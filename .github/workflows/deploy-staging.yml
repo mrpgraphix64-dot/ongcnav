@@ -1,0 +1,160 @@
+name: Deploy Staging
+
+# STAGING ONLY. This workflow never touches the production directory,
+# production PM2 processes, or the production Nginx site. It deploys the
+# NestJS API (apps/api) to a separate staging directory on the VPS.
+# The Next.js web app is built (build-and-verify job, and again on the VPS
+# for completeness) but is NOT served from the VPS — it stays on Hostinger
+# Web App (see docs/STAGING_DEPLOYMENT.md).
+#
+# Deployment mechanism: the runner checks out the exact commit being
+# deployed and rsyncs it over SSH straight into the VPS staging directory
+# (excluding node_modules/dist/.next/.env/etc — nothing built or secret
+# ever leaves the VPS or gets overwritten by this transfer). This makes
+# the workflow itself responsible for getting the right commit onto the
+# VPS, so deploy/staging-deploy.sh no longer needs git access on the VPS
+# and works correctly even when the staging directory starts out empty
+# (first deployment).
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+env:
+  STAGING_DEPLOY_DIR: /var/www/ongcnavratri-staging
+
+jobs:
+  build-and-verify:
+    name: Build & verify (fails fast before touching the VPS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared-types
+        run: npm run build:types
+
+      - name: Build API
+        run: npm run build:api
+
+      - name: Build web
+        run: npm run build:web
+
+      - name: Run API tests
+        run: npm run test:api
+
+  deploy:
+    name: Deploy to staging VPS
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout (exact commit being deployed)
+        uses: actions/checkout@v4
+
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Trust VPS host key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Back up current release on VPS (no-op on first deployment)
+        run: |
+          ssh -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" '
+            set -e
+            DIR="${{ env.STAGING_DEPLOY_DIR }}"
+            if [ -d "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
+              rm -rf "${DIR}.backup"
+              cp -a "$DIR" "${DIR}.backup"
+              echo "Backup created at ${DIR}.backup (includes built node_modules/dist so rollback does not need to rebuild)."
+            else
+              echo "Staging directory is empty or missing — first deployment, nothing to back up."
+            fi
+          '
+
+      # Excludes are deliberate:
+      # - node_modules / dist / .next: built on the VPS itself, never shipped over the wire
+      # - .env / .env.*: real secrets live only on the VPS, created manually, never in git or this transfer
+      # - .git / .github: not needed to run the app
+      # - coverage / *.log / logs: local test & log artifacts
+      - name: Sync repository to VPS
+        run: |
+          rsync -az --delete \
+            -e "ssh -p ${{ secrets.VPS_PORT }}" \
+            --exclude 'node_modules' \
+            --exclude 'dist' \
+            --exclude '.next' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'coverage' \
+            --exclude 'logs' \
+            --exclude '*.log' \
+            ./ "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.STAGING_DEPLOY_DIR }}/"
+
+      - name: Run deployment steps on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script_stop: true
+          script: |
+            cd /var/www/ongcnavratri-staging
+            bash deploy/staging-deploy.sh
+
+      - name: Roll back to previous release on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script_stop: false
+          script: |
+            cd /var/www/ongcnavratri-staging || exit 1
+            bash deploy/staging-rollback.sh
+
+      - name: Verify staging health endpoint externally
+        if: always()
+        run: |
+          # Runs from the GitHub-hosted runner against the public staging
+          # URL, independent of the VPS-local health check already done
+          # inside staging-deploy.sh / staging-rollback.sh. Reports the
+          # final live state whether the deploy succeeded or was rolled
+          # back. STAGING_HEALTH_URL is optional: skipped gracefully if
+          # not yet configured (e.g. before DNS/SSL exist for staging).
+          if [ -z "${{ secrets.STAGING_HEALTH_URL }}" ]; then
+            echo "STAGING_HEALTH_URL secret not set, skipping external health check."
+            exit 0
+          fi
+          for i in $(seq 1 5); do
+            if curl -fsS -m 5 "${{ secrets.STAGING_HEALTH_URL }}" | grep -q '"status":"ok"'; then
+              echo "External health check passed."
+              exit 0
+            fi
+            echo "Attempt $i/5 failed, retrying in 3s..."
+            sleep 3
+          done
+          echo "External health check failed after 5 attempts."
+          exit 1

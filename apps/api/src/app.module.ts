@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { EventControlModule } from './event-control/event-control.module';
 import { GatesModule } from './gates/gates.module';
@@ -21,6 +22,7 @@ import { TrafficTestModule } from './traffic-test/traffic-test.module';
     }),
     PrismaModule,
     RedisModule,
+    HealthModule,
     AuthModule,
     EventControlModule,
     GatesModule,
