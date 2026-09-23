@@ -9,9 +9,10 @@
   ],
   "scripts": {
     "build:types": "npm run build --workspace=packages/shared-types",
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
     "build:api": "npm run build --workspace=apps/api",
     "build:web": "npm run build --workspace=apps/web",
-    "build": "npm run build:types && npm run build:api && npm run build:web",
+    "build": "npm run build:types && npm run prisma:generate && npm run build:api && npm run build:web",
     "test:api": "npm run test --workspace=apps/api",
     "test": "npm run test:api",
     "start:api": "npm run start:prod --workspace=apps/api",

@@ -4,7 +4,7 @@ import { EventControlService } from './event-control.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@ongc-navratri/shared-types';
+import { UserRole } from '@ongc/shared-types';
 
 @ApiTags('Event Control')
 @Controller('event-control')

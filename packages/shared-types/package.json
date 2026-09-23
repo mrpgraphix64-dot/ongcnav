@@ -1,9 +1,17 @@
 {
-  "name": "@ongc-navratri/shared-types",
+  "name": "@ongc/shared-types",
   "version": "1.0.0",
   "description": "Shared TypeScript definitions and contracts for ONGC Navratri QR System",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w"
