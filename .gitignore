@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+*/node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+apps/*/.env
+apps/*/.env.*
+!apps/*/.env.example
+*.local
+
+# Build Outputs & Caches
+dist/
+build/
+.next/
+apps/*/.next/
+apps/*/dist/
+packages/*/dist/
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+.turbo/
+
+# Private Uploads & Storage
+storage/private/
+apps/api/storage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database & Temporary Files
+*.sqlite
+*.sqlite3
+*.db
+*.tmp
+*.zip
+*.tar.gz
+
+# System & OS Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+*.swo

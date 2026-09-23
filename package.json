@@ -1,0 +1,23 @@
+{
+  "name": "ongc-navratri-qr-system",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Production ONGC Navratri QR Entry Control System (Next.js + NestJS + PostgreSQL + Redis)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:types": "npm run build --workspace=packages/shared-types",
+    "build:api": "npm run build --workspace=apps/api",
+    "build:web": "npm run build --workspace=apps/web",
+    "build": "npm run build:types && npm run build:api && npm run build:web",
+    "test:api": "npm run test --workspace=apps/api",
+    "test": "npm run test:api",
+    "start:api": "npm run start:prod --workspace=apps/api",
+    "start:web": "npm run start --workspace=apps/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
