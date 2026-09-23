@@ -25,6 +25,11 @@ set -uo pipefail
 
 DEPLOY_DIR="${STAGING_DEPLOY_DIR:-/var/www/ongcnavratri-staging}"
 HEALTH_URL="${STAGING_HEALTH_URL:-http://127.0.0.1:3011/health}"
+# TEMPORARY staging value — not a secret (a plain HTTP IP), so it's fine
+# as a plain default here rather than requiring it in apps/api/.env or a
+# GitHub Secret. Baked into the Next.js bundle at build time (below), not
+# read at runtime. Update once the staging API has a real hostname/HTTPS.
+export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://100.234.41.6}"
 PM2_ECOSYSTEM="ecosystem.staging.config.js"
 LOG_FILE="$DEPLOY_DIR/deploy.log"
 HEALTH_ATTEMPTS=10
@@ -66,7 +71,7 @@ npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma || fail "prisma
 log "Building API..."
 npm run build:api || fail "build:api failed"
 
-log "Building web (verification only — not served from this VPS)..."
+log "Building web (verification only — not served from this VPS) with NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL..."
 npm run build:web || fail "build:web failed"
 
 log "Starting/reloading PM2 process via $PM2_ECOSYSTEM..."
