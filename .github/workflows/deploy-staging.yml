@@ -60,7 +60,7 @@ jobs:
       # Secret. Update this once the staging API has a real hostname/HTTPS.
       - name: Build web
         env:
-          NEXT_PUBLIC_API_URL: http://100.234.41.6
+          NEXT_PUBLIC_API_URL: http://200.234.41.6
         run: npm run build:web
 
       - name: Run API tests

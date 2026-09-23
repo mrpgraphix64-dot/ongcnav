@@ -29,7 +29,7 @@ HEALTH_URL="${STAGING_HEALTH_URL:-http://127.0.0.1:3011/health}"
 # as a plain default here rather than requiring it in apps/api/.env or a
 # GitHub Secret. Baked into the Next.js bundle at build time (below), not
 # read at runtime. Update once the staging API has a real hostname/HTTPS.
-export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://100.234.41.6}"
+export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://200.234.41.6}"
 PM2_ECOSYSTEM="ecosystem.staging.config.js"
 LOG_FILE="$DEPLOY_DIR/deploy.log"
 HEALTH_ATTEMPTS=10
