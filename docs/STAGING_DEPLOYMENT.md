@@ -23,7 +23,10 @@ On every push to `main` (or manual trigger):
      rollback doesn't need to rebuild — no-op on the very first deploy),
    - `rsync`s that commit's source straight into the staging directory,
      excluding `node_modules`, `dist`, `.next`, `.env*`, `.git`, `.github`,
-     `coverage`, and logs — nothing built or secret ever crosses the wire,
+     `coverage`, and logs — nothing built or secret ever crosses the wire.
+     **Temporarily runs without `--delete`** (adds/updates files only,
+     never removes) until the pipeline has a track record against the
+     real VPS — see the comment above the rsync step in the workflow,
    - SSHes in and runs
      [`deploy/staging-deploy.sh`](../deploy/staging-deploy.sh), which:
      - `npm ci`,
@@ -74,14 +77,23 @@ pm2 -v
 
 ```bash
 sudo mkdir -p /var/www/ongcnavratri-staging
-sudo chown "$USER":"$USER" /var/www/ongcnavratri-staging
+sudo chown -R ongcdeploy:ongcdeploy /var/www/ongcnavratri-staging
 ```
 
 That's it — leave it empty. The GitHub Actions workflow populates it via
 `rsync` on the first run; there's no need to `git clone` manually. (Git
 itself isn't even required on the VPS for this pipeline — only `node`,
 `npm`, `pm2`, `curl`, and `rsync`'s server-side counterpart, which ships
-with OpenSSH.)
+with OpenSSH. Neither `deploy/staging-deploy.sh` nor
+`deploy/staging-rollback.sh` invoke `git` at all.)
+
+Replace `ongcdeploy` with whatever SSH/deploy user actually owns this — it
+must be the same user GitHub Actions connects as (`VPS_USER`), and it
+needs write access to this directory, `${DIR}.backup` next to it (created
+automatically before each deploy), and its own `logs/` subdirectory.
+`deploy/staging-deploy.sh` checks these are writable up front and fails
+fast with a clear message instead of partway through a build if
+permissions are wrong — see section 2.9.
 
 If `/var/www/ongcnavratri-staging` isn't the right path on your actual VPS
 (e.g. disk layout differs), pick an equivalent directory that is clearly
@@ -203,6 +215,36 @@ ssh-keygen -t ed25519 -f ~/.ssh/ongc_staging_deploy -N ""
 cat ~/.ssh/ongc_staging_deploy.pub >> ~/.ssh/authorized_keys
 cat ~/.ssh/ongc_staging_deploy   # copy this private key into the VPS_SSH_KEY GitHub secret
 ```
+
+### 2.9 Verify directory permissions for the deploy user
+
+Everything the pipeline writes to must be owned (or at least writable) by
+the same user GitHub Actions connects as (`VPS_USER`, e.g. `ongcdeploy`).
+Check/fix before the first run:
+
+```bash
+# As the deploy user (or via sudo -u ongcdeploy):
+[ -w /var/www/ongcnavratri-staging ] && echo "staging dir: writable" || echo "staging dir: NOT writable — fix ownership"
+
+# The backup directory sits next to it and is created fresh by the
+# workflow before every deploy — its parent (/var/www) must be writable
+# by the deploy user so it can create/replace ongcnavratri-staging.backup:
+[ -w /var/www ] && echo "/var/www: writable" || echo "/var/www: NOT writable — fix ownership or grant a specific ACL"
+```
+
+If either check fails:
+
+```bash
+sudo chown -R ongcdeploy:ongcdeploy /var/www/ongcnavratri-staging
+# /var/www itself likely stays root-owned (shared with production) — grant
+# the deploy user rights to create siblings of ongcnavratri-staging there
+# instead of chowning the whole directory:
+sudo setfacl -m u:ongcdeploy:rwx /var/www
+```
+
+`deploy/staging-deploy.sh` also checks this itself at the start of every
+run and fails fast with a clear error instead of partway through a build
+if the staging directory or its `logs/` subdirectory isn't writable.
 
 ## 3. GitHub Secrets required
 

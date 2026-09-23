@@ -39,14 +39,17 @@ fail() {
   exit 1
 }
 
-cd "$DEPLOY_DIR" || fail "Deploy directory $DEPLOY_DIR does not exist. Create it first — see docs/STAGING_DEPLOYMENT.md."
+[ -d "$DEPLOY_DIR" ] || fail "Deploy directory $DEPLOY_DIR does not exist. Create it first — see docs/STAGING_DEPLOYMENT.md."
+[ -w "$DEPLOY_DIR" ] || fail "Deploy directory $DEPLOY_DIR is not writable by $(whoami). Fix ownership/permissions first — see docs/STAGING_DEPLOYMENT.md section 2.2/2.10."
 
-mkdir -p "$DEPLOY_DIR/logs"
+cd "$DEPLOY_DIR" || fail "Could not cd into $DEPLOY_DIR."
+
+mkdir -p "$DEPLOY_DIR/logs" || fail "Could not create $DEPLOY_DIR/logs — check permissions."
+[ -w "$DEPLOY_DIR/logs" ] || fail "$DEPLOY_DIR/logs is not writable by $(whoami)."
 
 [ -f "apps/api/.env" ] || fail "apps/api/.env is missing. Create it manually on the VPS before the first deployment — see docs/STAGING_DEPLOYMENT.md section 2.5. It is intentionally never shipped by this pipeline."
 
 log "=== Starting staging deployment ==="
-log "Deploying commit: $(git -C . rev-parse --short HEAD 2>/dev/null || echo 'unknown (source synced without .git, as expected)')"
 
 log "Installing dependencies (npm ci)..."
 npm ci || fail "npm ci failed"

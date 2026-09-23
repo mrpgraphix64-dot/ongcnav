@@ -94,9 +94,18 @@ jobs:
       # - .env / .env.*: real secrets live only on the VPS, created manually, never in git or this transfer
       # - .git / .github: not needed to run the app
       # - coverage / *.log / logs: local test & log artifacts
+      #
+      # NOTE: intentionally NOT using --delete for now. Without it, rsync
+      # only adds/updates files and never removes anything from the VPS
+      # side, which is safer while this pipeline is still unproven against
+      # the real staging directory (nothing gets deleted if an exclude
+      # pattern is wrong, etc.). The tradeoff: a file removed from the repo
+      # will keep lingering on the VPS until manually cleaned up or --delete
+      # is reintroduced later once the pipeline has a track record. Revisit
+      # this once a few deployments have gone cleanly.
       - name: Sync repository to VPS
         run: |
-          rsync -az --delete \
+          rsync -az \
             -e "ssh -p ${{ secrets.VPS_PORT }}" \
             --exclude 'node_modules' \
             --exclude 'dist' \
