@@ -59,6 +59,27 @@ log "=== Starting staging deployment ==="
 log "Installing dependencies (npm ci)..."
 npm ci || fail "npm ci failed"
 
+# The repo's root .npmrc sets ignore-scripts=true (a deliberate supply-chain
+# hardening default — it stops arbitrary install/postinstall scripts from
+# every dependency running unreviewed). That also silently skips bcrypt's
+# own "install" script (node-pre-gyp install --fallback-to-build), which is
+# what fetches/builds its native Linux binary — so `npm ci` succeeds with no
+# errors, but apps/api/node_modules/bcrypt/lib/binding/*/bcrypt_lib.node is
+# never created, and the API crashes at runtime the first time bcrypt is
+# required. Rather than turning ignore-scripts off repo-wide (which would
+# re-enable install scripts for every dependency, not just this one), force
+# it back on for this single, known, required package via an explicit CLI
+# flag that overrides .npmrc for just this command.
+log "Rebuilding bcrypt's native binary (skipped by npm ci due to ignore-scripts=true in .npmrc)..."
+npm rebuild bcrypt --workspace=apps/api --ignore-scripts=false || fail "bcrypt rebuild failed"
+
+# Preflight: fail clearly here, before building or touching PM2, if the
+# native binary still isn't there — instead of discovering it only after
+# PM2 starts crash-looping the process.
+BCRYPT_BINDING=$(find apps/api/node_modules/bcrypt/lib/binding -type f -name 'bcrypt_lib.node' 2>/dev/null | head -1)
+[ -n "$BCRYPT_BINDING" ] && [ -f "$BCRYPT_BINDING" ] || fail "bcrypt native binary not found after rebuild (expected under apps/api/node_modules/bcrypt/lib/binding/*/bcrypt_lib.node). Not starting PM2 against a broken build."
+log "bcrypt native binary verified at $BCRYPT_BINDING"
+
 log "Building packages/shared-types..."
 npm run build:types || fail "build:types failed"
 

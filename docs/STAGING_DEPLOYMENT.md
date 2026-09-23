@@ -316,6 +316,32 @@ the `tsconfig.json` `paths` order with the `rootDir` implications handled
 properly, or simply pointing both configs at the real output path as done
 here).
 
+## 6a. Known pre-existing issue: `.npmrc` ignore-scripts vs bcrypt's native binary
+
+The repo's root [`.npmrc`](../.npmrc) sets `ignore-scripts=true` — a
+deliberate supply-chain hardening default that stops install/postinstall
+scripts from running for every dependency during `npm ci`/`npm install`.
+`bcrypt` relies on exactly such a script (`node-pre-gyp install
+--fallback-to-build`) to fetch or build its native `.node` binary, so a
+plain `npm ci` on a fresh Linux host leaves
+`apps/api/node_modules/bcrypt/lib/binding/*/bcrypt_lib.node` missing —
+`npm ci` reports success, but the API crashes the first time bcrypt is
+required (PM2 crash-loops trying to restart it).
+
+Rather than disabling `ignore-scripts` repo-wide (which would re-enable
+install scripts for every dependency, defeating the point of the
+setting), `deploy/staging-deploy.sh` runs a single, explicitly-scoped
+override right after `npm ci`:
+
+```bash
+npm rebuild bcrypt --workspace=apps/api --ignore-scripts=false
+```
+
+then verifies `bcrypt_lib.node` actually exists before continuing to
+build or touch PM2 — see [Health check](#5-health-check) and the deploy
+script itself for the exact preflight. If this ever needs doing manually
+on the VPS, that same command is safe to re-run standalone.
+
 ## 7. Rollback
 
 Before every `rsync`, the workflow makes a full local copy of the current
