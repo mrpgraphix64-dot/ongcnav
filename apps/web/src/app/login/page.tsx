@@ -36,8 +36,15 @@ export default function LoginPage() {
         }),
       });
 
-      if (res.user.role === UserRole.GATE_OPERATOR) {
-        router.push('/scanner');
+      if (res?.user) {
+        try {
+          localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
+        } catch {}
+      }
+
+      const role = String(res?.user?.role || '').toUpperCase();
+      if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
+        router.push('/admin/my-gate');
       } else {
         router.push('/admin');
       }
@@ -63,8 +70,15 @@ export default function LoginPage() {
         }),
       });
 
-      if (res.user.role === UserRole.GATE_OPERATOR) {
-        router.push('/scanner');
+      if (res?.user) {
+        try {
+          localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
+        } catch {}
+      }
+
+      const role = String(res?.user?.role || '').toUpperCase();
+      if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
+        router.push('/admin/my-gate');
       } else {
         router.push('/admin');
       }

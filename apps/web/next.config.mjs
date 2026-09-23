@@ -22,6 +22,15 @@ const nextConfig = {
   // hoisted/workspace files into the standalone output. Pointed at apps/web
   // itself (the previous value), the trace could miss them.
   outputFileTracingRoot: path.join(__dirname, '../..'),
+  async redirects() {
+    return [
+      {
+        source: '/admin/login',
+        destination: '/login',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
