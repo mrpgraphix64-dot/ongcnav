@@ -42,8 +42,16 @@ log() {
   echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $*" | tee -a "$LOG_FILE" 2>/dev/null || echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $*"
 }
 
-if [ ! -d "$BACKUP_DIR" ]; then
-  log "CRITICAL: no backup found at $BACKUP_DIR — nothing to roll back to (likely a failed first deployment). Manual intervention required now."
+# A usable backup must actually contain a previous release, not just
+# exist as an empty/incomplete directory — checking for the PM2 ecosystem
+# file specifically confirms there's a real deployable release in there,
+# not just a directory. Without this check, a first deployment (which has
+# no previous release at all) could fall through to the pm2 call below
+# with nothing valid to start, producing a confusing
+# "[PM2][ERROR] File ecosystem.staging.config.js not found" instead of a
+# clear "nothing to roll back to" message.
+if [ ! -d "$BACKUP_DIR" ] || [ ! -f "$BACKUP_DIR/$PM2_ECOSYSTEM" ]; then
+  log "No usable backup at $BACKUP_DIR (missing or incomplete) — likely the first deployment, which has no previous release to restore. Leaving the deploy directory as-is and skipping PM2; nothing to roll back to."
   exit 1
 fi
 
@@ -65,6 +73,14 @@ if [ "${fail_restore:-0}" = "1" ]; then
 fi
 
 cd "$DEPLOY_DIR" || { log "CRITICAL: $DEPLOY_DIR missing after restore. Manual intervention required now."; exit 1; }
+
+# Re-verify after the move: only call pm2 if the restored release actually
+# has its ecosystem file at the top level. Should always be true given the
+# check above, but this is the guard that actually protects the pm2 call.
+if [ ! -f "$PM2_ECOSYSTEM" ]; then
+  log "CRITICAL: restore completed but $PM2_ECOSYSTEM is missing from $DEPLOY_DIR after restore. Not calling pm2. Manual intervention required now."
+  exit 1
+fi
 
 log "Reloading PM2 with restored release..."
 pm2 startOrReload "$PM2_ECOSYSTEM" --update-env || log "WARNING: pm2 startOrReload reported an error during rollback — check pm2 status manually."

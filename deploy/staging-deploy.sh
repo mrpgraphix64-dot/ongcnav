@@ -66,7 +66,14 @@ log "Generating Prisma client..."
 npm run prisma:generate || fail "prisma generate failed"
 
 log "Applying database migrations (prisma migrate deploy — never db push, never reset)..."
-npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma || fail "prisma migrate deploy failed"
+# Uses the local Prisma CLI through the npm workspace script, not a global
+# `prisma`/`npx prisma` — `npx prisma` failed with "prisma: not found" when
+# run from the deploy directory root because the local prisma binary lives
+# in apps/api's own node_modules and isn't hoisted/resolvable from there.
+# `npm run ... --workspace=apps/api` runs the script with that workspace's
+# node_modules/.bin on PATH, so it resolves correctly without installing
+# Prisma globally.
+npm run prisma:migrate:deploy --workspace=apps/api || fail "prisma migrate deploy failed"
 
 log "Building API..."
 npm run build:api || fail "build:api failed"
