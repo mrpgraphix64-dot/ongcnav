@@ -89,8 +89,10 @@ with OpenSSH. Neither `deploy/staging-deploy.sh` nor
 
 Replace `ongcdeploy` with whatever SSH/deploy user actually owns this — it
 must be the same user GitHub Actions connects as (`VPS_USER`), and it
-needs write access to this directory, `${DIR}.backup` next to it (created
-automatically before each deploy), and its own `logs/` subdirectory.
+needs write access to this directory (which is enough — the release
+backup lives at `.backup` *inside* this directory, not next to it, since
+`ongcdeploy` owns this directory but not its parent `/var/www`, and this
+pipeline never uses `sudo`) and its own `logs/` subdirectory.
 `deploy/staging-deploy.sh` checks these are writable up front and fails
 fast with a clear message instead of partway through a build if
 permissions are wrong — see section 2.9.
@@ -220,27 +222,25 @@ cat ~/.ssh/ongc_staging_deploy   # copy this private key into the VPS_SSH_KEY Gi
 
 Everything the pipeline writes to must be owned (or at least writable) by
 the same user GitHub Actions connects as (`VPS_USER`, e.g. `ongcdeploy`).
-Check/fix before the first run:
+Because the release backup lives at `.backup` *inside* the staging
+directory (not next to it), the deploy user only ever needs write access
+to the staging directory itself — **not** to `/var/www`. Check/fix before
+the first run:
 
 ```bash
 # As the deploy user (or via sudo -u ongcdeploy):
 [ -w /var/www/ongcnavratri-staging ] && echo "staging dir: writable" || echo "staging dir: NOT writable — fix ownership"
-
-# The backup directory sits next to it and is created fresh by the
-# workflow before every deploy — its parent (/var/www) must be writable
-# by the deploy user so it can create/replace ongcnavratri-staging.backup:
-[ -w /var/www ] && echo "/var/www: writable" || echo "/var/www: NOT writable — fix ownership or grant a specific ACL"
 ```
 
-If either check fails:
+If that fails:
 
 ```bash
 sudo chown -R ongcdeploy:ongcdeploy /var/www/ongcnavratri-staging
-# /var/www itself likely stays root-owned (shared with production) — grant
-# the deploy user rights to create siblings of ongcnavratri-staging there
-# instead of chowning the whole directory:
-sudo setfacl -m u:ongcdeploy:rwx /var/www
 ```
+
+`/var/www` itself stays untouched and does not need its ownership or
+permissions changed — this pipeline never runs `sudo` and never writes
+outside the staging directory.
 
 `deploy/staging-deploy.sh` also checks this itself at the start of every
 run and fails fast with a clear error instead of partway through a build
@@ -319,18 +319,27 @@ here).
 ## 7. Rollback
 
 Before every `rsync`, the workflow makes a full local copy of the current
-live release on the VPS at `/var/www/ongcnavratri-staging.backup`
-(including its already-built `node_modules`/`dist` — no-op on the first
-deployment, since there's nothing yet to back up). If
-`deploy/staging-deploy.sh` fails for any reason — a build error, a failed
-migration, or the health check never passing — the workflow's "Roll back
-to previous release on failure" step runs
-[`deploy/staging-rollback.sh`](../deploy/staging-rollback.sh) on the VPS,
-which deletes the broken directory, moves the backup back into place, and
-reloads PM2 against it. Because the backup already has its dependencies
-installed and its build output in place, rollback doesn't need to
-reinstall or rebuild anything, which keeps it reliable even if the
-failure was caused by a broken dependency install.
+live release into `/var/www/ongcnavratri-staging/.backup` — **inside**
+the staging directory, not next to it, since the deploy user
+(`ongcdeploy`) owns the staging directory but not its parent (`/var/www`),
+and this pipeline never uses `sudo` (including its already-built
+`node_modules`/`dist` — no-op on the first deployment, since there's
+nothing yet to back up). The main "Sync repository to VPS" `rsync` step
+explicitly excludes `.backup` (and `.backup.new`, its short-lived staging
+name while being built) so the application sync never touches it.
+
+If `deploy/staging-deploy.sh` fails for any reason — a build error, a
+failed migration, or the health check never passing — the workflow's
+"Roll back to previous release on failure" step runs
+[`deploy/staging-rollback.sh`](../deploy/staging-rollback.sh) on the VPS.
+Because the backup is nested inside the staging directory, rollback can't
+just delete the staging directory and swap the backup in (that would
+delete the backup too); instead it removes everything in the staging
+directory *except* `.backup`, moves `.backup`'s contents back up to the
+top level, and reloads PM2. Because the backup already has its
+dependencies installed and its build output in place, rollback doesn't
+need to reinstall or rebuild anything, which keeps it reliable even if
+the failure was caused by a broken dependency install.
 
 **Limitation:** rollback restores **code, `node_modules`, and the PM2
 process** only — it does not revert Prisma migrations. If a failed deploy
@@ -343,11 +352,11 @@ database matches the rolled-back code.
 Manual rollback (if needed outside the automated path):
 
 ```bash
-cd /var/www
-[ -d ongcnavratri-staging.backup ] || echo "No backup available — nothing to restore"
-rm -rf ongcnavratri-staging
-mv ongcnavratri-staging.backup ongcnavratri-staging
-cd ongcnavratri-staging
+cd /var/www/ongcnavratri-staging
+[ -d .backup ] || echo "No backup available — nothing to restore"
+find . -mindepth 1 -maxdepth 1 ! -name '.backup' -exec rm -rf {} +
+find .backup -mindepth 1 -maxdepth 1 -exec mv {} . \;
+rmdir .backup 2>/dev/null || rm -rf .backup
 pm2 startOrReload ecosystem.staging.config.js --update-env
 ```
 

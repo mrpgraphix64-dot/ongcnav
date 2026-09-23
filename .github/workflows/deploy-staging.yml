@@ -15,6 +15,11 @@ name: Deploy Staging
 # VPS, so deploy/staging-deploy.sh no longer needs git access on the VPS
 # and works correctly even when the staging directory starts out empty
 # (first deployment).
+#
+# The pre-deploy backup lives at $STAGING_DEPLOY_DIR/.backup — inside the
+# staging directory itself, not next to it — because the deploy user
+# (ongcdeploy) owns that directory but not its parent (/var/www), and this
+# pipeline never uses sudo.
 
 on:
   push:
@@ -82,17 +87,28 @@ jobs:
           ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
           chmod 644 ~/.ssh/known_hosts
 
+      # The backup lives INSIDE the staging directory (.backup), not as a
+      # sibling (staging-dir.backup) — ongcdeploy owns the staging directory
+      # itself but not its parent (/var/www), so a sibling path fails with
+      # "Permission denied" the moment there's an existing release to back
+      # up. Building it with rsync (excluding any previous .backup/.backup.new
+      # from the copy) avoids the self-referential-copy problem of `cp -a`
+      # a directory into its own subdirectory.
       - name: Back up current release on VPS (no-op on first deployment)
         run: |
           ssh -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" '
             set -e
             DIR="${{ env.STAGING_DEPLOY_DIR }}"
-            if [ -d "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
-              rm -rf "${DIR}.backup"
-              cp -a "$DIR" "${DIR}.backup"
-              echo "Backup created at ${DIR}.backup (includes built node_modules/dist so rollback does not need to rebuild)."
+            BACKUP="$DIR/.backup"
+            if [ -d "$DIR" ] && [ -n "$(find "$DIR" -mindepth 1 -maxdepth 1 ! -name .backup ! -name .backup.new 2>/dev/null)" ]; then
+              rm -rf "$BACKUP.new"
+              mkdir -p "$BACKUP.new"
+              rsync -a --exclude=".backup" --exclude=".backup.new" "$DIR"/ "$BACKUP.new"/
+              rm -rf "$BACKUP"
+              mv "$BACKUP.new" "$BACKUP"
+              echo "Backup created at $BACKUP (includes built node_modules/dist so rollback does not need to rebuild)."
             else
-              echo "Staging directory is empty or missing — first deployment, nothing to back up."
+              echo "Staging directory is empty or has no release yet — first deployment, nothing to back up."
             fi
           '
 
@@ -101,6 +117,9 @@ jobs:
       # - .env / .env.*: real secrets live only on the VPS, created manually, never in git or this transfer
       # - .git / .github: not needed to run the app
       # - coverage / *.log / logs: local test & log artifacts
+      # - .backup / .backup.new: the VPS-side release backup lives inside this
+      #   same directory (see the backup step above) — it must never be
+      #   touched by this sync, now or if --delete is reintroduced later
       #
       # NOTE: intentionally NOT using --delete for now. Without it, rsync
       # only adds/updates files and never removes anything from the VPS
@@ -124,6 +143,8 @@ jobs:
             --exclude 'coverage' \
             --exclude 'logs' \
             --exclude '*.log' \
+            --exclude '.backup' \
+            --exclude '.backup.new' \
             ./ "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.STAGING_DEPLOY_DIR }}/"
 
       - name: Run deployment steps on VPS

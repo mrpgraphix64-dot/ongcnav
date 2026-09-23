@@ -7,10 +7,19 @@
 # Restores the previous release from the backup that the workflow's
 # "Back up current release on VPS" step took (a full copy including
 # node_modules/dist, so this does NOT need to reinstall or rebuild —
-# just swap the directory back and reload PM2). This is why the backup
+# just swap the files back and reload PM2). This is why the backup
 # step runs before every rsync: this script has nothing to do if that
 # backup doesn't exist, which only happens on a failed first deployment
 # (nothing to roll back to yet).
+#
+# The backup lives INSIDE the deploy directory, at .backup — not as a
+# sibling directory — because the deploy user (ongcdeploy) owns the
+# deploy directory but not its parent (/var/www), and this pipeline never
+# uses sudo. That means restoring can't just `rm -rf` the deploy
+# directory and `mv` the backup over it (that would delete the backup
+# along with everything else, since it's nested inside). Instead: wipe
+# everything in the deploy directory EXCEPT .backup, then move .backup's
+# contents back up to the top level.
 #
 # Limitation: this restores CODE and the running process only. If the
 # failed deploy already applied a new Prisma migration before a later
@@ -22,7 +31,7 @@
 set -uo pipefail
 
 DEPLOY_DIR="${STAGING_DEPLOY_DIR:-/var/www/ongcnavratri-staging}"
-BACKUP_DIR="${DEPLOY_DIR}.backup"
+BACKUP_DIR="${DEPLOY_DIR}/.backup"
 HEALTH_URL="${STAGING_HEALTH_URL:-http://127.0.0.1:3011/health}"
 PM2_ECOSYSTEM="ecosystem.staging.config.js"
 LOG_FILE="$DEPLOY_DIR/deploy.log"
@@ -38,9 +47,22 @@ if [ ! -d "$BACKUP_DIR" ]; then
   exit 1
 fi
 
-log "=== Rolling back: restoring $BACKUP_DIR over $DEPLOY_DIR ==="
-rm -rf "$DEPLOY_DIR"
-mv "$BACKUP_DIR" "$DEPLOY_DIR"
+log "=== Rolling back: restoring $BACKUP_DIR into $DEPLOY_DIR ==="
+
+# Remove everything in the deploy directory except the backup itself.
+find "$DEPLOY_DIR" -mindepth 1 -maxdepth 1 ! -name '.backup' -exec rm -rf {} + \
+  || fail_restore=1
+
+# Move the backup's contents up to the top level, then drop the now-empty
+# .backup marker.
+find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -exec mv {} "$DEPLOY_DIR"/ \; \
+  || fail_restore=1
+rmdir "$BACKUP_DIR" 2>/dev/null || rm -rf "$BACKUP_DIR"
+
+if [ "${fail_restore:-0}" = "1" ]; then
+  log "CRITICAL: restore steps reported an error moving files. Manual intervention required now."
+  exit 1
+fi
 
 cd "$DEPLOY_DIR" || { log "CRITICAL: $DEPLOY_DIR missing after restore. Manual intervention required now."; exit 1; }
 
