@@ -3,35 +3,218 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 255, 255, 255;
+  --color-maroon: #7A1930;
+  --color-maroon-dark: #5A0F21;
+  --color-cream: #FAF7F2;
+  --color-gold: #D4AF37;
+  --color-ink: #2A2124;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: #2A2124;
+  background-color: #FAF7F2;
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-@keyframes scan-line {
+/* Background Texture Patterns */
+.rangoli-pattern {
+  background-image: radial-gradient(#D4AF37 0.75px, transparent 0.75px), radial-gradient(#7A1930 0.75px, #FAF7F2 0.75px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+  opacity: 0.05;
+}
+
+.gold-border-gradient {
+  border-image: linear-gradient(to right, #D4AF37, #F3E5AB, #D4AF37) 1;
+}
+
+.card-shadow {
+  box-shadow: 0 4px 6px -1px rgba(42, 33, 36, 0.05), 0 20px 25px -5px rgba(42, 33, 36, 0.1);
+}
+
+.dot-texture {
+  background-image: radial-gradient(rgba(122, 25, 48, 0.12) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* Animated Navratri Dancers Keyframes & Styles */
+@keyframes dancerBoyEntrance {
   0% {
-    top: 5%;
+    transform: translate3d(-120%, 40px, 0) scale(0.85) rotate(-8deg);
+    opacity: 0;
+    filter: blur(8px) drop-shadow(0 0 0 rgba(212, 175, 55, 0));
   }
-  50% {
-    top: 95%;
+  70% {
+    transform: translate3d(8px, -6px, 0) scale(1.02) rotate(1.5deg);
+    opacity: 1;
+    filter: blur(0px) drop-shadow(-8px 12px 25px rgba(0, 0, 0, 0.4));
   }
   100% {
-    top: 5%;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+    filter: blur(0px) drop-shadow(-10px 15px 30px rgba(0, 0, 0, 0.45));
   }
 }
 
-.animate-scan-line {
-  animation: scan-line 2.5s ease-in-out infinite;
+@keyframes dancerGirlEntrance {
+  0% {
+    transform: translate3d(120%, -30px, 0) scale(0.85) rotate(8deg);
+    opacity: 0;
+    filter: blur(8px) drop-shadow(0 0 0 rgba(212, 175, 55, 0));
+  }
+  70% {
+    transform: translate3d(-8px, 4px, 0) scale(1.02) rotate(-1.5deg);
+    opacity: 1;
+    filter: blur(0px) drop-shadow(8px 12px 25px rgba(0, 0, 0, 0.4));
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+    filter: blur(0px) drop-shadow(10px 15px 30px rgba(0, 0, 0, 0.45));
+  }
+}
+
+@keyframes dancerIdleBoy {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(-4px, -12px, 0) rotate(1.2deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+}
+
+@keyframes dancerIdleGirl {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(4px, -12px, 0) rotate(-1.2deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+}
+
+@keyframes goldenTrailFade {
+  0% { opacity: 0.85; transform: scale(1); }
+  70% { opacity: 0.5; }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+@keyframes goldenParticleFloat {
+  0% { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+  50% { opacity: 0.9; transform: translate3d(0, -30px, 0) scale(1.1); }
+  100% { transform: translate3d(0, -60px, 0) scale(0.4); opacity: 0; }
+}
+
+.animate-dancer-boy {
+  animation: dancerBoyEntrance 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards,
+             dancerIdleBoy 5.8s ease-in-out 1.3s infinite;
+  will-change: transform, filter, opacity;
+}
+
+.animate-dancer-girl {
+  animation: dancerGirlEntrance 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.45s forwards,
+             dancerIdleGirl 5.5s ease-in-out 1.55s infinite;
+  will-change: transform, filter, opacity;
+}
+
+.animate-golden-trail-boy {
+  animation: goldenTrailFade 1.4s ease-out 0.2s forwards;
+}
+
+.animate-golden-trail-girl {
+  animation: goldenTrailFade 1.4s ease-out 0.45s forwards;
+}
+
+.golden-particle-1 { animation: goldenParticleFloat 3.2s ease-in-out 1.2s infinite; }
+.golden-particle-2 { animation: goldenParticleFloat 4.1s ease-in-out 1.8s infinite; }
+.golden-particle-3 { animation: goldenParticleFloat 3.7s ease-in-out 1.5s infinite; }
+.golden-particle-4 { animation: goldenParticleFloat 4.5s ease-in-out 2.1s infinite; }
+
+/* Luxury Stage Sponsors Section Styles & Animations */
+.sponsor-stage-bg {
+  background: radial-gradient(circle at 50% 35%, rgba(212, 175, 55, 0.12) 0%, rgba(250, 247, 242, 0.7) 45%, #FAF7F2 100%);
+}
+
+@keyframes diyaFlicker {
+  0%, 100% {
+    transform: scale(1) rotate(-1deg);
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.7));
+  }
+  50% {
+    transform: scale(1.06) rotate(1.5deg);
+    filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.95));
+  }
+}
+
+.diya-flame-anim {
+  animation: diyaFlicker 2.6s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.gold-stage-border {
+  border: 2px solid rgba(212, 175, 55, 0.65);
+  box-shadow: 0 10px 30px -5px rgba(122, 25, 48, 0.08), 0 0 0 1px rgba(212, 175, 55, 0.2) inset;
+}
+
+.gold-stage-border:hover {
+  box-shadow: 0 15px 40px -5px rgba(122, 25, 48, 0.12), 0 0 24px rgba(212, 175, 55, 0.3), 0 0 0 1px rgba(212, 175, 55, 0.4) inset;
+}
+
+@keyframes sponsorDecorLeftIdle {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(-0.5deg); }
+}
+
+@keyframes sponsorDecorRightIdle {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(5px) rotate(0.5deg); }
+}
+
+.sponsor-decor-left-idle {
+  animation: sponsorDecorLeftIdle 5.0s ease-in-out infinite;
+  transform-origin: bottom left;
+}
+
+.sponsor-decor-right-idle {
+  animation: sponsorDecorRightIdle 5.5s ease-in-out infinite;
+  transform-origin: bottom right;
+}
+
+@keyframes decorGlowPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.95); }
+  50% { opacity: 0.55; transform: scale(1.05); }
+}
+
+.decor-glow-pulse { animation: decorGlowPulse 4.5s ease-in-out infinite; }
+
+@keyframes decorDiyaGlow {
+  0%, 100% { opacity: 0.5; transform: scale(0.92); }
+  50% { opacity: 0.85; transform: scale(1.10); }
+}
+
+.decor-diya-glow { animation: decorDiyaGlow 3.0s ease-in-out infinite; }
+
+/* Spirit of Navratri Dark Festive Theme */
+.spirit-festive-bg {
+  background-color: #4A101B;
+  background-image: radial-gradient(circle at 50% 20%, rgba(138, 28, 52, 0.45) 0%, rgba(74, 16, 27, 0.9) 60%, #350A12 100%);
+}
+
+.spirit-card-lift {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.spirit-card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.35), 0 0 22px rgba(212, 175, 55, 0.25);
+  border-color: rgba(212, 175, 55, 0.75);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-dancer-girl,
+  .animate-dancer-boy {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+  .diya-flame-anim,
+  .sponsor-decor-left-idle,
+  .sponsor-decor-right-idle,
+  .decor-glow-pulse,
+  .decor-diya-glow {
+    animation: none !important;
+  }
 }

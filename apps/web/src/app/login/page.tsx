@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,9 +8,8 @@ import {
   User,
   ShieldCheck,
   AlertCircle,
-  LogIn,
   ArrowRight,
-  Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { UserRole } from '@ongc/shared-types';
@@ -18,7 +17,7 @@ import { UserRole } from '@ongc/shared-types';
 export default function LoginPage() {
   const router = useRouter();
 
-  const [identifier, setIdentifier] = useState('admin@ongcnavratri.in');
+  const [identifier, setIdentifier] = useState('admin@ongc.co.in');
   const [password, setPassword] = useState('Admin@2026');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +36,6 @@ export default function LoginPage() {
         }),
       });
 
-      // Redirect based on user role
       if (res.user.role === UserRole.GATE_OPERATOR) {
         router.push('/scanner');
       } else {
@@ -50,154 +48,175 @@ export default function LoginPage() {
     }
   };
 
-  const quickDemoLogin = (role: UserRole) => {
-    if (role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN) {
-      setIdentifier('admin@ongcnavratri.in');
-      setPassword('Admin@2026');
-    } else if (role === UserRole.GATE_SUPERVISOR) {
-      setIdentifier('supervisor@ongcnavratri.in');
-      setPassword('Supervisor@2026');
-    } else if (role === UserRole.GATE_OPERATOR) {
-      setIdentifier('operator@ongcnavratri.in');
-      setPassword('Operator@2026');
-    } else if (role === UserRole.HELP_DESK) {
-      setIdentifier('helpdesk@ongcnavratri.in');
-      setPassword('HelpDesk@2026');
+  const handleDemoLogin = async () => {
+    setIdentifier('admin@ongc.co.in');
+    setPassword('Admin@2026');
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await fetchApi('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          identifier: 'admin@ongc.co.in',
+          password: 'Admin@2026',
+        }),
+      });
+
+      if (res.user.role === UserRole.GATE_OPERATOR) {
+        router.push('/scanner');
+      } else {
+        router.push('/admin');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to login as admin demo');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between selection:bg-red-600">
-      <header className="p-4 border-b border-slate-800 bg-slate-900/60 backdrop-blur">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-bold text-white text-base">
-            <span className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-black text-xs">
-              ओ
-            </span>
-            <span>ONGC Navratri Entry System</span>
-          </Link>
-          <Link
-            href="/"
-            className="text-xs font-semibold text-slate-400 hover:text-white"
-          >
-            ← Public Portal
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-screen font-sans bg-cream text-ink flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative selection:bg-maroon selection:text-white">
+      {/* Background decorative ambient circles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-maroon/5 blur-3xl" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-gold/10 blur-3xl" />
+      </div>
 
-      <main className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl space-y-6">
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-red-950/60 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto">
-              <Lock className="w-6 h-6" />
+      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        {/* Login Card Container */}
+        <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-7 sm:p-9 relative overflow-hidden">
+          {/* Subtle gold accent bar at top */}
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-maroon via-gold to-maroon" />
+
+          {/* Dot pattern subtle accent */}
+          <div className="absolute top-0 right-0 w-32 h-32 dot-texture opacity-30 pointer-events-none" />
+
+          {/* Top Header & Branding */}
+          <div className="text-center space-y-3 pb-6 border-b border-stone-100">
+            <div className="flex justify-center">
+              <img
+                src="/images/logo-web.png"
+                alt="ONGC Logo"
+                className="h-14 w-auto max-w-[200px] object-contain"
+              />
             </div>
-            <h1 className="text-2xl font-black text-white">Staff & Admin Login</h1>
-            <p className="text-xs text-slate-400">
-              Access turnstile scanner, gate control, reports, and traffic test lab.
-            </p>
+
+            <div className="space-y-0.5">
+              <div className="font-outfit font-extrabold text-xs tracking-widest uppercase text-maroon">
+                ONGC NAVRATRI
+              </div>
+              <div className="font-outfit font-black text-[15px] tracking-wider uppercase text-ink">
+                ENTRY CONTROL PORTAL
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <h2 className="text-2xl font-outfit font-bold text-ink">Welcome Back</h2>
+              <p className="text-xs text-ink-soft mt-1">
+                Sign in to manage registrations, tickets and entry operations.
+              </p>
+            </div>
           </div>
 
+          {/* Error Message */}
           {error && (
-            <div className="p-3.5 rounded-xl bg-red-950/60 border border-red-500/40 flex items-center gap-2.5 text-xs text-red-200">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <div className="mt-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
               <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          {/* Standard Login Form */}
+          <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                Email or Staff ID
+              <label className="block text-xs font-semibold text-ink-soft mb-1.5">
+                Email / Admin ID
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+                <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input
                   type="text"
                   required
-                  placeholder="admin@ongcnavratri.in"
+                  placeholder="admin@ongc.co.in"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-red-500"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-semibold text-ink-soft mb-1.5">
                 Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+                <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input
                   type="password"
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-red-500"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-900/40 transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <span>Authenticating...</span>
-              ) : (
-                <>
-                  <LogIn className="w-4 h-4" />
-                  <span>Sign In</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Quick Demo Fill Buttons */}
-          <div className="pt-4 border-t border-slate-800 space-y-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block text-center">
-              Quick Role Switch (Demo Mode)
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold">
+            <div className="pt-2">
               <button
-                type="button"
-                onClick={() => quickDemoLogin(UserRole.SUPER_ADMIN)}
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-left"
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-maroon text-white font-outfit font-bold text-sm hover:bg-maroon-dark transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-60"
               >
-                👑 Super Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => quickDemoLogin(UserRole.GATE_SUPERVISOR)}
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-left"
-              >
-                🛡️ Gate Supervisor
-              </button>
-              <button
-                type="button"
-                onClick={() => quickDemoLogin(UserRole.GATE_OPERATOR)}
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-left"
-              >
-                📱 Gate Operator
-              </button>
-              <button
-                type="button"
-                onClick={() => quickDemoLogin(UserRole.HELP_DESK)}
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-left"
-              >
-                🎧 Help Desk
+                <span>{loading ? 'AUTHENTICATING...' : 'LOGIN'}</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+          </form>
+
+          {/* Quick Demo Bypass */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-stone-200" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white px-3 text-ink-soft font-medium">or quick testing</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDemoLogin}
+            disabled={loading}
+            className="w-full group relative flex flex-col items-center justify-center p-3.5 rounded-xl bg-gradient-to-r from-cream-soft to-gold/15 border-2 border-gold/60 text-maroon font-outfit font-bold hover:border-maroon hover:bg-gold/25 transition-all duration-200 cursor-pointer disabled:opacity-60"
+          >
+            <div className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="w-4 h-4 text-maroon group-hover:scale-110 transition-transform" />
+              <span>CONTINUE AS ADMIN</span>
+            </div>
+            <span className="text-[11px] font-medium text-amber-800 tracking-wide mt-0.5">
+              Demo access &bull; Temporary
+            </span>
+          </button>
+
+          {/* Bottom Back link */}
+          <div className="mt-6 text-center">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-soft hover:text-maroon transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to ONGC Navratri Homepage</span>
+            </Link>
           </div>
         </div>
-      </main>
 
-      <footer className="p-4 border-t border-slate-800 text-center text-xs text-slate-500">
-        ONGC Entry Management Architecture 2.0 • Secured with JWT & Session Cookies
-      </footer>
+        {/* Footer Notice */}
+        <p className="mt-6 text-center text-xs text-ink-soft">
+          ONGC Navratri 2026 &middot; Entry Control System &middot; Authorized Personnel Only
+        </p>
+      </div>
     </div>
   );
 }

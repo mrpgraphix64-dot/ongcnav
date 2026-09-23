@@ -8,16 +8,49 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        ongc: {
-          red: '#D32F2F',
-          darkred: '#9A0007',
-          lightred: '#FF6659',
-          gold: '#FFD700',
-          darkgold: '#B29700',
-          navy: '#0A192F',
-          darknavy: '#020C1B',
-          lightnavy: '#172A45',
+        maroon: {
+          DEFAULT: '#7A1930',
+          dark: '#5A0F21',
+          deep: '#3D0714',
+          light: '#9E2442',
+          soft: '#FDF2F4',
         },
+        cream: {
+          DEFAULT: '#FAF7F2',
+          light: '#FFFDF9',
+          soft: '#F3EDDF',
+          dark: '#E8DEC9',
+          card: '#FFFFFF',
+        },
+        gold: {
+          DEFAULT: '#D4AF37',
+          muted: '#C5A059',
+          light: '#F3E5AB',
+          soft: '#FFF9E6',
+          dark: '#9A7B1C',
+        },
+        saffron: {
+          DEFAULT: '#E65100',
+          light: '#FF8A65',
+          soft: '#FFF3E0',
+        },
+        ink: {
+          DEFAULT: '#2A2124',
+          soft: '#66595C',
+          muted: '#94888B',
+        },
+        ongc: {
+          red: '#7A1930',
+          darkred: '#5A0F21',
+          lightred: '#9E2442',
+          gold: '#D4AF37',
+          darkgold: '#9A7B1C',
+        },
+      },
+      fontFamily: {
+        sans: ['var(--font-inter)', 'Inter', 'sans-serif'],
+        outfit: ['var(--font-outfit)', 'Outfit', 'sans-serif'],
+        cinzel: ['var(--font-cinzel)', 'Cinzel', 'serif'],
       },
     },
   },

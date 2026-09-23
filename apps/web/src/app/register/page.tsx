@@ -1,52 +1,59 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  User,
-  Users,
-  Calendar,
-  Upload,
+  Info,
   CheckCircle2,
+  CheckCircle,
+  PlusCircle,
   AlertCircle,
-  Plus,
+  User,
+  Upload,
+  RefreshCw,
   Trash2,
-  ArrowRight,
-  ShieldCheck,
-  Building,
-  Phone,
-  Mail,
-  Briefcase,
+  Plus,
+  Loader2,
+  Home,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 
-const EVENT_DATES = [
-  { id: '2026-09-23', label: 'Day 1 — 23 Sep (Wed) — Pratipada' },
-  { id: '2026-09-24', label: 'Day 2 — 24 Sep (Thu) — Dwitiya' },
-  { id: '2026-09-25', label: 'Day 3 — 25 Sep (Fri) — Tritiya' },
-  { id: '2026-09-26', label: 'Day 4 — 26 Sep (Sat) — Chaturthi' },
-  { id: '2026-09-27', label: 'Day 5 — 27 Sep (Sun) — Panchami' },
-  { id: '2026-09-28', label: 'Day 6 — 28 Sep (Mon) — Sasthi' },
-  { id: '2026-09-29', label: 'Day 7 — 29 Sep (Tue) — Saptami' },
-  { id: '2026-09-30', label: 'Day 8 — 30 Sep (Wed) — Ashtami' },
-  { id: '2026-10-01', label: 'Day 9 — 01 Oct (Thu) — Navami & Dussehra' },
-];
+interface FamilyMember {
+  name: string;
+  mobile_no: string;
+  relation?: string;
+}
 
 export default function RegisterPage() {
   const router = useRouter();
 
-  // Employee Form State
-  const [cpf, setCpf] = useState('');
+  // Form state matching Laravel EWC registration
   const [name, setName] = useState('');
-  const [designation, setDesignation] = useState('');
-  const [department, setDepartment] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [mobileNo, setMobileNo] = useState('');
+  const [cpfNo, setCpfNo] = useState('');
+  const [dob, setDob] = useState('');
+  const [dateOfJoining, setDateOfJoining] = useState('');
 
-  // Booking Days
-  const [bookingDays, setBookingDays] = useState<string[]>([
+  // Photo upload
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [photoFileName, setPhotoFileName] = useState('');
+  const [photoFileSize, setPhotoFileSize] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Family members
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+
+  // UI state
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [registeredToken, setRegisteredToken] = useState<string | null>(null);
+
+  // All 9 dates for season festival pass
+  const ALL_FESTIVAL_DATES = [
     '2026-09-23',
     '2026-09-24',
     '2026-09-25',
@@ -56,91 +63,125 @@ export default function RegisterPage() {
     '2026-09-29',
     '2026-09-30',
     '2026-10-01',
-  ]);
+  ];
 
-  // Family Members
-  const [familyMembers, setFamilyMembers] = useState<
-    Array<{ name: string; relation: string; age?: number; gender?: string }>
-  >([]);
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
 
-  // UI state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    setPhotoError('');
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const validExts = ['jpg', 'jpeg', 'png', 'webp'];
 
-  const toggleAllDays = () => {
-    if (bookingDays.length === EVENT_DATES.length) {
-      setBookingDays([]);
-    } else {
-      setBookingDays(EVENT_DATES.map((d) => d.id));
+    if (!ext || !validExts.includes(ext)) {
+      setPhotoError('Please upload a JPG, PNG or WEBP image up to 5 MB.');
+      e.target.value = '';
+      return;
     }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError('Please upload a JPG, PNG or WEBP image up to 5 MB.');
+      e.target.value = '';
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+    setPhotoFileName(file.name);
+    setPhotoFileSize((file.size / (1024 * 1024)).toFixed(2) + ' MB');
   };
 
-  const toggleDay = (dayId: string) => {
-    if (bookingDays.includes(dayId)) {
-      setBookingDays(bookingDays.filter((d) => d !== dayId));
-    } else {
-      setBookingDays([...bookingDays, dayId]);
+  const removePhoto = () => {
+    if (photoPreviewUrl) {
+      URL.revokeObjectURL(photoPreviewUrl);
+    }
+    setPhotoFile(null);
+    setPhotoPreviewUrl(null);
+    setPhotoFileName('');
+    setPhotoFileSize('');
+    setPhotoError('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
   const addFamilyMember = () => {
     if (familyMembers.length >= 6) {
-      alert('Maximum 6 family members allowed per registration');
+      alert('Maximum 6 family members allowed');
       return;
     }
-    setFamilyMembers([
-      ...familyMembers,
-      { name: '', relation: 'Spouse', age: 30, gender: 'Female' },
-    ]);
-  };
-
-  const updateFamilyMember = (index: number, field: string, value: any) => {
-    const updated = [...familyMembers];
-    (updated[index] as any)[field] = value;
-    setFamilyMembers(updated);
+    setFamilyMembers([...familyMembers, { name: '', mobile_no: '', relation: 'Family Member' }]);
   };
 
   const removeFamilyMember = (index: number) => {
     setFamilyMembers(familyMembers.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const updateFamilyMember = (index: number, field: keyof FamilyMember, value: string) => {
+    const updated = [...familyMembers];
+    updated[index][field] = value;
+    setFamilyMembers(updated);
+  };
+
+  const submitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
+    if (submitting) return;
 
-    if (!cpf.trim() || !name.trim() || !phone.trim() || !email.trim()) {
-      setErrorMessage('Please fill in all mandatory employee fields.');
+    setErrorMessage('');
+    setPhotoError('');
+
+    // Frontend Indian Mobile Number Validation
+    const indianMobileRegex = /^[6-9][0-9]{9}$/;
+    const cleanMobile = mobileNo.trim();
+
+    if (!indianMobileRegex.test(cleanMobile)) {
+      setErrorMessage('Enter a valid 10-digit Indian mobile number starting with 6, 7, 8 or 9.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    if (bookingDays.length === 0) {
-      setErrorMessage('Please select at least 1 event night to attend.');
-      return;
-    }
-
-    // Verify family members
+    // Family Member Validation
     for (let i = 0; i < familyMembers.length; i++) {
-      if (!familyMembers[i].name.trim()) {
-        setErrorMessage(`Please enter the name for family member #${i + 1}`);
+      const fm = familyMembers[i];
+      const fmName = fm.name.trim();
+      const fmMobile = fm.mobile_no.trim();
+
+      if (!fmName) {
+        setErrorMessage(`Please enter the name for family member #${i + 1}.`);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (fmMobile !== '' && !indianMobileRegex.test(fmMobile)) {
+        setErrorMessage(
+          `Enter a valid 10-digit Indian mobile number starting with 6, 7, 8 or 9 for family member #${i + 1}.`
+        );
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
     }
 
-    setIsSubmitting(true);
+    setSubmitting(true);
 
     try {
       const formData = new FormData();
-      formData.append('cpf', cpf.trim().toUpperCase());
       formData.append('name', name.trim());
-      formData.append('designation', designation.trim() || 'Officer');
-      formData.append('department', department.trim() || 'General');
-      formData.append('phone', phone.trim());
-      formData.append('email', email.trim().toLowerCase());
-      formData.append('bookingDays', JSON.stringify(bookingDays));
-      formData.append('familyMembers', JSON.stringify(familyMembers));
+      formData.append('phone', cleanMobile);
+      formData.append('cpf', cpfNo.trim().toUpperCase());
+      formData.append('email', `${cpfNo.trim().toLowerCase()}@ongc.co.in`);
+      formData.append('designation', 'ONGC Employee');
+      formData.append('department', 'EWC Ahmedabad');
+      formData.append('bookingDays', JSON.stringify(ALL_FESTIVAL_DATES));
 
-      if (photo) {
-        formData.append('photo', photo);
+      const formattedFamily = familyMembers.map((m) => ({
+        name: m.name.trim(),
+        relation: m.relation || 'Family Member',
+        phone: m.mobile_no.trim() || cleanMobile,
+      }));
+      formData.append('familyMembers', JSON.stringify(formattedFamily));
+
+      if (photoFile) {
+        formData.append('photo', photoFile);
       }
 
       const res = await fetchApi('/public/register', {
@@ -148,344 +189,499 @@ export default function RegisterPage() {
         body: formData,
       });
 
-      if (res.data?.attendee?.qrCodeToken) {
-        router.push(`/ticket/${res.data.attendee.qrCodeToken}`);
-      } else {
-        router.push(`/my-tickets?cpf=${cpf.trim().toUpperCase()}`);
+      const qrToken = res.data?.attendee?.qrCodeToken;
+      if (qrToken) {
+        setRegisteredToken(qrToken);
       }
+      setSubmitted(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to submit registration');
+      setErrorMessage(err.message || 'Validation failed. Please check the entered details.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
+  const resetForm = () => {
+    setSubmitted(false);
+    setErrorMessage('');
+    removePhoto();
+    setName('');
+    setMobileNo('');
+    setCpfNo('');
+    setDob('');
+    setDateOfJoining('');
+    setFamilyMembers([]);
+    setRegisteredToken(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between selection:bg-red-600 selection:text-white">
-      {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-bold text-white text-lg">
-            <span className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-black text-sm">
-              ओ
-            </span>
-            <span>ONGC Navratri Pass Registration</span>
+    <div className="font-sans bg-cream text-ink antialiased min-h-screen py-6 px-4 sm:px-6 lg:px-8 flex flex-col justify-between selection:bg-maroon selection:text-white">
+      {/* TOP HEADER / PROMINENT BRANDING */}
+      <header className="max-w-2xl mx-auto w-full text-center mb-6 pt-2 sm:pt-4">
+        {/* Navigation Home Link */}
+        <div className="flex justify-between items-center mb-4 max-w-2xl mx-auto">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-maroon hover:text-maroon-dark transition-colors"
+          >
+            <Home className="w-4 h-4" />
+            <span>Home</span>
           </Link>
           <Link
             href="/my-tickets"
-            className="text-xs sm:text-sm font-semibold text-amber-400 hover:text-amber-300"
+            className="text-xs font-bold text-maroon hover:underline"
           >
             Already registered? Find Pass
           </Link>
         </div>
-      </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8 flex-1 w-full">
-        <div className="mb-8">
-          <h1 className="text-3xl font-extrabold text-white">
-            Employee & Family Registration
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Complete this form to generate digital QR entry passes for the 2026 festival.
-          </p>
+        {/* ONGC Logo + ONGC AHMEDABAD Badge */}
+        <div className="inline-flex items-center gap-3 sm:gap-4 px-5 py-2.5 sm:px-7 sm:py-3 bg-white rounded-2xl border border-gold/45 shadow-md mb-4 hover:shadow-lg transition-shadow">
+          <img
+            src="/images/logo-web.png"
+            alt="ONGC Logo"
+            className="h-11 sm:h-14 w-auto object-contain shrink-0"
+          />
+          <div className="h-8 w-px bg-gold/50 mx-0.5" />
+          <span className="font-cinzel font-extrabold text-maroon text-lg sm:text-2xl tracking-wider uppercase">
+            ONGC AHMEDABAD
+          </span>
         </div>
 
-        {errorMessage && (
-          <div className="mb-6 p-4 rounded-xl bg-red-950/60 border border-red-500/50 flex items-center gap-3 text-red-200 text-sm">
-            <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
+        {/* EWC Ahmedabad Title */}
+        <h1 className="font-cinzel font-extrabold text-3xl sm:text-5xl text-maroon tracking-tight drop-shadow-xs mt-1">
+          EWC Ahmedabad
+        </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Section 1: Employee Primary Details */}
-          <div className="p-6 rounded-2xl bg-slate-800/40 border border-slate-800 space-y-6">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-700/60">
-              <User className="w-5 h-5 text-red-500" />
-              <h2 className="font-bold text-lg text-white">
-                1. ONGC Employee Details
+        {/* Subtitle */}
+        <p className="font-outfit text-ink-soft text-base sm:text-lg mt-1.5 font-semibold tracking-wide">
+          ONGC Employee & Family Registration
+        </p>
+      </header>
+
+      {/* MAIN REGISTRATION CONTAINER */}
+      <main className="max-w-2xl mx-auto w-full my-auto">
+        {/* INSTRUCTION / BEFORE YOU BEGIN PANEL */}
+        <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-cream-soft/90 via-white to-cream-soft/90 border border-gold/45 shadow-sm text-left">
+          <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-gold/25">
+            <div className="w-6 h-6 rounded-lg bg-gold/20 text-maroon flex items-center justify-center shrink-0 border border-gold/40">
+              <Info className="w-3.5 h-3.5 text-maroon" />
+            </div>
+            <h3 className="font-outfit font-bold text-sm sm:text-base text-maroon tracking-wide">
+              Before You Begin
+            </h3>
+          </div>
+          <ul className="space-y-1.5 text-xs sm:text-sm text-ink-soft leading-relaxed">
+            <li className="flex items-start gap-2">
+              <span className="text-gold font-bold text-sm leading-none mt-0.5">&bull;</span>
+              <span>This form is for ONGC employees of EWC Ahmedabad.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-gold font-bold text-sm leading-none mt-0.5">&bull;</span>
+              <span>Please enter your details exactly as per official records.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-gold font-bold text-sm leading-none mt-0.5">&bull;</span>
+              <span>
+                All employee details marked with <span className="text-rose-600 font-bold">*</span> are mandatory.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-gold font-bold text-sm leading-none mt-0.5">&bull;</span>
+              <span>Family member details are optional.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-gold font-bold text-sm leading-none mt-0.5">&bull;</span>
+              <span>Please keep your mobile number active for registration-related communication.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-gold font-bold text-sm leading-none mt-0.5">&bull;</span>
+              <span>After successful submission, your digital pass/QR code will be generated.</span>
+            </li>
+          </ul>
+        </div>
+
+        {/* SUCCESS STATE CARD */}
+        {submitted ? (
+          <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/30 shadow-xl text-center space-y-6">
+            <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner border border-emerald-200">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink">
+                Registration Submitted Successfully
               </h2>
+              <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full" />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  ONGC CPF Number *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 123456"
-                  value={cpf}
-                  onChange={(e) => setCpf(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-white placeholder-slate-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Full Name (as per ONGC ID) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ramesh Kumar"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-white placeholder-slate-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Designation *
-                </label>
-                <div className="relative">
-                  <Briefcase className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Superintending Engineer (Drilling)"
-                    value={designation}
-                    onChange={(e) => setDesignation(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-white placeholder-slate-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Department / Asset *
-                </label>
-                <div className="relative">
-                  <Building className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Western Onshore Basin"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-white placeholder-slate-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Mobile Number (for SMS & Verification) *
-                </label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                  <input
-                    type="tel"
-                    required
-                    placeholder="+91 9876543210"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-white placeholder-slate-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Email Address *
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="name@ongc.co.in"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-white placeholder-slate-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Photo Upload */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Employee Photo (Optional, used for turnstile gate screen display)
-              </label>
-              <div className="flex items-center gap-4">
-                <label className="px-4 py-2.5 rounded-xl bg-slate-900 border border-dashed border-slate-600 hover:border-slate-500 cursor-pointer flex items-center gap-2 text-sm text-slate-300">
-                  <Upload className="w-4 h-4 text-slate-400" />
-                  <span>{photo ? photo.name : 'Choose JPG/PNG file...'}</span>
-                  <input
-                    type="file"
-                    accept="image/png, image/jpeg, image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setPhoto(e.target.files[0]);
-                      }
-                    }}
-                  />
-                </label>
-                {photo && (
-                  <button
-                    type="button"
-                    onClick={() => setPhoto(null)}
-                    className="text-xs text-red-400 hover:underline"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Attendance Dates */}
-          <div className="p-6 rounded-2xl bg-slate-800/40 border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-amber-400" />
-                <h2 className="font-bold text-lg text-white">
-                  2. Select Event Nights
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={toggleAllDays}
-                className="text-xs font-semibold text-amber-400 hover:underline"
-              >
-                {bookingDays.length === EVENT_DATES.length
-                  ? 'Deselect All'
-                  : 'Select All 9 Nights'}
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400">
-              Passes will be active and authorized for entry exclusively on the dates checked below.
+            <p className="text-ink-soft text-sm sm:text-base leading-relaxed max-w-md mx-auto">
+              Thank you. Your EWC Ahmedabad employee and family details have been submitted successfully.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-2">
-              {EVENT_DATES.map((day) => {
-                const isSelected = bookingDays.includes(day.id);
-                return (
-                  <button
-                    type="button"
-                    key={day.id}
-                    onClick={() => toggleDay(day.id)}
-                    className={`p-3 rounded-xl border text-left text-xs font-medium transition-all flex items-center justify-between ${
-                      isSelected
-                        ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <span>{day.label}</span>
-                    {isSelected && (
-                      <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+              {registeredToken ? (
+                <Link
+                  href={`/ticket/${registeredToken}`}
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gold text-maroon-deep font-bold text-sm hover:bg-gold-light transition-all shadow-md inline-flex items-center justify-center gap-2 border border-maroon/20"
+                >
+                  <span>View & Download My Digital Pass</span>
+                </Link>
+              ) : (
+                <Link
+                  href={`/my-tickets?cpf=${cpfNo.trim().toUpperCase()}`}
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gold text-maroon-deep font-bold text-sm hover:bg-gold-light transition-all shadow-md inline-flex items-center justify-center gap-2 border border-maroon/20"
+                >
+                  <span>View All My Passes</span>
+                </Link>
+              )}
 
-          {/* Section 3: Family Members */}
-          <div className="p-6 rounded-2xl bg-slate-800/40 border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-emerald-400" />
-                <h2 className="font-bold text-lg text-white">
-                  3. Immediate Family Members
-                </h2>
-              </div>
               <button
+                onClick={resetForm}
                 type="button"
-                onClick={addFamilyMember}
-                className="px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 hover:bg-emerald-900/60 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-maroon text-white font-bold text-sm hover:bg-maroon-dark transition-all shadow-md inline-flex items-center justify-center gap-2 border border-gold/40"
               >
-                <Plus className="w-4 h-4" />
-                Add Family Member
+                <PlusCircle className="w-4 h-4 text-gold-light" />
+                <span>Register Another Employee</span>
               </button>
             </div>
-
-            {familyMembers.length === 0 ? (
-              <p className="text-sm text-slate-400 italic py-2">
-                No family members added. (Click the button above to include spouse, children, or parents).
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {familyMembers.map((fam, idx) => (
-                  <div
-                    key={idx}
-                    className="p-4 rounded-xl bg-slate-900 border border-slate-700/80 flex flex-col sm:flex-row items-center gap-3"
-                  >
-                    <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 text-xs flex items-center justify-center font-bold">
-                      {idx + 1}
-                    </span>
-
-                    <input
-                      type="text"
-                      required
-                      placeholder="Family Member Full Name"
-                      value={fam.name}
-                      onChange={(e) => updateFamilyMember(idx, 'name', e.target.value)}
-                      className="w-full sm:flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-emerald-500"
-                    />
-
-                    <select
-                      value={fam.relation}
-                      onChange={(e) => updateFamilyMember(idx, 'relation', e.target.value)}
-                      className="w-full sm:w-36 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-emerald-500"
-                    >
-                      <option value="Spouse">Spouse</option>
-                      <option value="Child">Child / Dependent</option>
-                      <option value="Parent">Parent</option>
-                      <option value="Other">Other Family</option>
-                    </select>
-
-                    <input
-                      type="number"
-                      placeholder="Age"
-                      min={1}
-                      max={120}
-                      value={fam.age || ''}
-                      onChange={(e) =>
-                        updateFamilyMember(idx, 'age', parseInt(e.target.value, 10))
-                      }
-                      className="w-full sm:w-20 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-emerald-500"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => removeFamilyMember(idx)}
-                      className="p-2 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition-colors"
-                      title="Remove"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+          </div>
+        ) : (
+          /* FORM CARD */
+          <div className="bg-white rounded-3xl p-6 sm:p-10 border border-gold/40 shadow-xl space-y-8">
+            {/* ERROR ALERT */}
+            {errorMessage && (
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-semibold flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1">{errorMessage}</div>
               </div>
             )}
-          </div>
 
-          {/* Submit Action */}
-          <div className="pt-4">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-extrabold text-lg shadow-xl shadow-red-900/40 flex items-center justify-center gap-3 transition-transform hover:-translate-y-0.5 disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <span>Generating Digital Passes...</span>
-              ) : (
-                <>
-                  <ShieldCheck className="w-6 h-6" />
-                  <span>Generate Passes ({1 + familyMembers.length} Total)</span>
-                  <ArrowRight className="w-5 h-5" />
-                </>
-              )}
-            </button>
+            <form onSubmit={submitForm} className="space-y-8">
+              {/* SECTION 1 — EMPLOYEE DETAILS */}
+              <div className="space-y-5">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-stone-100">
+                  <div className="w-8 h-8 rounded-lg bg-maroon-soft text-maroon font-bold text-sm flex items-center justify-center border border-maroon/20">
+                    1
+                  </div>
+                  <h2 className="font-outfit font-bold text-lg text-maroon uppercase tracking-wide">
+                    EMPLOYEE DETAILS
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* 1. NAME (FULL WIDTH) */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-ink mb-1.5">
+                      Employee Name <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      placeholder="e.g. Ramesh Kumar Patel"
+                      className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-2 focus:ring-maroon/20"
+                    />
+                  </div>
+
+                  {/* 2. MOBILE NO. (TWO COLUMNS ON DESKTOP) */}
+                  <div>
+                    <label className="block text-xs font-bold text-ink mb-1.5">
+                      Mobile No. (10 Digits) <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={mobileNo}
+                      onChange={(e) => setMobileNo(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+                      required
+                      pattern="[6-9][0-9]{9}"
+                      maxLength={10}
+                      minLength={10}
+                      inputMode="numeric"
+                      placeholder="e.g. 9876543210"
+                      className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-2 focus:ring-maroon/20"
+                    />
+                  </div>
+
+                  {/* 3. CPF NO. (TWO COLUMNS ON DESKTOP) */}
+                  <div>
+                    <label className="block text-xs font-bold text-ink mb-1.5">
+                      CPF No. <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={cpfNo}
+                      onChange={(e) => setCpfNo(e.target.value.toUpperCase())}
+                      required
+                      placeholder="e.g. 123456"
+                      className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink placeholder-stone-400 text-sm uppercase font-mono focus:outline-none focus:border-maroon focus:ring-2 focus:ring-maroon/20"
+                    />
+                  </div>
+
+                  {/* 4. D.O.B. (TWO COLUMNS ON DESKTOP) */}
+                  <div>
+                    <label className="block text-xs font-bold text-ink mb-1.5">
+                      D.O.B. <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      required
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon focus:ring-2 focus:ring-maroon/20"
+                    />
+                  </div>
+
+                  {/* 5. DATE OF JOINING (TWO COLUMNS ON DESKTOP) */}
+                  <div>
+                    <label className="block text-xs font-bold text-ink mb-1.5">
+                      Date of Joining <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={dateOfJoining}
+                      onChange={(e) => setDateOfJoining(e.target.value)}
+                      required
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon focus:ring-2 focus:ring-maroon/20"
+                    />
+                  </div>
+
+                  {/* 6. EMPLOYEE PHOTO (FULL WIDTH UPLOAD AREA) */}
+                  <div className="sm:col-span-2 pt-1">
+                    <label className="block text-xs font-bold text-ink mb-1">
+                      Employee Photo
+                    </label>
+                    <p className="text-[11px] text-ink-soft mb-2.5">
+                      Upload a recent photo for identity verification. (Admin verification only)
+                    </p>
+
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={handlePhotoSelect}
+                    />
+
+                    {!photoPreviewUrl ? (
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="cursor-pointer border-2 border-dashed border-stone-300 hover:border-maroon/60 bg-cream-light hover:bg-cream/70 rounded-2xl p-6 text-center transition-all group shadow-2xs"
+                      >
+                        <div className="w-12 h-12 rounded-full bg-maroon-soft text-maroon mx-auto flex items-center justify-center mb-3 group-hover:scale-105 transition-transform border border-maroon/20">
+                          <User className="w-6 h-6" />
+                        </div>
+                        <div className="font-outfit font-bold text-sm text-ink group-hover:text-maroon transition-colors">
+                          Upload Employee Photo
+                        </div>
+                        <div className="text-xs text-ink-soft mt-1">
+                          JPG / PNG / WEBP &bull; Max 5 MB
+                        </div>
+                        <div className="mt-3.5">
+                          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-white border border-stone-200 text-xs font-bold text-maroon shadow-xs group-hover:border-gold/60">
+                            <Upload className="w-3.5 h-3.5 text-gold-dark" /> Choose Photo
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-2xl bg-cream-light border border-gold/40 shadow-xs flex flex-col sm:flex-row items-center gap-4">
+                        <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-gold/60 shadow-md bg-white shrink-0">
+                          <img
+                            src={photoPreviewUrl}
+                            alt="Employee Photo Preview"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+
+                        <div className="flex-1 text-center sm:text-left space-y-1">
+                          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Photo uploaded</span>
+                          </div>
+                          <div className="text-xs font-semibold text-ink truncate max-w-xs">
+                            {photoFileName}
+                          </div>
+                          <div className="text-[11px] text-ink-soft">{photoFileSize}</div>
+
+                          <div className="flex items-center justify-center sm:justify-start gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-ink hover:text-maroon text-xs font-bold transition-colors shadow-2xs inline-flex items-center gap-1"
+                            >
+                              <RefreshCw className="w-3 h-3" /> Change Photo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={removePhoto}
+                              className="px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-xs font-bold transition-colors shadow-2xs inline-flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3 h-3" /> Remove
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {photoError && (
+                      <div className="mt-2 text-xs text-rose-600 font-semibold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>{photoError}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2 — FAMILY MEMBERS (OPTIONAL) */}
+              <div className="space-y-5 pt-4 border-t border-stone-200">
+                <div className="flex items-center justify-between gap-4 pb-3 border-b border-stone-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-maroon-soft text-maroon font-bold text-sm flex items-center justify-center border border-maroon/20">
+                      2
+                    </div>
+                    <div>
+                      <h2 className="font-outfit font-bold text-lg text-maroon uppercase tracking-wide">
+                        FAMILY MEMBERS
+                      </h2>
+                      <p className="text-xs text-ink-soft">Add family members if applicable.</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    Optional
+                  </span>
+                </div>
+
+                {/* EMPTY STATE */}
+                {familyMembers.length === 0 ? (
+                  <div className="p-6 rounded-2xl bg-cream-soft/60 border border-stone-200 text-center space-y-3">
+                    <p className="text-xs font-semibold text-ink-soft">No family member added</p>
+                    <button
+                      onClick={addFamilyMember}
+                      type="button"
+                      className="px-5 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition-all inline-flex items-center gap-1.5 shadow-sm border border-gold/40"
+                    >
+                      <Plus className="w-4 h-4 text-gold-light" />
+                      <span>+ Add Family Member</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {familyMembers.map((member, index) => (
+                      <div
+                        key={index}
+                        className="p-4 sm:p-5 rounded-2xl bg-cream-light border border-stone-200/80 space-y-4 relative"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-outfit font-bold text-sm text-maroon">
+                            Family Member {index + 1}
+                          </span>
+                          <button
+                            onClick={() => removeFamilyMember(index)}
+                            type="button"
+                            className="text-xs font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                          <div>
+                            <label className="block text-[11px] font-bold text-ink mb-1">
+                              Name <span className="text-rose-600">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={member.name}
+                              onChange={(e) => updateFamilyMember(index, 'name', e.target.value)}
+                              required
+                              placeholder="Full Name"
+                              className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-ink mb-1">
+                              Mobile No. (10 Digits)
+                            </label>
+                            <input
+                              type="tel"
+                              value={member.mobile_no}
+                              onChange={(e) =>
+                                updateFamilyMember(
+                                  index,
+                                  'mobile_no',
+                                  e.target.value.replace(/[^0-9]/g, '').slice(0, 10)
+                                )
+                              }
+                              pattern="[6-9][0-9]{9}"
+                              maxLength={10}
+                              inputMode="numeric"
+                              placeholder="e.g. 9876543210"
+                              className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div>
+                      <button
+                        onClick={addFamilyMember}
+                        type="button"
+                        className="w-full py-3.5 rounded-2xl bg-cream-soft border border-gold/50 text-maroon font-bold text-sm hover:bg-gold-soft transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4 text-maroon" />
+                        <span>+ Add Another Family Member</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SUBMIT BUTTON & PRIVACY NOTICE */}
+              <div className="pt-4 border-t border-stone-200 space-y-4">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`w-full py-4 rounded-2xl bg-maroon text-white font-bold text-base shadow-md transition-all flex items-center justify-center gap-2 border border-gold/40 ${
+                    submitting
+                      ? 'opacity-60 cursor-not-allowed'
+                      : 'hover:bg-maroon-dark hover:shadow-lg'
+                  }`}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5 text-gold-light" />
+                      <span>Submit Registration</span>
+                    </>
+                  )}
+                </button>
+
+                <p className="text-center text-xs text-ink-soft leading-relaxed max-w-lg mx-auto">
+                  Your information is collected for EWC Ahmedabad event registration and entry management. Employee photo is used only for administrative verification.
+                </p>
+              </div>
+            </form>
           </div>
-        </form>
+        )}
       </main>
+
+      {/* FOOTER */}
+      <footer className="max-w-2xl mx-auto w-full text-center text-xs text-ink-soft py-6 mt-8 border-t border-stone-200/80">
+        <p>&copy; 2026 ONGC Ahmedabad &bull; EWC Registration System</p>
+      </footer>
     </div>
   );
 }
