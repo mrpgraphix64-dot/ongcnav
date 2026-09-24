@@ -162,7 +162,6 @@ ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=CHANGE_ME_TO_A_STRONG_PASSWORD
 APP_TIMEZONE=Asia/Kolkata
 LOAD_TESTING_ENABLED=false
-DEMO_ADMIN_BYPASS=false
 LOAD_TEST_INTERNAL_SECRET=CHANGE_ME_TO_A_RANDOM_SECRET
 ENV
 chmod 600 .env
@@ -295,8 +294,13 @@ not full application secrets.
 | `NODE_ENV` | yes | `staging` |
 | `APP_TIMEZONE` | yes | e.g. `Asia/Kolkata` |
 | `LOAD_TESTING_ENABLED` | as needed | `false` unless actively load testing |
-| `DEMO_ADMIN_BYPASS` | as needed | `false` for a realistic staging environment |
 | `PORT` | yes | `3011` (matches `ecosystem.staging.config.js` and Nginx upstream) |
+
+> **Demo/bypass authentication has been fully removed** — there is no
+> `DEMO_ADMIN_BYPASS` flag and no `/auth/demo` endpoint. `ADMIN_EMAIL`/
+> `ADMIN_PASSWORD` remain as an emergency fallback login (used only when
+> no matching `User` row exists yet) — both must be set or that path
+> can't authenticate at all; there is no hardcoded default password.
 
 ## 5. Health check
 

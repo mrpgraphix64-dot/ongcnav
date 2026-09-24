@@ -65,12 +65,11 @@ jobs:
 
       # NEXT_PUBLIC_API_URL is baked into the browser bundle at build time
       # (it's a Next.js public env var, not read at runtime), so it must be
-      # set here, not just on the server. TEMPORARY staging value — not a
-      # secret (a plain HTTP IP), so it's a plain env var, not a GitHub
-      # Secret. Update this once the staging API has a real hostname/HTTPS.
+      # set here, not just on the server. Not a secret — a plain env var,
+      # not a GitHub Secret. HTTPS staging API domain (DNS/SSL finalized).
       - name: Build web
         env:
-          NEXT_PUBLIC_API_URL: http://200.234.41.6
+          NEXT_PUBLIC_API_URL: https://api-ongcnavratri.reworkzone.in
         run: npm run build:web
 
       - name: Run API tests
