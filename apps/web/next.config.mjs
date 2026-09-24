@@ -29,6 +29,21 @@ const nextConfig = {
         destination: '/admin/helpdesk',
         permanent: false,
       },
+      {
+        source: '/admin/dashboard',
+        destination: '/admin',
+        permanent: true,
+      },
+      {
+        source: '/admin/my-gate',
+        destination: '/admin',
+        permanent: false,
+      },
+      {
+        source: '/admin/scanner',
+        destination: '/scanner',
+        permanent: false,
+      },
     ];
   },
 };

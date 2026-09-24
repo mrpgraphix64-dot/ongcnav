@@ -44,7 +44,7 @@ export class SettingsController {
   }
 
   @Post('reset-data')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN)
   @ApiOperation({ summary: 'Danger zone: Request event data purge' })
   async resetData(@Body() dto: ResetEventDataDto, @Req() req: Request) {
     const user = (req as any).user;

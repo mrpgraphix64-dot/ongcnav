@@ -33,8 +33,11 @@ export class ScannerController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     UserRole.GATE_OPERATOR,
+    UserRole.SCANNER_STAFF,
     UserRole.GATE_SUPERVISOR,
+    UserRole.GATE_MANAGER,
     UserRole.ADMIN,
+    UserRole.EVENT_ADMIN,
     UserRole.SUPER_ADMIN,
     UserRole.HELP_DESK,
   )

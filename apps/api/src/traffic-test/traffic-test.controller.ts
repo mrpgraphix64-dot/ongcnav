@@ -33,7 +33,7 @@ export class TrafficTestController {
   @Get('runs')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'List all traffic test execution runs' })
   async listRuns() {
     return this.trafficTestService.listRuns();
@@ -42,7 +42,7 @@ export class TrafficTestController {
   @Get('runs/:id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Get details of a specific traffic test run' })
   async getRun(@Param('id') id: string) {
     return this.trafficTestService.getRun(BigInt(id));
@@ -51,7 +51,7 @@ export class TrafficTestController {
   @Get('runs/:id/status')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Get live status and telemetry of a traffic test run' })
   async getRunStatus(@Param('id') id: string) {
     return this.trafficTestService.getRunStatus(BigInt(id));
@@ -60,7 +60,7 @@ export class TrafficTestController {
   @Post('start')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Initiate a simulated load test run' })
   async startTest(@Body() dto: StartLoadTestDto, @Req() req: Request) {
     const user = (req as any).user;
@@ -70,7 +70,7 @@ export class TrafficTestController {
   @Post('runs/:id/stop')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Stop an active load test run' })
   async stopRun(@Param('id') id: string) {
     return this.trafficTestService.stopRun(BigInt(id));
@@ -79,7 +79,7 @@ export class TrafficTestController {
   @Get('runs/:id/export')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Export granular request logs to CSV' })
   async exportCsv(@Param('id') id: string, @Res() res: Response) {
     const csvData = await this.trafficTestService.exportCsv(BigInt(id));
@@ -93,7 +93,7 @@ export class TrafficTestController {
   @Delete('runs/:id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Purge test run and all isolated load test data' })
   async cleanupRun(@Param('id') id: string) {
     return this.trafficTestService.cleanupRun(BigInt(id));
@@ -102,7 +102,7 @@ export class TrafficTestController {
   @Post('runs/:id/cleanup')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Legacy POST alias to purge test run' })
   async cleanupRunPost(@Param('id') id: string) {
     return this.trafficTestService.cleanupRun(BigInt(id));
