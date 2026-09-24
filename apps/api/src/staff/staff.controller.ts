@@ -21,47 +21,68 @@ import { UserRole } from '@ongc/shared-types';
 @ApiTags('Admin Staff')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN)
 @Controller('admin/staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.GATE_SUPERVISOR)
-  @ApiOperation({ summary: 'List all staff users with gate assignments' })
-  async findAll(@Query('role') role?: string) {
-    return this.staffService.findAll(role);
+  @ApiOperation({ summary: 'List all staff users with gate assignments and filters' })
+  async findAll(
+    @Query('role') role?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.staffService.findAll(role, status, search);
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.GATE_SUPERVISOR)
   @ApiOperation({ summary: 'Get staff user details' })
   async findOne(@Param('id') id: string) {
     return this.staffService.findOne(BigInt(id));
   }
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Create new staff member' })
+  @ApiOperation({ summary: 'Create new staff member operator' })
   async create(@Body() dto: CreateStaffDto) {
     return this.staffService.create(dto);
   }
 
   @Put(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Update staff member' })
   async update(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
     return this.staffService.update(BigInt(id), dto);
   }
 
+  @Post(':id/toggle')
+  @ApiOperation({ summary: 'Toggle staff member active/inactive status' })
+  async toggle(@Param('id') id: string) {
+    return this.staffService.toggleStatus(BigInt(id));
+  }
+
+  @Post(':id/toggle-status')
+  @ApiOperation({ summary: 'Toggle staff member active/inactive status (Laravel alias)' })
+  async toggleStatus(@Param('id') id: string) {
+    return this.staffService.toggleStatus(BigInt(id));
+  }
+
+  @Get(':id/activity')
+  @ApiOperation({ summary: 'Get operator activity log audit history' })
+  async getActivity(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.staffService.getActivity(BigInt(id), Number(page) || 1, Number(limit) || 25);
+  }
+
   @Post(':id/assign-gate')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.GATE_SUPERVISOR)
   @ApiOperation({ summary: 'Assign staff member to a gate' })
   async assignGate(@Param('id') id: string, @Body() dto: AssignGateDto) {
     return this.staffService.assignGate(BigInt(id), dto);
   }
 
   @Delete(':id/gates/:gateId')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.GATE_SUPERVISOR)
   @ApiOperation({ summary: 'Remove staff gate assignment' })
   async unassignGate(
     @Param('id') id: string,
