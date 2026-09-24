@@ -47,10 +47,14 @@ enum CheckinStatus {
 }
 
 enum IncidentCategory {
+  TICKET_ISSUE
+  CAPACITY_LIMIT
+  DUPLICATE_CLAIM
   SECURITY
   CROWD
   MEDICAL
   VIP
+  LOST_FOUND
   SYSTEM
   OTHER
 }
@@ -65,6 +69,7 @@ enum IncidentSeverity {
 enum IncidentStatus {
   OPEN
   IN_PROGRESS
+  IN_REVIEW
   RESOLVED
   CLOSED
 }
@@ -103,8 +108,10 @@ model User {
 
   gateUsers        GateUser[]
   scannedCheckins  DailyCheckin[] @relation("ScannedByUser")
+  voidedCheckins   DailyCheckin[] @relation("VoidedByUser")
   scannedLogs      ScanLog[]      @relation("ScanLogUser")
   reportedIncidents Incident[]    @relation("IncidentReporter")
+  resolvedIncidents Incident[]    @relation("IncidentResolver")
   auditLogs        AuditLog[]
 
   @@map("users")
@@ -203,6 +210,7 @@ model Attendee {
   familyMember  FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
   dailyCheckins DailyCheckin[]
   scanLogs      ScanLog[]
+  incidents     Incident[]
 
   @@index([ticketNumber])
   @@index([qrCodeToken])
@@ -218,6 +226,11 @@ model DailyCheckin {
   eventDate     String        @map("event_date") @db.VarChar(20)
   checkinTime   DateTime      @default(now()) @map("checkin_time")
   status        CheckinStatus @default(SUCCESS)
+  isManual      Boolean       @default(false) @map("is_manual")
+  manualReason  String?       @map("manual_reason") @db.Text
+  voidedAt      DateTime?     @map("voided_at")
+  voidedById    BigInt?       @map("voided_by_id")
+  voidReason    String?       @map("void_reason") @db.Text
   isLoadTest    Boolean       @default(false) @map("is_load_test")
   loadTestRunId BigInt?       @map("load_test_run_id")
   createdAt     DateTime      @default(now()) @map("created_at")
@@ -226,6 +239,7 @@ model DailyCheckin {
   attendee    Attendee     @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
   gate        Gate         @relation(fields: [gateId], references: [id], onDelete: Cascade)
   scannedBy   User?        @relation("ScannedByUser", fields: [scannedById], references: [id], onDelete: SetNull)
+  voidedBy    User?        @relation("VoidedByUser", fields: [voidedById], references: [id], onDelete: SetNull)
   loadTestRun LoadTestRun? @relation(fields: [loadTestRunId], references: [id], onDelete: Cascade)
 
   @@unique([attendeeId, eventDate], name: "unique_attendee_event_date")
@@ -262,24 +276,33 @@ model ScanLog {
 model Incident {
   id              BigInt           @id @default(autoincrement())
   incidentNumber  String           @unique @map("incident_number") @db.VarChar(50)
-  gateId          BigInt           @map("gate_id")
+  gateId          BigInt?          @map("gate_id")
   reportedById    BigInt           @map("reported_by_id")
   category        IncidentCategory @default(SECURITY)
   severity        IncidentSeverity @default(MEDIUM)
   status          IncidentStatus   @default(OPEN)
   title           String           @db.VarChar(255)
   description     String           @db.Text
+  ticketId        String?          @map("ticket_id") @db.VarChar(50)
+  attendeeId      BigInt?          @map("attendee_id")
+  incidentDate    String?          @map("incident_date") @db.VarChar(20)
+  incidentTime    String?          @map("incident_time") @db.VarChar(20)
   resolutionNotes String?          @map("resolution_notes") @db.Text
+  resolvedById    BigInt?          @map("resolved_by_id")
   resolvedAt      DateTime?        @map("resolved_at")
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  gate       Gate @relation(fields: [gateId], references: [id], onDelete: Cascade)
-  reportedBy User @relation("IncidentReporter", fields: [reportedById], references: [id], onDelete: Cascade)
+  gate       Gate?     @relation(fields: [gateId], references: [id], onDelete: SetNull)
+  reportedBy User      @relation("IncidentReporter", fields: [reportedById], references: [id], onDelete: Cascade)
+  resolvedBy User?     @relation("IncidentResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  attendee   Attendee? @relation(fields: [attendeeId], references: [id], onDelete: SetNull)
 
   @@index([category])
   @@index([severity])
   @@index([status])
+  @@index([ticketId])
+  @@index([incidentDate])
   @@map("incidents")
 }
 

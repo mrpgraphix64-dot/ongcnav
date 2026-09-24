@@ -1,302 +1,651 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   AlertTriangle,
-  Plus,
+  PlusCircle,
   RefreshCw,
   CheckCircle2,
   Clock,
   ShieldAlert,
   Filter,
+  X,
+  DoorOpen,
+  Calendar,
+  Check,
+  CheckCircle,
+  HelpCircle,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { IncidentCategory, IncidentSeverity, IncidentStatus } from '@ongc/shared-types';
 
+interface GateItem {
+  id: string;
+  name: string;
+  code?: string;
+}
+
+interface IncidentItem {
+  id: string;
+  incident_id?: string;
+  incidentNumber: string;
+  category: string;
+  categoryLabel?: string;
+  severity: string;
+  status: string;
+  title?: string;
+  description: string;
+  ticket_id?: string | null;
+  ticketId?: string | null;
+  incident_date?: string | null;
+  incident_time?: string | null;
+  resolution_notes?: string | null;
+  resolutionNotes?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  gate?: {
+    id: string;
+    name: string;
+    gateNumber?: string;
+  } | null;
+  reportedBy?: {
+    id: string;
+    name: string;
+    role: string;
+    staffId?: string;
+  } | null;
+  resolvedBy?: {
+    id: string;
+    name: string;
+    role: string;
+    staffId?: string;
+  } | null;
+  attendee?: {
+    id: string;
+    name: string;
+    ticketNumber?: string;
+    mobile?: string;
+  } | null;
+}
+
+const CATEGORIES_MAP: Record<string, string> = {
+  TICKET_ISSUE: 'Ticket / QR Issue',
+  CAPACITY_LIMIT: 'Capacity Limit Reached',
+  DUPLICATE_CLAIM: 'Duplicate Entry Dispute',
+  SECURITY: 'Security Concern',
+  MEDICAL: 'Medical / First Aid',
+  LOST_FOUND: 'Lost & Found',
+  OTHER: 'Other Incident',
+  CROWD: 'Crowd Congestion',
+  SYSTEM: 'Technical / System',
+  VIP: 'VIP Escort',
+};
+
 export default function AdminIncidentsPage() {
-  const [incidents, setIncidents] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<IncidentItem[]>([]);
+  const [gates, setGates] = useState<GateItem[]>([]);
+  const [categories, setCategories] = useState<Record<string, string>>(CATEGORIES_MAP);
   const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Modal State
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [gateId, setGateId] = useState('1');
-  const [category, setCategory] = useState<IncidentCategory>(IncidentCategory.SECURITY);
-  const [severity, setSeverity] = useState<IncidentSeverity>(IncidentSeverity.MEDIUM);
+  // Metrics
+  const [metrics, setMetrics] = useState({
+    totalCount: 0,
+    openCount: 0,
+    inReviewCount: 0,
+    resolvedCount: 0,
+  });
 
-  // Resolution Modal State
-  const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
-  const [resolutionNotes, setResolutionNotes] = useState('');
-  const [resStatus, setResStatus] = useState<IncidentStatus>(IncidentStatus.RESOLVED);
+  // Filters
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [gateFilter, setGateFilter] = useState<string>('');
 
-  const loadIncidents = async () => {
+  // Create Modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createCategory, setCreateCategory] = useState<string>('TICKET_ISSUE');
+  const [createGateId, setCreateGateId] = useState<string>('');
+  const [createTicketId, setCreateTicketId] = useState<string>('');
+  const [createDescription, setCreateDescription] = useState<string>('');
+  const [createSeverity, setCreateSeverity] = useState<string>('MEDIUM');
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+
+  // Resolve Modal
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<IncidentItem | null>(null);
+  const [resolveStatus, setResolveStatus] = useState<string>('RESOLVED');
+  const [resolutionNotes, setResolutionNotes] = useState<string>('');
+  const [resolveSubmitting, setResolveSubmitting] = useState(false);
+
+  const loadIncidents = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await fetchApi('/admin/incidents');
-      setIncidents(data || []);
-    } catch (e) {
-      console.error(e);
+      const queryParams = new URLSearchParams();
+      if (selectedDate) queryParams.set('date', selectedDate);
+      if (statusFilter) queryParams.set('status', statusFilter);
+      if (categoryFilter) queryParams.set('category', categoryFilter);
+      if (gateFilter) queryParams.set('gateId', gateFilter);
+
+      const qs = queryParams.toString();
+      const res = await fetchApi(`/admin/incidents${qs ? `?${qs}` : ''}`);
+
+      if (res) {
+        const list = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.incidents)
+          ? res.incidents
+          : Array.isArray(res)
+          ? res
+          : [];
+        setIncidents(list);
+
+        if (res.metrics) {
+          setMetrics({
+            totalCount: res.metrics.totalCount ?? list.length,
+            openCount:
+              res.metrics.openCount ?? list.filter((i: any) => i.status === 'OPEN').length,
+            inReviewCount:
+              res.metrics.inReviewCount ??
+              list.filter((i: any) => i.status === 'IN_REVIEW').length,
+            resolvedCount:
+              res.metrics.resolvedCount ??
+              list.filter((i: any) => i.status === 'RESOLVED' || i.status === 'CLOSED').length,
+          });
+        } else {
+          setMetrics({
+            totalCount: list.length,
+            openCount: list.filter((i: any) => i.status === 'OPEN').length,
+            inReviewCount: list.filter((i: any) => i.status === 'IN_REVIEW').length,
+            resolvedCount: list.filter(
+              (i: any) => i.status === 'RESOLVED' || i.status === 'CLOSED',
+            ).length,
+          });
+        }
+
+        if (Array.isArray(res.gates)) {
+          setGates(res.gates);
+        }
+
+        if (res.categories && typeof res.categories === 'object') {
+          setCategories(res.categories);
+        }
+
+        if (res.selectedDate && !selectedDate) {
+          setSelectedDate(res.selectedDate);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching incidents:', err);
+      setMsg({ text: err.message || 'Failed to load incidents', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedDate, statusFilter, categoryFilter, gateFilter]);
 
   useEffect(() => {
     loadIncidents();
-  }, []);
+  }, [loadIncidents]);
+
+  const handleResetFilters = () => {
+    setSelectedDate('');
+    setStatusFilter('');
+    setCategoryFilter('');
+    setGateFilter('');
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const desc = createDescription.trim();
+    if (!desc || desc.length < 5) {
+      alert('Detailed description is required (minimum 5 characters).');
+      return;
+    }
+
+    setCreateSubmitting(true);
     try {
       await fetchApi('/admin/incidents', {
         method: 'POST',
         body: JSON.stringify({
-          title,
-          description,
-          gateId,
-          category,
-          severity,
+          category: createCategory,
+          gate_id: createGateId ? createGateId : undefined,
+          gateId: createGateId ? createGateId : undefined,
+          ticket_id: createTicketId.trim() ? createTicketId.trim() : undefined,
+          ticketId: createTicketId.trim() ? createTicketId.trim() : undefined,
+          description: desc,
+          severity: createSeverity,
+          title: `${CATEGORIES_MAP[createCategory] || createCategory} incident`,
         }),
       });
-      setShowAddModal(false);
-      setTitle('');
-      setDescription('');
+
+      setShowCreateModal(false);
+      setCreateDescription('');
+      setCreateTicketId('');
+      setCreateGateId('');
+      setMsg({ text: 'Incident successfully recorded and dispatched.', type: 'success' });
       loadIncidents();
-    } catch (e: any) {
-      alert(e.message || 'Failed to report incident');
+    } catch (err: any) {
+      alert(err.message || 'Failed to log incident.');
+    } finally {
+      setCreateSubmitting(false);
     }
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  const openResolveModal = (inc: IncidentItem) => {
+    setSelectedIncident(inc);
+    setResolveStatus('RESOLVED');
+    setResolutionNotes(inc.resolution_notes || inc.resolutionNotes || '');
+    setShowResolveModal(true);
+  };
+
+  const closeResolveModal = () => {
+    setShowResolveModal(false);
+    setSelectedIncident(null);
+    setResolutionNotes('');
+  };
+
+  const handleResolve = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedIncident) return;
+    const notes = resolutionNotes.trim();
+    if (!notes || notes.length < 3) {
+      alert('Mandatory resolution notes are required to resolve/update an incident.');
+      return;
+    }
+
+    setResolveSubmitting(true);
     try {
-      await fetchApi(`/admin/incidents/${selectedIncident.id}`, {
-        method: 'PUT',
+      await fetchApi(`/admin/incidents/${selectedIncident.id}/resolve`, {
+        method: 'POST',
         body: JSON.stringify({
-          status: resStatus,
-          resolutionNotes,
+          status: resolveStatus,
+          resolution_notes: notes,
+          resolutionNotes: notes,
         }),
       });
-      setSelectedIncident(null);
-      setResolutionNotes('');
+
+      closeResolveModal();
+      setMsg({
+        text: `Incident ${selectedIncident.incidentNumber} marked as ${resolveStatus}.`,
+        type: 'success',
+      });
       loadIncidents();
-    } catch (e: any) {
-      alert(e.message || 'Failed to update incident');
+    } catch (err: any) {
+      alert(err.message || 'Failed to resolve incident.');
+    } finally {
+      setResolveSubmitting(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2">
-            <AlertTriangle className="w-6 h-6 text-red-500" />
-            Security & Incident Log
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Track real-time gate incidents, crowd surges, medical alerts, and security escalations.
-          </p>
+      {/* Flash Alerts */}
+      {msg && (
+        <div
+          className={`p-4 rounded-2xl flex items-center justify-between shadow-xs transition-all ${
+            msg.type === 'success'
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
+              : 'bg-rose-50 border border-rose-300 text-rose-900'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {msg.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="text-sm font-semibold">{msg.text}</span>
+          </div>
+          <button
+            onClick={() => setMsg(null)}
+            className={`p-1 rounded-lg hover:bg-black/5 transition-colors ${
+              msg.type === 'success' ? 'text-emerald-700' : 'text-rose-700'
+            }`}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Header Card with Metrics */}
+      <div className="p-6 rounded-3xl bg-white border border-stone-200/80 card-shadow space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="font-outfit font-extrabold text-2xl text-ink flex items-center gap-2.5">
+              <AlertTriangle className="w-6 h-6 text-maroon shrink-0" />
+              <span>Gate &amp; Operations Incident Log</span>
+            </h2>
+            <p className="text-xs text-ink-soft mt-0.5">
+              Log, escalate, and resolve gate issues, duplicate claims, capacity bottlenecks, and
+              security matters.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={loadIncidents}
+              disabled={loading}
+              title="Refresh list"
+              className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-cream-soft text-ink transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 text-maroon ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              className="px-5 py-2.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center gap-2 shrink-0 shadow-xs cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Log New Incident</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Metric Badges */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+          <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200/70">
+            <div className="text-[10px] font-bold text-stone-500 uppercase">Total Incidents</div>
+            <div className="font-outfit font-extrabold text-xl text-ink mt-0.5">
+              {metrics.totalCount}
+            </div>
+          </div>
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200/70">
+            <div className="text-[10px] font-bold text-rose-700 uppercase">
+              Open / Action Required
+            </div>
+            <div className="font-outfit font-extrabold text-xl text-rose-800 mt-0.5">
+              {metrics.openCount}
+            </div>
+          </div>
+          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/70">
+            <div className="text-[10px] font-bold text-amber-700 uppercase">In Review</div>
+            <div className="font-outfit font-extrabold text-xl text-amber-800 mt-0.5">
+              {metrics.inReviewCount}
+            </div>
+          </div>
+          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/70">
+            <div className="text-[10px] font-bold text-emerald-700 uppercase">Resolved</div>
+            <div className="font-outfit font-extrabold text-xl text-emerald-800 mt-0.5">
+              {metrics.resolvedCount}
+            </div>
+          </div>
+        </div>
+
+        {/* Filters Form */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100 text-xs">
+          <input
+            type="date"
+            name="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-stone-200 bg-cream-soft font-semibold text-ink focus:outline-maroon"
+          />
+
+          <select
+            name="status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium text-ink focus:outline-maroon"
+          >
+            <option value="">All Statuses</option>
+            <option value="OPEN">OPEN</option>
+            <option value="IN_REVIEW">IN_REVIEW</option>
+            <option value="RESOLVED">RESOLVED</option>
+            <option value="CLOSED">CLOSED</option>
+          </select>
+
+          <select
+            name="category"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium text-ink focus:outline-maroon"
+          >
+            <option value="">All Categories</option>
+            {Object.entries(categories).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            name="gate_id"
+            value={gateFilter}
+            onChange={(e) => setGateFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium text-ink focus:outline-maroon"
+          >
+            <option value="">All Gates</option>
+            {gates.map((gate) => (
+              <option key={gate.id} value={gate.id}>
+                {gate.name}
+              </option>
+            ))}
+          </select>
+
           <button
+            type="button"
             onClick={loadIncidents}
-            disabled={loading}
-            className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+            className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink font-bold transition cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Filter
           </button>
-
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-red-900/30"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Report Incident</span>
-          </button>
+          {(selectedDate || statusFilter || categoryFilter || gateFilter) && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="px-3 py-2 rounded-xl text-stone-500 hover:text-stone-800 font-semibold transition cursor-pointer"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Incidents List */}
-      <div className="space-y-3">
-        {incidents.map((inc) => (
-          <div
-            key={inc.id}
-            className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
-          >
-            <div className="space-y-1.5 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-mono font-bold text-amber-400">
-                  {inc.incidentNumber}
-                </span>
+      {/* Incidents Table */}
+      <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70">
+                <th className="py-3.5 px-4">Incident ID &amp; Time</th>
+                <th className="py-3.5 px-3">Category</th>
+                <th className="py-3.5 px-4">Description &amp; Context</th>
+                <th className="py-3.5 px-3">Gate / Reporter</th>
+                <th className="py-3.5 px-3">Status</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {incidents.length > 0 ? (
+                incidents.map((inc) => {
+                  const incCode = inc.incident_id || inc.incidentNumber;
+                  const categoryTitle =
+                    categories[inc.category] || inc.categoryLabel || inc.category;
+                  const isResolved = inc.status === 'RESOLVED' || inc.status === 'CLOSED';
 
-                <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                    inc.severity === IncidentSeverity.CRITICAL
-                      ? 'bg-red-950 text-red-400 border border-red-500/60 animate-pulse'
-                      : inc.severity === IncidentSeverity.HIGH
-                      ? 'bg-rose-950 text-rose-300 border border-rose-500/40'
-                      : 'bg-amber-950 text-amber-300 border border-amber-500/40'
-                  }`}
-                >
-                  {inc.severity}
-                </span>
-
-                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                  {inc.category}
-                </span>
-
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    inc.status === IncidentStatus.RESOLVED || inc.status === IncidentStatus.CLOSED
-                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
-                      : 'bg-yellow-950/80 text-yellow-300 border border-yellow-500/40'
-                  }`}
-                >
-                  {inc.status}
-                </span>
-              </div>
-
-              <h3 className="text-base font-bold text-white">{inc.title}</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">{inc.description}</p>
-
-              <div className="text-[11px] text-slate-500 flex flex-wrap gap-3 pt-1">
-                <span>Gate: <strong className="text-slate-400">{inc.gate?.name || 'All Gates'}</strong></span>
-                <span>•</span>
-                <span>Reported By: {inc.reportedBy?.name || 'Staff'}</span>
-                <span>•</span>
-                <span>{new Date(inc.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span>
-              </div>
-
-              {inc.resolutionNotes && (
-                <div className="mt-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs text-emerald-300">
-                  <span className="font-bold">Resolution:</span> {inc.resolutionNotes}
-                </div>
+                  return (
+                    <tr key={inc.id} className="hover:bg-cream/40 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-mono font-bold text-ink">{incCode}</div>
+                        <div className="text-[11px] text-stone-400">
+                          {inc.incident_date ? inc.incident_date : 'Today'}
+                          {inc.incident_time ? ` • ${inc.incident_time}` : ''}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-stone-100 text-stone-700">
+                          {categoryTitle}
+                        </span>
+                        {(inc.ticket_id || inc.ticketId) && (
+                          <div className="font-mono text-[10px] text-maroon mt-0.5 font-bold">
+                            {inc.ticket_id || inc.ticketId}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 max-w-sm">
+                        <p className="text-xs text-ink/80 leading-relaxed">{inc.description}</p>
+                        {isResolved && (inc.resolution_notes || inc.resolutionNotes) && (
+                          <div className="mt-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900">
+                            <span className="font-bold text-emerald-800">Resolution:</span>{' '}
+                            {inc.resolution_notes || inc.resolutionNotes}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <div className="font-semibold text-stone-800">
+                          {inc.gate?.name || 'General Perimeter'}
+                        </div>
+                        <div className="text-[11px] text-stone-400">
+                          By: {inc.reportedBy?.name || 'Staff'}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        {inc.status === 'OPEN' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />{' '}
+                            OPEN
+                          </span>
+                        ) : inc.status === 'IN_REVIEW' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                            IN REVIEW
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                            <Check className="w-3 h-3 text-emerald-600" />{' '}
+                            {inc.status === 'CLOSED' ? 'CLOSED' : 'RESOLVED'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        {!isResolved ? (
+                          <button
+                            type="button"
+                            onClick={() => openResolveModal(inc)}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs cursor-pointer"
+                          >
+                            Resolve
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-stone-400 font-medium">Closed</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={6} className="py-10 text-center text-stone-400 font-medium">
+                    No incidents logged for this period.
+                  </td>
+                </tr>
               )}
-            </div>
-
-            <div>
-              {inc.status !== IncidentStatus.RESOLVED && inc.status !== IncidentStatus.CLOSED && (
-                <button
-                  onClick={() => {
-                    setSelectedIncident(inc);
-                    setResStatus(IncidentStatus.RESOLVED);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-colors"
-                >
-                  Update / Resolve
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {incidents.length === 0 && !loading && (
-          <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900 border border-slate-800">
-            No active incidents reported. All gates operating normally.
-          </div>
-        )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Report Incident Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4">
-            <h3 className="text-lg font-bold text-white">Report New Incident</h3>
+      {/* Create Incident Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-stone-200 card-shadow space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5 text-maroon">
+                <div className="w-9 h-9 rounded-xl bg-maroon/10 text-maroon flex items-center justify-center font-bold">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-outfit font-extrabold text-base text-ink">
+                    Log New Incident
+                  </h4>
+                  <p className="text-[11px] text-ink-soft">Event-day operational report</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Incident Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Crowd congestion at turnstile 2"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    Category
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as IncidentCategory)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
-                  >
-                    <option value={IncidentCategory.SECURITY}>Security Alert</option>
-                    <option value={IncidentCategory.CROWD}>Crowd Congestion</option>
-                    <option value={IncidentCategory.MEDICAL}>Medical Emergency</option>
-                    <option value={IncidentCategory.VIP}>VIP Escort</option>
-                    <option value={IncidentCategory.SYSTEM}>System / Network</option>
-                    <option value={IncidentCategory.OTHER}>Other Issue</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    Severity
-                  </label>
-                  <select
-                    value={severity}
-                    onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
-                  >
-                    <option value={IncidentSeverity.LOW}>Low</option>
-                    <option value={IncidentSeverity.MEDIUM}>Medium</option>
-                    <option value={IncidentSeverity.HIGH}>High</option>
-                    <option value={IncidentSeverity.CRITICAL}>Critical</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Gate Location
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Incident Category <span className="text-rose-500">*</span>
                 </label>
                 <select
-                  value={gateId}
-                  onChange={(e) => setGateId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
+                  value={createCategory}
+                  onChange={(e) => setCreateCategory(e.target.value)}
+                  required
+                  className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-white font-medium focus:outline-maroon"
                 >
-                  <option value="1">Gate 1 (Main Entrance)</option>
-                  <option value="2">Gate 2 (Officers Entry)</option>
-                  <option value="3">Gate 3 (Family Turnstile)</option>
+                  {Object.entries(categories).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Detailed Description *
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Related Entry Gate (Optional)
+                </label>
+                <select
+                  value={createGateId}
+                  onChange={(e) => setCreateGateId(e.target.value)}
+                  className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-white font-medium focus:outline-maroon"
+                >
+                  <option value="">None / General Venue</option>
+                  {gates.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} {g.code ? `(${g.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Ticket ID (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. NR2026-0042"
+                  value={createTicketId}
+                  onChange={(e) => setCreateTicketId(e.target.value)}
+                  className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 font-mono focus:outline-maroon"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Description <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   required
                   rows={3}
-                  placeholder="Describe what occurred and immediate actions taken..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs"
+                  placeholder="Describe the occurrence, people involved, or action taken..."
+                  value={createDescription}
+                  onChange={(e) => setCreateDescription(e.target.value)}
+                  className="w-full text-xs p-3 rounded-xl border border-stone-200 focus:outline-maroon"
                 />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-100 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold"
+                  disabled={createSubmitting}
+                  className="px-5 py-2 rounded-xl text-xs font-extrabold bg-maroon hover:bg-maroon-dark text-white transition shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  Submit Incident
+                  {createSubmitting ? 'Saving...' : 'Save Incident'}
                 </button>
               </div>
             </form>
@@ -305,57 +654,74 @@ export default function AdminIncidentsPage() {
       )}
 
       {/* Resolve Incident Modal */}
-      {selectedIncident && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4">
-            <h3 className="text-lg font-bold text-white">Resolve Incident</h3>
-            <p className="text-xs text-slate-400">
-              Updating <strong className="text-white">{selectedIncident.incidentNumber}</strong>
-            </p>
+      {showResolveModal && selectedIncident && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-emerald-200 card-shadow space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
+              <div className="flex items-center gap-2.5 text-emerald-700">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-outfit font-extrabold text-base text-ink">
+                    Resolve Incident
+                  </h4>
+                  <p className="text-[11px] text-emerald-700 font-semibold font-mono">
+                    {selectedIncident.incident_id || selectedIncident.incidentNumber}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeResolveModal}
+                className="text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            <form onSubmit={handleUpdate} className="space-y-4">
+            <form onSubmit={handleResolve} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  New Status
-                </label>
+                <label className="block text-xs font-bold text-ink mb-1">Status</label>
                 <select
-                  value={resStatus}
-                  onChange={(e) => setResStatus(e.target.value as IncidentStatus)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
+                  value={resolveStatus}
+                  onChange={(e) => setResolveStatus(e.target.value)}
+                  className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-white font-medium focus:outline-emerald-600"
                 >
-                  <option value={IncidentStatus.IN_PROGRESS}>In Progress</option>
-                  <option value={IncidentStatus.RESOLVED}>Resolved</option>
-                  <option value={IncidentStatus.CLOSED}>Closed</option>
+                  <option value="RESOLVED">RESOLVED</option>
+                  <option value="CLOSED">CLOSED</option>
+                  <option value="IN_REVIEW">IN_REVIEW</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                  Resolution Notes
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Resolution Notes <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   required
                   rows={3}
-                  placeholder="Actions taken to clear the incident..."
+                  placeholder="Action taken to address and close this incident..."
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs"
+                  className="w-full text-xs p-3 rounded-xl border border-stone-200 focus:outline-emerald-600"
                 />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedIncident(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+                  onClick={closeResolveModal}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-stone-600 hover:bg-stone-100 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                  disabled={resolveSubmitting}
+                  className="px-5 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  Save Resolution
+                  {resolveSubmitting ? 'Saving...' : 'Mark as Resolved'}
                 </button>
               </div>
             </form>

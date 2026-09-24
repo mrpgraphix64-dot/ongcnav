@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Query,
+  Param,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -19,30 +20,53 @@ import { UserRole } from '@ongc/shared-types';
 @ApiTags('Admin Help Desk')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller('admin/helpdesk')
+@Controller(['admin/helpdesk', 'admin/help-desk'])
 export class HelpDeskController {
   constructor(private readonly helpdeskService: HelpDeskService) {}
 
-  @Get('search')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HELP_DESK, UserRole.GATE_SUPERVISOR)
+  @Get(['search', ''])
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EVENT_ADMIN,
+    UserRole.ADMIN,
+    UserRole.GATE_MANAGER,
+    UserRole.REGISTRATION_STAFF,
+    UserRole.HELP_DESK,
+    UserRole.SCANNER_STAFF,
+  )
   @ApiOperation({ summary: 'Quick search for attendees, passes, or CPF records' })
-  async search(@Query('q') q: string) {
-    return this.helpdeskService.search(q || '');
+  async search(@Query('q') q: string, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.helpdeskService.search(q || '', user?.role);
   }
 
-  @Post('manual-checkin')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HELP_DESK)
+  @Post(['manual-checkin', 'checkin'])
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EVENT_ADMIN,
+    UserRole.ADMIN,
+    UserRole.GATE_MANAGER,
+    UserRole.REGISTRATION_STAFF,
+    UserRole.HELP_DESK,
+    UserRole.SCANNER_STAFF,
+  )
   @ApiOperation({ summary: 'Manually check-in an attendee with mandatory justification' })
   async manualCheckin(@Body() dto: ManualCheckinDto, @Req() req: Request) {
     const user = (req as any).user;
     return this.helpdeskService.manualCheckin(dto, BigInt(user.id));
   }
 
-  @Post('void-checkin')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Void an erroneous check-in record preserving full audit logs' })
-  async voidCheckin(@Body() dto: VoidCheckinDto, @Req() req: Request) {
+  @Post(['void-checkin', 'checkin/:id/void'])
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Void an erroneous check-in record preserving full audit logs (Super/Event Admin only)' })
+  async voidCheckin(
+    @Param('id') paramId: string | undefined,
+    @Body() dto: VoidCheckinDto,
+    @Req() req: Request,
+  ) {
     const user = (req as any).user;
-    return this.helpdeskService.voidCheckin(dto, BigInt(user.id));
+    const targetCheckinId = paramId || dto.checkinId;
+    const reason = dto.void_reason || dto.reason || '';
+    return this.helpdeskService.voidCheckin(BigInt(targetCheckinId!), reason, BigInt(user.id));
   }
 }

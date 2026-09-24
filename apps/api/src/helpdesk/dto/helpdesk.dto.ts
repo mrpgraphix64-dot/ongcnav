@@ -1,39 +1,76 @@
-import { IsNotEmpty, IsString, MinLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, MinLength, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ManualCheckinDto {
-  @ApiProperty({ example: '1', description: 'Attendee ID' })
+  @ApiPropertyOptional({ example: '1', description: 'Attendee ID' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  attendeeId: string;
+  attendeeId?: string;
 
-  @ApiProperty({ example: '1', description: 'Gate ID' })
+  @ApiPropertyOptional({ example: 'NR2026-000001', description: 'Ticket ID / Ticket Number' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  gateId: string;
+  ticketId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({ example: 'NR2026-000001', description: 'Ticket ID (Laravel alias)' })
+  @IsOptional()
+  @IsString()
+  ticket_id?: string;
+
+  @ApiPropertyOptional({ example: '1', description: 'Gate ID' })
+  @IsOptional()
+  @IsString()
+  gateId?: string;
+
+  @ApiPropertyOptional({ example: '1', description: 'Gate ID (Laravel alias)' })
+  @IsOptional()
+  @IsString()
+  gate_id?: string;
+
+  @ApiPropertyOptional({
     example: 'Damaged phone screen, verified physical ONGC Employee ID Card',
     description: 'Mandatory justification for manual check-in override',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  @MinLength(5)
-  reason: string;
+  @MinLength(3)
+  @MaxLength(255)
+  reason?: string;
+
+  @ApiPropertyOptional({
+    example: 'Damaged phone screen, verified physical ONGC Employee ID Card',
+    description: 'Mandatory justification (Laravel alias)',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  manual_reason?: string;
 }
 
 export class VoidCheckinDto {
-  @ApiProperty({ example: '1', description: 'Daily Checkin ID to void' })
+  @ApiPropertyOptional({ example: '1', description: 'Daily Checkin ID to void' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  checkinId: string;
+  checkinId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'Scanned wrong family pass by operator mistake',
     description: 'Mandatory reason for voiding check-in',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MinLength(5)
-  reason: string;
+  @MaxLength(500)
+  reason?: string;
+
+  @ApiPropertyOptional({
+    example: 'Scanned wrong family pass by operator mistake',
+    description: 'Mandatory reason for voiding check-in (Laravel alias)',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  void_reason?: string;
 }

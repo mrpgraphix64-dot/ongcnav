@@ -12,7 +12,7 @@ import {
 import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IncidentsService } from './incidents.service';
-import { CreateIncidentDto, UpdateIncidentDto } from './dto/create-incident.dto';
+import { CreateIncidentDto, UpdateIncidentDto, ResolveIncidentDto } from './dto/create-incident.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,22 +28,38 @@ export class IncidentsController {
   @Get()
   @Roles(
     UserRole.SUPER_ADMIN,
+    UserRole.EVENT_ADMIN,
     UserRole.ADMIN,
-    UserRole.GATE_SUPERVISOR,
-    UserRole.HELP_DESK,
-    UserRole.GATE_OPERATOR,
+    UserRole.GATE_MANAGER,
+    UserRole.SCANNER_STAFF,
   )
   @ApiOperation({ summary: 'List incidents with gate, status, and severity filters' })
   async findAll(
+    @Query('date') date?: string,
     @Query('gateId') gateId?: string,
     @Query('status') status?: string,
-    @Query('severity') severity?: string,
+    @Query('category') category?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.incidentsService.findAll({ gateId, status, severity });
+    return this.incidentsService.findAll({
+      date,
+      gateId,
+      status,
+      category,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.GATE_SUPERVISOR)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EVENT_ADMIN,
+    UserRole.ADMIN,
+    UserRole.GATE_MANAGER,
+    UserRole.SCANNER_STAFF,
+  )
   @ApiOperation({ summary: 'Get incident details by ID' })
   async findOne(@Param('id') id: string) {
     return this.incidentsService.findOne(BigInt(id));
@@ -52,21 +68,51 @@ export class IncidentsController {
   @Post()
   @Roles(
     UserRole.SUPER_ADMIN,
+    UserRole.EVENT_ADMIN,
     UserRole.ADMIN,
-    UserRole.GATE_SUPERVISOR,
-    UserRole.GATE_OPERATOR,
-    UserRole.HELP_DESK,
+    UserRole.GATE_MANAGER,
+    UserRole.SCANNER_STAFF,
   )
-  @ApiOperation({ summary: 'Report a new incident' })
+  @ApiOperation({ summary: 'Log a new event operational incident' })
   async create(@Body() dto: CreateIncidentDto, @Req() req: Request) {
     const user = (req as any).user;
     return this.incidentsService.create(dto, BigInt(user.id));
   }
 
+  @Post(':id/resolve')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EVENT_ADMIN,
+    UserRole.ADMIN,
+    UserRole.GATE_MANAGER,
+    UserRole.SCANNER_STAFF,
+  )
+  @ApiOperation({ summary: 'Resolve an incident with mandatory resolution notes (Laravel canonical)' })
+  async resolve(
+    @Param('id') id: string,
+    @Body() dto: ResolveIncidentDto,
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    const notes = dto.resolution_notes || dto.resolutionNotes || '';
+    return this.incidentsService.resolve(BigInt(id), notes, BigInt(user.id));
+  }
+
   @Put(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.GATE_SUPERVISOR)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EVENT_ADMIN,
+    UserRole.ADMIN,
+    UserRole.GATE_MANAGER,
+    UserRole.SCANNER_STAFF,
+  )
   @ApiOperation({ summary: 'Update incident status, severity, or resolution notes' })
-  async update(@Param('id') id: string, @Body() dto: UpdateIncidentDto) {
-    return this.incidentsService.update(BigInt(id), dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateIncidentDto,
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    return this.incidentsService.update(BigInt(id), dto, BigInt(user.id));
   }
 }

@@ -4,33 +4,52 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IncidentCategory, IncidentSeverity, IncidentStatus } from '@ongc/shared-types';
 
 export class CreateIncidentDto {
-  @ApiProperty({ example: '1' })
+  @ApiPropertyOptional({ example: '1', description: 'Gate ID (Optional)' })
   @IsString()
-  @IsNotEmpty()
-  gateId: string;
+  @IsOptional()
+  gateId?: string;
+
+  @ApiPropertyOptional({ example: '1', description: 'Gate ID (Laravel alias)' })
+  @IsString()
+  @IsOptional()
+  gate_id?: string;
 
   @ApiProperty({ enum: IncidentCategory, default: IncidentCategory.SECURITY })
-  @IsEnum(IncidentCategory)
-  category: IncidentCategory;
-
-  @ApiProperty({ enum: IncidentSeverity, default: IncidentSeverity.MEDIUM })
-  @IsEnum(IncidentSeverity)
-  severity: IncidentSeverity;
-
-  @ApiProperty({ example: 'Crowd surge at turnstile 2' })
   @IsString()
   @IsNotEmpty()
-  @MinLength(3)
-  title: string;
+  category: string;
+
+  @ApiPropertyOptional({ enum: IncidentSeverity, default: IncidentSeverity.MEDIUM })
+  @IsEnum(IncidentSeverity)
+  @IsOptional()
+  severity?: IncidentSeverity;
+
+  @ApiPropertyOptional({ example: 'NR2026-000042', description: 'Optional Ticket ID involved' })
+  @IsString()
+  @IsOptional()
+  ticketId?: string;
+
+  @ApiPropertyOptional({ example: 'NR2026-000042', description: 'Optional Ticket ID (Laravel alias)' })
+  @IsString()
+  @IsOptional()
+  ticket_id?: string;
+
+  @ApiPropertyOptional({ example: 'Crowd surge at turnstile 2' })
+  @IsString()
+  @IsOptional()
+  title?: string;
 
   @ApiProperty({ example: 'Large group attempted to enter without passes. Additional security requested.' })
   @IsString()
   @IsNotEmpty()
+  @MinLength(5)
+  @MaxLength(1000)
   description: string;
 }
 
@@ -48,5 +67,26 @@ export class UpdateIncidentDto {
   @ApiPropertyOptional({ example: 'Security team deployed additional barriers. Situation cleared.' })
   @IsString()
   @IsOptional()
+  resolutionNotes?: string;
+
+  @ApiPropertyOptional({ example: 'Security team deployed additional barriers (Laravel alias)' })
+  @IsString()
+  @IsOptional()
+  resolution_notes?: string;
+}
+
+export class ResolveIncidentDto {
+  @ApiProperty({ example: 'Addressed crowd backlog and verified guest wristbands' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(5)
+  @MaxLength(1000)
+  resolution_notes?: string;
+
+  @ApiPropertyOptional({ example: 'Addressed crowd backlog' })
+  @IsString()
+  @IsOptional()
+  @MinLength(5)
+  @MaxLength(1000)
   resolutionNotes?: string;
 }
