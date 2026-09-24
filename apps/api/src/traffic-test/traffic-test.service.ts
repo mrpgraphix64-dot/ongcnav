@@ -243,7 +243,10 @@ export class TrafficTestService {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-load-test-auth': 'ongc-traffic-test-internal',
+              // If unset, the internal endpoint fails closed (rejects the
+              // request) rather than accepting a default/blank value —
+              // see execute-checkin's own check.
+              'x-load-test-auth': process.env.LOAD_TEST_INTERNAL_SECRET || '',
             },
             body: payload,
           });

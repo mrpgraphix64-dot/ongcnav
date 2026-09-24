@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TrafficTestController } from './traffic-test.controller';
 import { TrafficTestService } from './traffic-test.service';
 import { CheckinService } from '../checkin/checkin.service';
-import { LoadTestMode, LoadTestScenario, LoadTestStatus, CheckinResult } from '@ongc/shared-types';
+import { LoadTestMode, LoadTestScenario, LoadTestStatus, CheckinResult, UserRole } from '@ongc/shared-types';
 
 describe('TrafficTestController', () => {
   let controller: TrafficTestController;
@@ -89,5 +89,62 @@ describe('TrafficTestController', () => {
     const result = await controller.cleanupRun('1');
     expect(result.success).toBe(true);
     expect(service.cleanupRun).toHaveBeenCalledWith(BigInt(1));
+  });
+
+  describe('executeCheckin internal auth', () => {
+    const originalSecret = process.env.LOAD_TEST_INTERNAL_SECRET;
+    const dto = { token: 'ABC', gateId: '1' } as any;
+    const req = {
+      headers: { 'user-agent': 'jest' },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as any;
+
+    afterEach(() => {
+      if (originalSecret === undefined) {
+        delete process.env.LOAD_TEST_INTERNAL_SECRET;
+      } else {
+        process.env.LOAD_TEST_INTERNAL_SECRET = originalSecret;
+      }
+    });
+
+    it('fails closed when LOAD_TEST_INTERNAL_SECRET is not configured, even with a header sent', async () => {
+      delete process.env.LOAD_TEST_INTERNAL_SECRET;
+
+      await expect(controller.executeCheckin(dto, 'anything', req)).rejects.toThrow(
+        'Invalid load testing internal authorization',
+      );
+      expect(checkinService.processCheckin).not.toHaveBeenCalled();
+    });
+
+    it('rejects a request with a missing auth header', async () => {
+      process.env.LOAD_TEST_INTERNAL_SECRET = 'correct-secret';
+
+      await expect(controller.executeCheckin(dto, undefined, req)).rejects.toThrow(
+        'Invalid load testing internal authorization',
+      );
+      expect(checkinService.processCheckin).not.toHaveBeenCalled();
+    });
+
+    it('rejects a request with an incorrect auth header', async () => {
+      process.env.LOAD_TEST_INTERNAL_SECRET = 'correct-secret';
+
+      await expect(controller.executeCheckin(dto, 'wrong-secret', req)).rejects.toThrow(
+        'Invalid load testing internal authorization',
+      );
+      expect(checkinService.processCheckin).not.toHaveBeenCalled();
+    });
+
+    it('accepts a request with the correct auth header and runs the real check-in pipeline', async () => {
+      process.env.LOAD_TEST_INTERNAL_SECRET = 'correct-secret';
+
+      const result = await controller.executeCheckin(dto, 'correct-secret', req);
+
+      expect(result.success).toBe(true);
+      expect(checkinService.processCheckin).toHaveBeenCalledWith(
+        { ...dto, isLoadTest: true },
+        { id: '1', role: UserRole.ADMIN },
+        expect.objectContaining({ userAgent: 'jest' }),
+      );
+    });
   });
 });

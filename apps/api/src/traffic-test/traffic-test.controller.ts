@@ -11,6 +11,7 @@ import {
   Headers,
   ForbiddenException,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TrafficTestService } from './traffic-test.service';
@@ -112,10 +113,14 @@ export class TrafficTestController {
   @ApiOperation({ summary: 'Internal loopback check-in endpoint for real HTTP load testing' })
   async executeCheckin(
     @Body() dto: ProcessCheckinDto,
-    @Headers('x-load-test-auth') authHeader: string,
+    @Headers('x-load-test-auth') authHeader: string | undefined,
     @Req() req: Request,
   ) {
-    if (authHeader !== 'ongc-traffic-test-internal') {
+    // Fail closed: if the internal secret isn't configured for this
+    // environment, the endpoint is unusable rather than falling back to
+    // any default value.
+    const expectedSecret = process.env.LOAD_TEST_INTERNAL_SECRET;
+    if (!expectedSecret || !this.isValidInternalAuth(authHeader, expectedSecret)) {
       throw new ForbiddenException('Invalid load testing internal authorization');
     }
 
@@ -129,5 +134,23 @@ export class TrafficTestController {
       { id: '1', role: UserRole.ADMIN },
       reqMeta,
     );
+  }
+
+  // Constant-time comparison so a mismatching header can't be used to
+  // learn anything about the configured secret via response-time
+  // differences. Never logs either value.
+  private isValidInternalAuth(provided: string | undefined, expected: string): boolean {
+    if (!provided) {
+      return false;
+    }
+
+    const providedBuf = Buffer.from(provided);
+    const expectedBuf = Buffer.from(expected);
+
+    if (providedBuf.length !== expectedBuf.length) {
+      return false;
+    }
+
+    return timingSafeEqual(providedBuf, expectedBuf);
   }
 }

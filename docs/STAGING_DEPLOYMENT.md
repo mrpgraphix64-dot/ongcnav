@@ -163,6 +163,7 @@ ADMIN_PASSWORD=CHANGE_ME_TO_A_STRONG_PASSWORD
 APP_TIMEZONE=Asia/Kolkata
 LOAD_TESTING_ENABLED=false
 DEMO_ADMIN_BYPASS=false
+LOAD_TEST_INTERNAL_SECRET=CHANGE_ME_TO_A_RANDOM_SECRET
 ENV
 chmod 600 .env
 ```
@@ -170,6 +171,21 @@ chmod 600 .env
 Replace every placeholder value before starting the app. This file is
 created **once, manually**, and is not written to by CI — the deploy
 script only reads it (via NestJS's `ConfigModule`) at process start.
+
+> **CORS_ORIGINS is now strictly enforced on staging** (it previously fell
+> through to an "allow any origin" bypass on any non-production
+> `NODE_ENV`, which included staging — since fixed). Before redeploying
+> after that fix, confirm `CORS_ORIGINS` on the VPS actually includes the
+> real staging frontend origin (e.g. the Hostinger URL), not just the
+> placeholder above — otherwise the frontend's requests to the API will
+> start failing CORS where they previously worked by accident.
+
+> **LOAD_TEST_INTERNAL_SECRET is required** for
+> `POST /admin/traffic-test/execute-checkin` to work at all — that
+> endpoint now fails closed (rejects every request) if this is unset, and
+> the header sent by the load-test tool must match it exactly. Generate a
+> fresh value per environment, e.g. `openssl rand -hex 32` — never reuse
+> the same value across staging and production.
 
 ### 2.6 PM2 startup persistence
 
@@ -272,7 +288,8 @@ not full application secrets.
 | `REDIS_URL` | yes (recommended) | App degrades to in-memory if unset/unreachable |
 | `JWT_SECRET` | yes | Long random string, staging-only value |
 | `JWT_EXPIRES_IN` | yes | e.g. `1d` |
-| `CORS_ORIGINS` | yes | Staging frontend origin(s), comma-separated if multiple |
+| `CORS_ORIGINS` | yes | Staging frontend origin(s), comma-separated if multiple. **Strictly enforced** — staging no longer falls back to allowing any origin |
+| `LOAD_TEST_INTERNAL_SECRET` | yes, if using the load-test endpoint | Required by `POST /admin/traffic-test/execute-checkin`; that endpoint fails closed (rejects everything) if unset. Generate a fresh value per environment |
 | `APP_URL` | yes | Public staging API URL |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | yes | Seed/admin bootstrap credentials, staging-only |
 | `NODE_ENV` | yes | `staging` |
