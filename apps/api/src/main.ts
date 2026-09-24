@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
+import * as express from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -13,7 +14,33 @@ import { isOriginAllowed, isSwaggerEnabled } from './common/security/environment
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Body parsing is disabled here and applied manually below so the exact
+  // raw request bytes can be captured alongside normal JSON parsing. The
+  // Razorpay webhook (POST /payments/razorpay/webhook) must verify its
+  // HMAC signature against the ORIGINAL raw body — parsing then
+  // re-serializing with JSON.stringify() is not guaranteed to reproduce
+  // byte-identical output (key order, number formatting, whitespace), which
+  // would make signature verification unreliable. Capturing req.rawBody
+  // globally (rather than only on the webhook route) is the standard
+  // Nest/Express pattern for this and does not change parsing behavior for
+  // any other route.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+
+  app.use(
+    express.json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
+  app.use(
+    express.urlencoded({
+      extended: true,
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
   // Security Headers
   app.use(helmet());
