@@ -47,6 +47,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The repo's root .npmrc sets ignore-scripts=true (deliberate
+      # supply-chain hardening), which also skips bcrypt's own install
+      # script — the thing that fetches/builds its native binary. npm ci
+      # succeeds either way, but api tests then fail with "Cannot find
+      # module .../bcrypt_lib.node". deploy/staging-deploy.sh already
+      # handles this the same way for the actual VPS deploy; CI needs the
+      # identical explicit, narrowly-scoped rebuild before running tests.
+      - name: Rebuild bcrypt's native binary (skipped by npm ci due to ignore-scripts=true)
+        run: npm rebuild bcrypt --workspace=apps/api --ignore-scripts=false
+
       - name: Build shared-types
         run: npm run build:types
 
