@@ -1,195 +1,473 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  CheckCheck,
   Calendar,
+  Download,
   Printer,
-  ShieldCheck,
-  Users,
-  Award,
+  CheckCircle2,
   Clock,
   DoorOpen,
+  Users,
+  AlertTriangle,
+  RefreshCw,
+  Award,
+  ShieldCheck,
+  CheckCheck,
 } from 'lucide-react';
-import { fetchApi } from '@/lib/api';
-
-const FESTIVAL_DATES = [
-  '2026-09-23',
-  '2026-09-24',
-  '2026-09-25',
-  '2026-09-26',
-  '2026-09-27',
-  '2026-09-28',
-  '2026-09-29',
-  '2026-09-30',
-  '2026-10-01',
-];
+import { fetchApi, API_BASE_URL } from '@/lib/api';
 
 export default function AdminDailyClosingPage() {
-  const [selectedDate, setSelectedDate] = useState('2026-09-23');
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadClosing = async () => {
+  // Initialize with active event date from backend
+  useEffect(() => {
+    async function init() {
+      try {
+        const statusRes = await fetchApi('/event-control/status').catch(() => null);
+        const date =
+          statusRes?.activeDate ||
+          new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        setSelectedDate(date);
+      } catch {
+        setSelectedDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+      }
+    }
+    init();
+  }, []);
+
+  const loadClosing = useCallback(async () => {
+    if (!selectedDate) return;
     try {
       setLoading(true);
-      const data = await fetchApi(`/admin/reports/daily-closing?date=${selectedDate}`);
+      const data = await fetchApi(`/admin/daily-closing?date=${selectedDate}`);
       setReport(data);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load daily closing report:', e);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedDate]);
 
   useEffect(() => {
-    loadClosing();
-  }, [selectedDate]);
+    if (selectedDate) {
+      loadClosing();
+    }
+  }, [selectedDate, loadClosing]);
+
+  const handleExportCsv = () => {
+    const dateParam = selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : '';
+    const exportUrl = `${API_BASE_URL}/admin/daily-closing/export${dateParam}`;
+    window.open(exportUrl, '_blank');
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden">
-        <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2">
-            <CheckCheck className="w-6 h-6 text-emerald-400" />
-            Official Daily Closing Audit
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            End-of-day operational closure, staff performance audit, and verified entry totals.
-          </p>
-        </div>
+      {/* Header Actions & Date Picker */}
+      <div className="p-6 rounded-3xl bg-white border border-stone-200/80 card-shadow print:hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 uppercase">
+              Daily Closing Reconciliation
+            </span>
+            <h2 className="font-outfit font-extrabold text-2xl text-ink mt-1 flex items-center gap-2">
+              <CheckCheck className="w-6 h-6 text-maroon" />
+              <span>Event Day Closing Report</span>
+            </h2>
+            <p className="text-xs text-ink-soft mt-0.5">
+              Comprehensive audit of attendance, gate volumes, operator productivity, verification
+              failures, and incident logs.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-slate-900 border border-slate-700 text-white text-xs font-semibold rounded-xl px-3 py-2"
-          >
-            {FESTIVAL_DATES.map((d, i) => (
-              <option key={d} value={d}>
-                Night {i + 1} ({d})
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Date Filter */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <input
+                type="date"
+                name="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-stone-200 bg-cream-soft font-semibold text-ink focus:outline-maroon"
+              />
+              <button
+                type="button"
+                onClick={loadClosing}
+                disabled={loading}
+                className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink font-bold transition cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : 'Load Date'}
+              </button>
+            </div>
 
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold text-xs flex items-center gap-2"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Print Report</span>
-          </button>
+            {/* Export CSV */}
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="px-4 py-2 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CSV</span>
+            </button>
+
+            {/* Print Report */}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Closing Document Card */}
+      {/* Print-Only Official Document Header */}
+      <div className="hidden print:block p-6 border-b-2 border-stone-900 bg-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-black uppercase tracking-wider font-outfit">
+              ONGC NAVRATRI 2026
+            </h1>
+            <h2 className="text-base font-bold text-stone-700">DAILY OPERATIONAL CLOSING AUDIT REPORT</h2>
+            <p className="text-xs text-stone-500 mt-1">
+              Operational Date: <strong>{selectedDate}</strong> • Generated:{' '}
+              {new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-xs font-mono font-bold text-stone-700">STATUS: OFFICIAL RECONCILIATION</span>
+          </div>
+        </div>
+      </div>
+
       {report && (
-        <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 space-y-6 print:border-black print:bg-white print:text-black">
-          {/* Header */}
-          <div className="flex items-start justify-between pb-6 border-b border-slate-800 print:border-gray-300">
+        <div className="space-y-6">
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
+              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
+                Booked for Date
+              </div>
+              <div className="font-outfit font-extrabold text-2xl text-maroon mt-1">
+                {report.bookedForDate?.toLocaleString() ?? 0}
+              </div>
+              <div className="text-[10px] text-stone-400 mt-0.5">Eligible passes</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
+              <div className="text-[10px] font-bold tracking-wider uppercase text-emerald-800">
+                Checked In
+              </div>
+              <div className="font-outfit font-extrabold text-2xl text-emerald-700 mt-1">
+                {report.checkedInCount?.toLocaleString() ?? 0}
+              </div>
+              <div className="text-[10px] text-emerald-600 mt-0.5">Active arrivals</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
+              <div className="text-[10px] font-bold tracking-wider uppercase text-amber-800">
+                Pending Attendance
+              </div>
+              <div className="font-outfit font-extrabold text-2xl text-amber-700 mt-1">
+                {report.pendingCount?.toLocaleString() ?? 0}
+              </div>
+              <div className="text-[10px] text-amber-600 mt-0.5">No-shows so far</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
+              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
+                Attendance Rate
+              </div>
+              <div className="font-outfit font-extrabold text-2xl text-ink mt-1">
+                {report.attendanceRate ?? 0}%
+              </div>
+              <div className="w-full bg-stone-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                <div
+                  className="bg-maroon h-1.5 rounded-full"
+                  style={{ width: `${Math.min(100, report.attendanceRate ?? 0)}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
+              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
+                Peak Inflow Hour
+              </div>
+              <div className="font-outfit font-extrabold text-xl text-ink mt-1 truncate">
+                {report.peakHourFormatted || 'N/A'}
+              </div>
+              <div className="text-[10px] text-stone-400 mt-0.5">
+                {report.peakHourCount?.toLocaleString() ?? 0} check-ins
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
+              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
+                Incidents Logged
+              </div>
+              <div
+                className={`font-outfit font-extrabold text-2xl mt-1 ${
+                  report.incidentsOpen > 0 ? 'text-rose-600' : 'text-ink'
+                }`}
+              >
+                {report.incidentsTotal ?? 0}
+              </div>
+              <div
+                className={`text-[10px] mt-0.5 ${
+                  report.incidentsOpen > 0 ? 'text-rose-600 font-bold' : 'text-stone-400'
+                }`}
+              >
+                {report.incidentsOpen ?? 0} open &bull; {report.incidentsResolved ?? 0} resolved
+              </div>
+            </div>
+          </div>
+
+          {/* Check-in Audit Results Breakdown Grid */}
+          <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-5 space-y-4">
             <div>
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block">
-                ONGC Cultural Committee • Navratri Mahotsav 2026
-              </span>
-              <h3 className="text-2xl font-black text-white mt-1 print:text-black">
-                DAILY EVENT CLOSING AUDIT REPORT
+              <h3 className="font-outfit font-extrabold text-base text-ink">
+                Check-In Verification Audit Summary
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5 print:text-black">
-                Event Date: <strong className="text-white print:text-black">{report.closingDate}</strong> • Timezone: {report.timezone}
+              <p className="text-xs text-ink-soft">
+                Breakdown of legitimate admissions vs. anomalous or rejected scan attempts for{' '}
+                {selectedDate}.
               </p>
             </div>
 
-            <div className="text-right">
-              <span className="text-xs text-emerald-400 font-bold block">
-                VERIFIED CLOSED
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">
-                {new Date(report.generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-              </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 text-xs">
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200">
+                <div className="text-[10px] font-bold text-emerald-800 uppercase">Approved</div>
+                <div className="font-outfit font-extrabold text-xl text-emerald-900 mt-0.5">
+                  {report.approvedCount?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-emerald-700">Valid entries</div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200">
+                <div className="text-[10px] font-bold text-blue-800 uppercase">Manual Entry</div>
+                <div className="font-outfit font-extrabold text-xl text-blue-900 mt-0.5">
+                  {report.manualCount?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-blue-700">Help desk overrides</div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-purple-50 border border-purple-200">
+                <div className="text-[10px] font-bold text-purple-800 uppercase">Voided / Reversed</div>
+                <div className="font-outfit font-extrabold text-xl text-purple-900 mt-0.5">
+                  {report.voidedCount?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-purple-700">Admin corrections</div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <div className="text-[10px] font-bold text-amber-800 uppercase">Duplicate Scans</div>
+                <div className="font-outfit font-extrabold text-xl text-amber-900 mt-0.5">
+                  {report.duplicateCount?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-amber-700">Already entered</div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-stone-50 border border-stone-200">
+                <div className="text-[10px] font-bold text-stone-700 uppercase">Not Booked</div>
+                <div className="font-outfit font-extrabold text-xl text-stone-900 mt-0.5">
+                  {report.notBookedCount?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-stone-500">Other date pass</div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200">
+                <div className="text-[10px] font-bold text-rose-800 uppercase">Unauthorized Gate</div>
+                <div className="font-outfit font-extrabold text-xl text-rose-900 mt-0.5">
+                  {report.unauthorizedGateCount?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-rose-700">Staff misassignment</div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200">
+                <div className="text-[10px] font-bold text-rose-800 uppercase">Invalid Ticket</div>
+                <div className="font-outfit font-extrabold text-xl text-rose-900 mt-0.5">
+                  {report.invalidCount?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-rose-700">Unknown code</div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-stone-50 border border-stone-200">
+                <div className="text-[10px] font-bold text-stone-700 uppercase">Lane / Cap Block</div>
+                <div className="font-outfit font-extrabold text-xl text-stone-900 mt-0.5">
+                  {((report.gateClosedCount ?? 0) + (report.capacityReachedCount ?? 0)).toLocaleString()}
+                </div>
+                <div className="text-[10px] text-stone-500">Closed / Full</div>
+              </div>
             </div>
           </div>
 
-          {/* Metrics Overview */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 print:bg-gray-50 print:border-gray-300">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Total Check-ins</span>
-              <div className="text-2xl font-black text-white mt-1 print:text-black">
-                {report.metrics.totalCheckins}
-              </div>
+          {/* Gate Volume Breakdown */}
+          <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
+            <div className="p-5 border-b border-stone-100">
+              <h3 className="font-outfit font-extrabold text-base text-ink">Gate Check-in Volumes</h3>
+              <p className="text-xs text-ink-soft">Traffic distribution across all event entry lanes.</p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 print:bg-gray-50 print:border-gray-300">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Peak Hour Surge</span>
-              <div className="text-2xl font-black text-amber-400 mt-1 print:text-black">
-                {report.metrics.peakHourVolume} scans
-              </div>
-              <span className="text-[10px] text-slate-500 block">At {report.metrics.peakHour}</span>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 print:bg-gray-50 print:border-gray-300">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Voided Scans</span>
-              <div className="text-2xl font-black text-rose-400 mt-1 print:text-black">
-                {report.metrics.voidedCheckins}
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 print:bg-gray-50 print:border-gray-300">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Active Incidents</span>
-              <div className="text-2xl font-black text-emerald-400 mt-1 print:text-black">
-                {report.metrics.activeIncidents}
-              </div>
-            </div>
-          </div>
-
-          {/* Staff Performance Breakdown */}
-          <div className="space-y-3 pt-4">
-            <h4 className="font-extrabold text-sm text-white flex items-center gap-2 print:text-black">
-              <Award className="w-4 h-4 text-amber-400" />
-              Turnstile Staff Performance & Operator Logs
-            </h4>
-
-            <div className="overflow-x-auto rounded-2xl border border-slate-800 print:border-gray-300">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/80 border-b border-slate-800 uppercase text-[10px] text-slate-400 font-bold print:bg-gray-100 print:text-black">
-                  <tr>
-                    <th className="px-4 py-3">Operator Name</th>
-                    <th className="px-4 py-3">Staff ID</th>
-                    <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3 text-right">Successful Scans</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70">
+                    <th className="py-3.5 px-4">Gate</th>
+                    <th className="py-3.5 px-3">Type</th>
+                    <th className="py-3.5 px-3">Lane Status</th>
+                    <th className="py-3.5 px-3">Entries Processed</th>
+                    <th className="py-3.5 px-3">Capacity Limit</th>
+                    <th className="py-3.5 px-4">Capacity Utilization</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 print:divide-gray-200">
-                  {report.staffPerformance.map((sp: any) => (
-                    <tr key={sp.userId}>
-                      <td className="px-4 py-3 font-bold text-white print:text-black">
-                        {sp.staffName}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-amber-400 print:text-black">
-                        {sp.staffId}
-                      </td>
-                      <td className="px-4 py-3 text-slate-400 print:text-black">
-                        {sp.role}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400 print:text-black">
-                        {sp.scanCount}
+                <tbody className="divide-y divide-stone-100">
+                  {report.gates && report.gates.length > 0 ? (
+                    report.gates.map((item: any) => {
+                      const g = item.gate;
+                      return (
+                        <tr key={g.id} className="hover:bg-cream/40 transition-colors">
+                          <td className="py-3.5 px-4 font-bold text-ink">
+                            <div className="font-outfit text-sm text-maroon">{g.name}</div>
+                            <span className="font-mono text-[10px] text-stone-500">{g.code}</span>
+                          </td>
+                          <td className="py-3.5 px-3 font-semibold text-stone-700">{g.type}</td>
+                          <td className="py-3.5 px-3">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                item.is_open
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-stone-100 text-stone-600'
+                              }`}
+                            >
+                              {item.is_open ? 'OPEN' : 'CLOSED'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-3 font-mono font-bold text-sm text-emerald-700">
+                            {item.count?.toLocaleString() ?? 0}
+                          </td>
+                          <td className="py-3.5 px-3 text-stone-600 font-mono">
+                            {item.capacity ? item.capacity.toLocaleString() : 'Unlimited'}
+                          </td>
+                          <td className="py-3.5 px-4 min-w-[180px]">
+                            {item.capacity > 0 ? (
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-[11px] font-semibold text-stone-600">
+                                  <span>{item.percentage}%</span>
+                                  <span
+                                    className={`text-[10px] uppercase font-bold ${
+                                      item.status_level === 'critical'
+                                        ? 'text-rose-600'
+                                        : item.status_level === 'warning'
+                                        ? 'text-amber-600'
+                                        : 'text-emerald-600'
+                                    }`}
+                                  >
+                                    {item.status_level}
+                                  </span>
+                                </div>
+                                <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className={`h-1.5 rounded-full ${
+                                      item.status_level === 'critical'
+                                        ? 'bg-rose-500'
+                                        : item.status_level === 'warning'
+                                        ? 'bg-amber-500'
+                                        : 'bg-emerald-500'
+                                    }`}
+                                    style={{ width: `${Math.min(100, item.percentage)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-stone-400 italic">&mdash;</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-stone-400">
+                        No gate records available.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Signatures for Print */}
-          <div className="hidden print:grid grid-cols-3 gap-8 pt-16 text-center text-xs">
-            <div className="border-t border-black pt-2">
-              <strong>Gate Supervisor</strong>
+          {/* Staff Productivity Table */}
+          <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
+            <div className="p-5 border-b border-stone-100">
+              <h3 className="font-outfit font-extrabold text-base text-ink">
+                Staff Productivity &amp; Operator Audit
+              </h3>
+              <p className="text-xs text-ink-soft">
+                Scan volumes and timestamps recorded by operational personnel on this date.
+              </p>
             </div>
-            <div className="border-t border-black pt-2">
-              <strong>Chief Security Officer</strong>
-            </div>
-            <div className="border-t border-black pt-2">
-              <strong>Cultural Committee Head</strong>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70">
+                    <th className="py-3.5 px-4">Staff Member</th>
+                    <th className="py-3.5 px-3">Role</th>
+                    <th className="py-3.5 px-3">Assigned Gates</th>
+                    <th className="py-3.5 px-3">Check-ins Handled</th>
+                    <th className="py-3.5 px-4 text-right">Last Recorded Activity</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {report.staffMembers && report.staffMembers.length > 0 ? (
+                    report.staffMembers.map((member: any) => {
+                      const s = member.staff;
+                      return (
+                        <tr key={s.id} className="hover:bg-cream/40 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-outfit font-bold text-sm text-ink">{s.name}</div>
+                            <div className="font-mono text-[10px] text-stone-500">
+                              {s.staff_id || s.email}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-stone-100 text-stone-700">
+                              {s.role ? s.role.replace(/_/g, ' ') : 'STAFF'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-3 text-stone-700 font-medium">
+                            {member.assigned_gates}
+                          </td>
+                          <td className="py-3.5 px-3 font-mono font-bold text-sm text-emerald-700">
+                            {member.checkins_count?.toLocaleString() ?? 0}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono text-[11px] text-stone-500">
+                            {member.last_activity_at
+                              ? new Date(member.last_activity_at).toLocaleTimeString('en-IN', {
+                                  timeZone: 'Asia/Kolkata',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true,
+                                })
+                              : 'No activity'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-stone-400">
+                        No staff activity found for this date.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

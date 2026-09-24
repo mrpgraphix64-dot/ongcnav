@@ -19,6 +19,7 @@ import * as crypto from 'crypto';
 @Injectable()
 export class TrafficTestService {
   private readonly logger = new Logger(TrafficTestService.name);
+  private readonly activeRuns = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -26,7 +27,7 @@ export class TrafficTestService {
   ) {}
 
   private isEnabled(): boolean {
-    return process.env.LOAD_TESTING_ENABLED === 'true';
+    return process.env.LOAD_TESTING_ENABLED === 'true' || process.env.NODE_ENV !== 'production';
   }
 
   async listRuns() {
@@ -43,6 +44,7 @@ export class TrafficTestService {
       duplicateRequests: r.duplicateRequests.toString(),
       invalidRequests: r.invalidRequests.toString(),
       errorRequests: r.errorRequests.toString(),
+      bytesTransferred: r.bytesTransferred.toString(),
     }));
   }
 
@@ -69,12 +71,79 @@ export class TrafficTestService {
       duplicateRequests: run.duplicateRequests.toString(),
       invalidRequests: run.invalidRequests.toString(),
       errorRequests: run.errorRequests.toString(),
+      bytesTransferred: run.bytesTransferred.toString(),
       requests: run.requests.map((req) => ({
         ...req,
         id: req.id.toString(),
         runId: req.runId.toString(),
       })),
     };
+  }
+
+  async getRunStatus(id: bigint) {
+    const run = await this.prisma.loadTestRun.findUnique({
+      where: { id },
+      include: {
+        requests: {
+          take: 40,
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Load test run with ID ${id} not found`);
+    }
+
+    const total = Number(run.totalRequests);
+    const success = Number(run.successfulRequests);
+    const successPercentage = total > 0 ? ((success / total) * 100).toFixed(1) : '0';
+
+    return {
+      id: run.id.toString(),
+      status: run.status,
+      mode: run.mode,
+      scenario: run.scenario,
+      simulatedUsers: run.simulatedUsers,
+      totalRequests: run.totalRequests.toString(),
+      successfulRequests: run.successfulRequests.toString(),
+      duplicateRequests: run.duplicateRequests.toString(),
+      invalidRequests: run.invalidRequests.toString(),
+      errorRequests: run.errorRequests.toString(),
+      requestsPerSecond: run.requestsPerSecond,
+      avgResponseTimeMs: run.avgResponseTimeMs,
+      bytesTransferred: run.bytesTransferred.toString(),
+      bytesTransferredMb: (Number(run.bytesTransferred) / (1024 * 1024)).toFixed(2),
+      successPercentage,
+      isRunning: this.activeRuns.has(run.id.toString()) || run.status === LoadTestStatus.RUNNING,
+      recentRequests: run.requests.map((req) => ({
+        id: req.id.toString(),
+        token: req.token.substring(0, 16) + '...',
+        gateId: req.gateId,
+        result: req.result,
+        responseTimeMs: req.responseTimeMs,
+        createdAt: req.createdAt,
+      })),
+    };
+  }
+
+  async stopRun(id: bigint) {
+    this.activeRuns.delete(id.toString());
+
+    const run = await this.prisma.loadTestRun.findUnique({ where: { id } });
+    if (!run) {
+      throw new NotFoundException(`Load test run with ID ${id} not found`);
+    }
+
+    await this.prisma.loadTestRun.update({
+      where: { id },
+      data: {
+        status: LoadTestStatus.COMPLETED as any,
+        endTime: new Date(),
+      },
+    });
+
+    return { success: true, message: `Load test run ${id} stopped.` };
   }
 
   async startTest(dto: StartLoadTestDto, startedById: bigint) {
@@ -96,9 +165,16 @@ export class TrafficTestService {
       },
     });
 
+    this.activeRuns.add(run.id.toString());
+
     // Run asynchronously so caller gets immediate response
     this.executeLoadTestAsync(run.id, dto, startedById).catch((err) => {
       this.logger.error(`Load test ${run.id} failed:`, err);
+      this.activeRuns.delete(run.id.toString());
+      this.prisma.loadTestRun.update({
+        where: { id: run.id },
+        data: { status: LoadTestStatus.FAILED as any, endTime: new Date() },
+      }).catch(() => {});
     });
 
     return {
@@ -121,7 +197,6 @@ export class TrafficTestService {
     const apiUrl = `http://localhost:${port}/admin/traffic-test/execute-checkin`;
 
     // Fetch or generate synthetic attendee tokens for testing
-    // We can fetch real attendees or generate synthetic test passes
     const attendees = await this.prisma.attendee.findMany({
       take: Math.min(dto.simulatedUsers, 1000),
       select: { qrCodeToken: true },
@@ -139,9 +214,18 @@ export class TrafficTestService {
     let errorCount = 0;
     let totalBytesTransferred = 0;
     const latencyList: number[] = [];
+    const requestBuffer: Array<{
+      runId: bigint;
+      token: string;
+      gateId: string;
+      result: string;
+      responseTimeMs: number;
+    }> = [];
 
     // Helper to execute 1 checkin request
     const executeOne = async (token: string) => {
+      if (!this.activeRuns.has(runId.toString())) return;
+
       const reqStart = Date.now();
       let resResult: CheckinResult = CheckinResult.ERROR;
 
@@ -200,18 +284,24 @@ export class TrafficTestService {
       else if (resResult === CheckinResult.INVALID_QR || resResult === CheckinResult.NOT_BOOKED_TODAY)
         invalidCount++;
       else errorCount++;
+
+      requestBuffer.push({
+        runId,
+        token,
+        gateId: dto.gateId,
+        result: resResult,
+        responseTimeMs: reqDuration,
+      });
     };
 
     // Build execution tasks according to scenario
     const tasks: Array<() => Promise<void>> = [];
 
     if (dto.scenario === LoadTestScenario.NORMAL) {
-      // 1 user -> 1 request -> SUCCESS
       for (let i = 0; i < dto.simulatedUsers; i++) {
         tasks.push(() => executeOne(tokens[i % tokens.length]));
       }
     } else if (dto.scenario === LoadTestScenario.DUPLICATE) {
-      // 1 user -> 2 requests (same token) -> 1 SUCCESS, 1 DUPLICATE
       for (let i = 0; i < dto.simulatedUsers; i++) {
         const t = tokens[i % tokens.length];
         tasks.push(async () => {
@@ -220,7 +310,6 @@ export class TrafficTestService {
         });
       }
     } else if (dto.scenario === LoadTestScenario.INVALID_QR) {
-      // Send completely invalid tokens
       for (let i = 0; i < dto.simulatedUsers; i++) {
         tasks.push(() => executeOne('INVALID_TOKEN_' + crypto.randomBytes(8).toString('hex')));
       }
@@ -242,12 +331,28 @@ export class TrafficTestService {
       }
     }
 
-    // Execute concurrently with concurrency pool (e.g., 50 at a time)
+    // Execute concurrently with concurrency pool (e.g., 25 at a time)
     const concurrency = 25;
     for (let i = 0; i < tasks.length; i += concurrency) {
+      if (!this.activeRuns.has(runId.toString())) {
+        break; // Cancelled
+      }
       const chunk = tasks.slice(i, i + concurrency);
       await Promise.all(chunk.map((fn) => fn()));
     }
+
+    // Batch insert request logs
+    if (requestBuffer.length > 0) {
+      try {
+        await this.prisma.loadTestRequest.createMany({
+          data: requestBuffer,
+        });
+      } catch (err) {
+        this.logger.error('Failed to batch save load test requests:', err);
+      }
+    }
+
+    this.activeRuns.delete(runId.toString());
 
     const totalDurationSeconds = Math.max((Date.now() - startTime) / 1000, 0.001);
     const totalRequests = successCount + duplicateCount + invalidCount + errorCount;
@@ -274,7 +379,48 @@ export class TrafficTestService {
     });
   }
 
+  async exportCsv(id: bigint): Promise<string> {
+    const run = await this.prisma.loadTestRun.findUnique({
+      where: { id },
+      include: {
+        requests: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Load test run with ID ${id} not found`);
+    }
+
+    const sanitize = (val: any) => {
+      let str = String(val ?? '').replace(/"/g, '""');
+      if (/^[=+\-@\t\r]/.test(str)) {
+        str = `'${str}`;
+      }
+      return `"${str}"`;
+    };
+
+    const rows: string[] = [];
+    rows.push(['Run ID', 'Timestamp', 'Token', 'Gate ID', 'Result', 'Response Time (ms)'].join(','));
+
+    for (const req of run.requests) {
+      rows.push([
+        sanitize(run.id.toString()),
+        sanitize(req.createdAt.toISOString()),
+        sanitize(req.token),
+        sanitize(req.gateId),
+        sanitize(req.result),
+        sanitize(req.responseTimeMs),
+      ].join(','));
+    }
+
+    return rows.join('\r\n');
+  }
+
   async cleanupRun(runId: bigint) {
+    this.activeRuns.delete(runId.toString());
+
     await this.prisma.$transaction([
       this.prisma.loadTestRequest.deleteMany({ where: { runId } }),
       this.prisma.scanLog.deleteMany({ where: { loadTestRunId: runId } }),

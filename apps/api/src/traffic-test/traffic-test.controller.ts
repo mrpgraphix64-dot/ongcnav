@@ -7,10 +7,11 @@ import {
   Param,
   UseGuards,
   Req,
+  Res,
   Headers,
   ForbiddenException,
 } from '@nestjs/common';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TrafficTestService } from './traffic-test.service';
 import { CheckinService } from '../checkin/checkin.service';
@@ -47,6 +48,15 @@ export class TrafficTestController {
     return this.trafficTestService.getRun(BigInt(id));
   }
 
+  @Get('runs/:id/status')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get live status and telemetry of a traffic test run' })
+  async getRunStatus(@Param('id') id: string) {
+    return this.trafficTestService.getRunStatus(BigInt(id));
+  }
+
   @Post('start')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -57,12 +67,44 @@ export class TrafficTestController {
     return this.trafficTestService.startTest(dto, BigInt(user.id));
   }
 
+  @Post('runs/:id/stop')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Stop an active load test run' })
+  async stopRun(@Param('id') id: string) {
+    return this.trafficTestService.stopRun(BigInt(id));
+  }
+
+  @Get('runs/:id/export')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Export granular request logs to CSV' })
+  async exportCsv(@Param('id') id: string, @Res() res: Response) {
+    const csvData = await this.trafficTestService.exportCsv(BigInt(id));
+    const filename = `loadtest_run_${id}_results.csv`;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csvData);
+  }
+
   @Delete('runs/:id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @ApiOperation({ summary: 'Purge test run and all isolated load test data' })
   async cleanupRun(@Param('id') id: string) {
+    return this.trafficTestService.cleanupRun(BigInt(id));
+  }
+
+  @Post('runs/:id/cleanup')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Legacy POST alias to purge test run' })
+  async cleanupRunPost(@Param('id') id: string) {
     return this.trafficTestService.cleanupRun(BigInt(id));
   }
 
