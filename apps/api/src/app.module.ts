@@ -15,6 +15,7 @@ import { ReportsModule } from './reports/reports.module';
 import { TrafficTestModule } from './traffic-test/traffic-test.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SettingsModule } from './settings/settings.module';
+import { CommercialModule } from './commercial/commercial.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { SettingsModule } from './settings/settings.module';
     TrafficTestModule,
     DashboardModule,
     SettingsModule,
+    CommercialModule,
   ],
 })
 export class AppModule {}

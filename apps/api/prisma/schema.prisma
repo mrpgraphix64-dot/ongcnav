@@ -100,6 +100,28 @@ enum EmployeeCategory {
   CONTRACT
 }
 
+enum RegistrationType {
+  EMPLOYEE
+  COMMERCIAL
+  FREE
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
 model User {
   id        BigInt   @id @default(autoincrement())
   name      String   @db.VarChar(255)
@@ -176,6 +198,13 @@ model Employee {
   // existing data/reads that haven't been migrated to the resolver yet.
   bookingDays      Json             @map("booking_days")
   employeeCategory EmployeeCategory @default(REGULAR) @map("employee_category")
+  // Reserved for future category-specific fields (e.g. retirement date for
+  // RETIRED, contract end date for CONTRACT). Deliberately unstructured and
+  // unused today — no category currently has any fields that differ from
+  // the others, so nothing is written here yet. This column exists so that
+  // when a real category-specific field is defined, it can be added
+  // without a new migration, a new table, or touching existing rows.
+  categoryData     Json?            @map("category_data")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
@@ -194,6 +223,10 @@ model FamilyMember {
   relation   String   @db.VarChar(100)
   age        Int?
   gender     String?  @db.VarChar(20)
+  // Nullable at the DB level for backward compatibility with any existing
+  // rows created before this field existed — the API DTO enforces it as
+  // required (exact 10-digit Indian mobile) for every new registration.
+  phone      String?  @db.VarChar(20)
   photoPath  String?  @map("photo_path") @db.VarChar(500)
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -205,33 +238,94 @@ model FamilyMember {
 }
 
 model Attendee {
-  id             BigInt         @id @default(autoincrement())
-  name           String?        @db.VarChar(255)
-  mobile         String?        @db.VarChar(20)
-  email          String?        @db.VarChar(255)
-  category       String?        @default("General") @db.VarChar(50)
-  employeeId     BigInt?        @map("employee_id")
-  familyMemberId BigInt?        @unique @map("family_member_id")
-  ticketNumber   String         @unique @map("ticket_number") @db.VarChar(100)
-  qrCodeToken    String         @unique @map("qr_code_token") @db.VarChar(100)
-  status         AttendeeStatus @default(ACTIVE)
+  id               BigInt           @id @default(autoincrement())
+  registrationType RegistrationType @default(EMPLOYEE) @map("registration_type")
+  name             String?          @db.VarChar(255)
+  mobile           String?          @db.VarChar(20)
+  email            String?          @db.VarChar(255)
+  category         String?          @default("General") @db.VarChar(50)
+  employeeId       BigInt?          @map("employee_id")
+  familyMemberId   BigInt?          @unique @map("family_member_id")
+  orderId          BigInt?          @map("order_id")
+  ticketNumber     String           @unique @map("ticket_number") @db.VarChar(100)
+  qrCodeToken      String           @unique @map("qr_code_token") @db.VarChar(100)
+  status           AttendeeStatus   @default(ACTIVE)
   // This person's own selected event dates — independent of their employee
   // or other family members. Nullable so pre-migration rows fall back to
   // the legacy Employee.bookingDays via resolveBookingDays().
-  bookingDays    Json?          @map("booking_days")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
+  bookingDays      Json?            @map("booking_days")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
 
-  employee      Employee?     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  familyMember  FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+  employee      Employee?        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  familyMember  FamilyMember?    @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+  order         CommercialOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
   dailyCheckins DailyCheckin[]
   scanLogs      ScanLog[]
   incidents     Incident[]
 
+  @@index([registrationType])
+  @@index([orderId])
   @@index([ticketNumber])
   @@index([qrCodeToken])
   @@index([mobile])
   @@map("attendees")
+}
+
+model CommercialOrder {
+  id                BigInt                @id @default(autoincrement())
+  orderNumber       String                @unique @map("order_number") @db.VarChar(100)
+  registrationType  RegistrationType      @default(COMMERCIAL) @map("registration_type")
+  customerName      String                @map("customer_name") @db.VarChar(255)
+  customerMobile    String                @map("customer_mobile") @db.VarChar(20)
+  customerEmail     String                @map("customer_email") @db.VarChar(255)
+  ticketType        String                @default("COMMERCIAL_DAILY") @map("ticket_type") @db.VarChar(50)
+  selectedDates     Json                  @map("selected_dates")
+  quantity          Int                   @default(1)
+  unitPricePaise    Int                   @map("unit_price_paise")
+  amountPaise       Int                   @map("amount_paise")
+  currency          String                @default("INR") @db.VarChar(10)
+  orderStatus       OrderStatus           @default(PENDING) @map("order_status")
+  paymentStatus     PaymentStatus         @default(CREATED) @map("payment_status")
+
+  razorpayOrderId   String?               @unique @map("razorpay_order_id") @db.VarChar(100)
+  razorpayPaymentId String?               @unique @map("razorpay_payment_id") @db.VarChar(100)
+  razorpaySignature String?               @map("razorpay_signature") @db.VarChar(255)
+
+  paidAt            DateTime?             @map("paid_at")
+  failedAt          DateTime?             @map("failed_at")
+  failureReason     String?               @map("failure_reason") @db.Text
+
+  metadata          Json?
+
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  attendees         Attendee[]
+  webhookEvents     PaymentWebhookEvent[]
+
+  @@index([orderNumber])
+  @@index([razorpayOrderId])
+  @@index([customerMobile])
+  @@index([orderStatus])
+  @@map("commercial_orders")
+}
+
+model PaymentWebhookEvent {
+  id             BigInt           @id @default(autoincrement())
+  eventId        String           @unique @map("event_id") @db.VarChar(100)
+  orderId        BigInt?          @map("order_id")
+  eventType      String           @map("event_type") @db.VarChar(100)
+  paymentId      String?          @map("payment_id") @db.VarChar(100)
+  processed      Boolean          @default(false)
+  payloadSummary Json?            @map("payload_summary")
+  receivedAt     DateTime         @default(now()) @map("received_at")
+
+  order          CommercialOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([paymentId])
+  @@map("payment_webhook_events")
 }
 
 model DailyCheckin {
