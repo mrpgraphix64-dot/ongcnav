@@ -183,7 +183,7 @@ export class RegistrationService {
     const isFamily = !!attendee.familyMemberId;
     const attendeeName = isFamily
       ? attendee.familyMember?.name
-      : attendee.employee.name;
+      : (attendee.employee?.name || attendee.name || 'Attendee');
 
     return {
       ticketNumber: attendee.ticketNumber,
@@ -191,17 +191,19 @@ export class RegistrationService {
       qrSvg,
       status: attendee.status,
       isFamily,
-      relation: attendee.familyMember?.relation || 'Primary Employee',
+      relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Standalone Attendee'),
       attendeeName,
-      employee: {
-        id: attendee.employee.id.toString(),
-        cpf: attendee.employee.cpf,
-        name: attendee.employee.name,
-        designation: attendee.employee.designation,
-        department: attendee.employee.department,
-        bookingDays: attendee.employee.bookingDays,
-        hasPhoto: !!attendee.employee.photoPath,
-      },
+      employee: attendee.employee
+        ? {
+            id: attendee.employee.id.toString(),
+            cpf: attendee.employee.cpf,
+            name: attendee.employee.name,
+            designation: attendee.employee.designation,
+            department: attendee.employee.department,
+            bookingDays: attendee.employee.bookingDays,
+            hasPhoto: !!attendee.employee.photoPath,
+          }
+        : null,
       checkins: attendee.dailyCheckins.map((c) => ({
         id: c.id.toString(),
         eventDate: c.eventDate,

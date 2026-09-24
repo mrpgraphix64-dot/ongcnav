@@ -150,14 +150,14 @@ export class ReportsService {
       const isFamily = !!c.attendee?.familyMemberId;
       const attendeeName = isFamily
         ? c.attendee?.familyMember?.name
-        : c.attendee?.employee.name;
+        : (c.attendee?.employee?.name || c.attendee?.name || 'Attendee');
       const relation = isFamily
         ? c.attendee?.familyMember?.relation
-        : 'Primary Employee';
-      const cpf = c.attendee?.employee.cpf || '';
-      const phone = c.attendee?.employee.phone || '';
-      const designation = c.attendee?.employee.designation || '';
-      const department = c.attendee?.employee.department || '';
+        : (c.attendee?.employee ? 'Primary Employee' : 'Standalone Attendee');
+      const cpf = c.attendee?.employee?.cpf || '';
+      const phone = c.attendee?.employee?.phone || c.attendee?.mobile || '';
+      const designation = c.attendee?.employee?.designation || c.attendee?.category || '';
+      const department = c.attendee?.employee?.department || '';
       const istTime = new Date(c.checkinTime).toLocaleString('en-IN', {
         timeZone: 'Asia/Kolkata',
       });

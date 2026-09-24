@@ -1,243 +1,766 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   Users,
   CheckCircle2,
-  TrendingUp,
+  Clock,
   AlertTriangle,
   DoorOpen,
-  Radio,
-  Clock,
-  RefreshCw,
+  ScanLine,
+  UploadCloud,
+  UserPlus,
+  Gauge,
+  Sparkles,
   ArrowRight,
-  ShieldAlert,
+  Activity,
+  QrCode,
+  Inbox,
+  X,
+  Loader2,
+  Check,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 
-export default function AdminDashboardPage() {
-  const [summary, setSummary] = useState<any>(null);
-  const [gates, setGates] = useState<any[]>([]);
+interface GateActivity {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  count: number;
+  isOpen?: boolean;
+}
+
+interface RecentCheckin {
+  id: string;
+  name: string;
+  ticket_id: string;
+  category: string;
+  gate: string;
+  checked_in_at: string;
+}
+
+interface DashboardStats {
+  today: string;
+  totalAttendees: number;
+  checkedInCount: number;
+  pendingCount: number;
+  duplicateAttemptsCount: number;
+  checkInPercentage: number;
+  gatesActivity: GateActivity[];
+  totalGateCheckinsToday: number;
+  recentCheckIns: RecentCheckin[];
+  eventStatus?: 'open' | 'closed';
+  scanningEnabled?: boolean;
+  emergencyStopped?: boolean;
+}
+
+export default function OperationsDashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>({
+    today: '',
+    totalAttendees: 0,
+    checkedInCount: 0,
+    pendingCount: 0,
+    duplicateAttemptsCount: 0,
+    checkInPercentage: 0,
+    gatesActivity: [],
+    totalGateCheckinsToday: 0,
+    recentCheckIns: [],
+    eventStatus: 'open',
+    scanningEnabled: true,
+    emergencyStopped: false,
+  });
+
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  // Quick Add Attendee Modal State
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [addForm, setAddForm] = useState({
+    name: '',
+    mobile: '',
+    email: '',
+    category: 'General',
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+
+  // Read authenticated user role for Event Control button display
+  const [userRole, setUserRole] = useState<string>('SUPER_ADMIN');
+  useEffect(() => {
     try {
-      setLoading(true);
-      const [sumData, gatesData] = await Promise.all([
-        fetchApi('/admin/reports/summary'),
-        fetchApi('/admin/gates'),
-      ]);
-      setSummary(sumData);
-      setGates(gatesData || []);
-    } catch (e) {
-      console.error('Failed to load dashboard:', e);
+      const cached = localStorage.getItem('ongc_admin_user');
+      if (cached) {
+        const u = JSON.parse(cached);
+        if (u?.role) setUserRole(String(u.role).toUpperCase());
+      }
+    } catch {}
+  }, []);
+
+  const isSuperOrEventAdmin =
+    userRole === 'SUPER_ADMIN' ||
+    userRole === 'EVENT_ADMIN' ||
+    userRole === 'ADMIN';
+
+  // Fetch real live stats from NestJS
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await fetchApi<DashboardStats>('/admin/dashboard/live-stats');
+      if (data) {
+        setStats(data);
+      }
+    } catch {
+      // Gracefully ignore temporary network failures during polling
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 10000); // 10s auto-refresh
-    return () => clearInterval(interval);
   }, []);
 
+  // Initial load + 3.5s live polling matching Laravel dashboard behavior
+  useEffect(() => {
+    let isMounted = true;
+    fetchStats();
+
+    const interval = setInterval(() => {
+      // Only poll when the tab is visible to prevent unnecessary resource usage
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchStats();
+      }
+    }, 3500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [fetchStats]);
+
+  // Handle Quick Add Attendee submission
+  const handleQuickAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
+    setSubmitting(true);
+
+    try {
+      const res = await fetchApi('/admin/attendees', {
+        method: 'POST',
+        body: JSON.stringify(addForm),
+      });
+
+      setFormSuccess(res?.message || 'Attendee registered successfully!');
+      setAddForm({ name: '', mobile: '', email: '', category: 'General' });
+
+      // Refresh stats immediately
+      await fetchStats();
+
+      setTimeout(() => {
+        setAddModalOpen(false);
+        setFormSuccess(null);
+      }, 1200);
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to add attendee. Please check inputs.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-white">Live Event Command Center</h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Real-time entry monitoring for event date:{' '}
-            <span className="text-amber-400 font-bold">{summary?.targetDate || 'Active Night'}</span>
-          </p>
-        </div>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* 1. HERO SECTION */}
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-stone-200/70 card-shadow p-6 sm:p-8">
+        {/* Subtle dot texture, top-right corner only */}
+        <div
+          className="absolute top-0 right-0 w-48 h-48 dot-texture opacity-30 pointer-events-none"
+          style={{
+            maskImage: 'radial-gradient(circle at top right, black, transparent 70%)',
+            WebkitMaskImage: 'radial-gradient(circle at top right, black, transparent 70%)',
+          }}
+        />
 
-        <button
-          onClick={loadData}
-          disabled={loading}
-          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-2"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Metrics</span>
-        </button>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Today's Entries
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
+        <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-xl">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-maroon-50 text-maroon text-[11px] font-bold uppercase tracking-wider font-outfit">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Real-time Entry Operations</span>
             </div>
+            <h1 className="text-2xl sm:text-[28px] font-outfit font-bold text-ink leading-tight">
+              ONGC Navratri <span className="text-maroon">Entry Control</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-ink-soft">
+              Live check-in monitoring, QR verification analytics, and gate operations for the ONGC Ground Event.
+            </p>
           </div>
-          <div className="mt-3 text-3xl font-black text-white">
-            {summary?.todayTotalCheckins ?? 0}
-          </div>
-          <span className="text-[11px] text-emerald-400 font-semibold mt-1 block">
-            100% Unique Verified Scans
-          </span>
-        </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Peak Hourly Surge
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-950/60 border border-amber-500/40 text-amber-400 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-3xl font-black text-amber-400">
-            {summary?.peakHourCount ?? 0}
-          </div>
-          <span className="text-[11px] text-slate-400 font-medium mt-1 block">
-            Peak Window: {summary?.peakHour ?? 'N/A'}
-          </span>
-        </div>
+          {/* Action Buttons Hierarchy */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {isSuperOrEventAdmin && (
+              <Link
+                href="/admin/event-control"
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-cream-soft border border-stone-200 text-ink text-xs sm:text-sm font-bold hover:border-maroon/50 transition-all shadow-xs"
+              >
+                <Gauge className="w-4 h-4 text-maroon" />
+                <span>Event Control</span>
+              </Link>
+            )}
 
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Total Passes Issued
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-950/60 border border-blue-500/40 text-blue-400 flex items-center justify-center">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-3xl font-black text-white">
-            {summary?.totalRegisteredPasses ?? 0}
-          </div>
-          <span className="text-[11px] text-slate-400 font-medium mt-1 block">
-            {summary?.totalRegisteredEmployees ?? 0} Employees + {summary?.totalRegisteredFamilyMembers ?? 0} Family
-          </span>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Active Incidents
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-400 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-3xl font-black text-red-400">
-            {summary?.activeIncidents ?? 0}
-          </div>
-          <Link
-            href="/admin/incidents"
-            className="text-[11px] text-red-400 hover:underline font-semibold mt-1 block"
-          >
-            View Incident Logs →
-          </Link>
-        </div>
-      </div>
-
-      {/* Live Gate Status Grid */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-extrabold text-lg text-white flex items-center gap-2">
-            <DoorOpen className="w-5 h-5 text-red-500" />
-            Gate Turnstile Status
-          </h3>
-          <Link
-            href="/admin/gates"
-            className="text-xs text-amber-400 hover:underline font-semibold"
-          >
-            Manage Gates →
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {gates.map((gate) => (
-            <div
-              key={gate.id}
-              className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-4"
+            <button
+              onClick={() => {
+                setFormError(null);
+                setFormSuccess(null);
+                setAddModalOpen(true);
+              }}
+              type="button"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs cursor-pointer"
             >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-slate-400">
-                    GATE #{gate.gateNumber}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {gate.isOpen ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
-                        OPEN
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-red-950/80 border border-red-500/40 text-red-300 text-[10px] font-bold">
-                        CLOSED
-                      </span>
-                    )}
-                    {gate.isScanningPaused && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
-                        PAUSED
-                      </span>
-                    )}
-                  </div>
-                </div>
+              <UserPlus className="w-4 h-4 text-maroon" />
+              <span>Add Attendee</span>
+            </button>
 
-                <h4 className="font-bold text-base text-white mt-1">
-                  {gate.name}
-                </h4>
-                <span className="text-xs text-slate-400 font-medium">
-                  Type: {gate.gateType}
-                </span>
-              </div>
+            <Link
+              href="/admin/bulk-upload"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
+            >
+              <UploadCloud className="w-4 h-4 text-maroon" />
+              <span>Upload CSV</span>
+            </Link>
 
-              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Today's Scans:</span>
-                <span className="font-bold font-mono text-emerald-400 text-sm">
-                  {summary?.gateBreakdown?.find((g: any) => g.gateId === gate.id)?.count || 0}
-                </span>
-              </div>
-            </div>
-          ))}
+            {/* PRIMARY ACTION: Live Scanner (Distinct Highlight) */}
+            <Link
+              href="/scanner"
+              className="relative group flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-maroon via-maroon-dark to-maroon text-white text-xs sm:text-sm font-bold border-2 border-gold/60 hover:border-gold hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+            >
+              <span className="w-2 h-2 rounded-full bg-gold animate-ping" />
+              <ScanLine className="w-4 h-4 text-gold-light group-hover:rotate-6 transition-transform" />
+              <span className="font-outfit tracking-wide">LIVE SCANNER</span>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Hourly Entry Chart */}
-      {summary?.hourlyDistribution && (
-        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-extrabold text-base text-white flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-400" />
-              Hourly Entry Distribution (IST Asia/Kolkata)
-            </h3>
-            <span className="text-xs text-slate-400 font-mono">
-              Event Evening: 17:00 – 23:00
+      {/* 2. 4 ACTION-ORIENTED KPI CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Total People */}
+        <div className="bg-white rounded-2xl p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-maroon/30 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
+                Total People
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-maroon-50 text-maroon flex items-center justify-center border border-maroon/20">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-3xl font-outfit font-black text-ink leading-none">
+                {stats.totalAttendees.toLocaleString()}
+              </div>
+              <p className="text-xs text-ink-soft mt-1.5 font-medium">
+                Employees + Family Members
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-stone-100">
+            <Link
+              href="/admin/attendees"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-maroon hover:text-maroon-dark group"
+            >
+              <span>View Attendees</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Card 2: Checked In */}
+        <div className="bg-white rounded-2xl p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-emerald-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
+                Checked In
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-3xl font-outfit font-black text-emerald-700 leading-none">
+                {stats.checkedInCount.toLocaleString()}
+              </div>
+              <p className="text-xs text-ink-soft mt-1.5 font-medium">
+                <span className="font-bold text-emerald-700">
+                  {stats.checkInPercentage}%
+                </span>{' '}
+                of registered people
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-stone-100">
+            <Link
+              href="/admin/attendees?status=checked_in"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 group"
+            >
+              <span>View Check-ins</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Card 3: Pending */}
+        <div className="bg-white rounded-2xl p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-amber-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
+                Pending
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-3xl font-outfit font-black text-amber-700 leading-none">
+                {stats.pendingCount.toLocaleString()}
+              </div>
+              <p className="text-xs text-ink-soft mt-1.5 font-medium">
+                Awaiting Entry
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-stone-100">
+            <Link
+              href="/admin/attendees?status=pending"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-800 group"
+            >
+              <span>View Pending</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Card 4: Duplicate Attempts */}
+        <div className="bg-white rounded-2xl p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-rose-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
+                Duplicate Attempts
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-3xl font-outfit font-black text-rose-700 leading-none">
+                {stats.duplicateAttemptsCount.toLocaleString()}
+              </div>
+              <p className="text-xs text-ink-soft mt-1.5 font-medium">
+                Prevented re-entry alerts
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-stone-100">
+            <Link
+              href="/scanner"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 hover:text-rose-800 group"
+            >
+              <span>View Scan Logs</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. TODAY'S GATE ACTIVITY */}
+      <div className="bg-white rounded-2xl p-6 border border-stone-200/70 card-shadow space-y-4">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-maroon/10 text-maroon flex items-center justify-center shrink-0">
+              <DoorOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-outfit font-bold text-ink">
+                Today's Gate Activity
+              </h3>
+              <p className="text-xs text-ink-soft">
+                Real-time check-in volume distributed across entry gates
+              </p>
+            </div>
+          </div>
+          <div className="text-right flex items-center gap-2">
+            <span className="text-xs font-semibold text-ink-soft">Total Today:</span>
+            <span className="font-outfit font-black text-maroon text-base">
+              {stats.totalGateCheckinsToday.toLocaleString()}
             </span>
+            <Link
+              href="/admin/gates"
+              className="ml-2 text-xs font-bold text-maroon hover:underline hidden sm:inline"
+            >
+              Manage Gates &rarr;
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {stats.gatesActivity.length > 0 ? (
+            stats.gatesActivity.map((ga) => (
+              <Link
+                key={ga.id}
+                href="/admin/gates"
+                className="p-3.5 rounded-xl bg-cream-soft border border-stone-200/60 hover:border-gold hover:bg-white transition-all text-center group block shadow-2xs"
+              >
+                <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-maroon text-gold-light font-outfit">
+                  {ga.code || 'GATE'}
+                </span>
+                <div className="font-outfit font-bold text-sm text-ink group-hover:text-maroon transition-colors truncate mt-1">
+                  {ga.name}
+                </div>
+                <div className="text-[10px] text-ink-soft mb-1 capitalize">
+                  {ga.type.toLowerCase()} Entry
+                </div>
+                <div className="font-outfit font-black text-xl text-maroon">
+                  {ga.count.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-ink-soft">check-ins</div>
+              </Link>
+            ))
+          ) : (
+            <div className="col-span-full py-6 text-center text-xs text-ink-soft">
+              No active gates configured.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4. LIVE CAPACITY & RECENT CHECK-INS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Live Capacity & Check-in Meter (2/3 width) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-stone-200/70 card-shadow space-y-6 flex flex-col justify-between">
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 pb-4">
+              <div>
+                <h3 className="text-base font-outfit font-bold text-ink flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-maroon" />
+                  <span>Live Capacity &amp; Check-in Meter</span>
+                </h3>
+                <p className="text-xs text-ink-soft mt-0.5">
+                  Real-time gate processing and attendance load
+                </p>
+              </div>
+
+              {stats.emergencyStopped ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                  <span>Emergency Stop</span>
+                </span>
+              ) : !stats.scanningEnabled || stats.eventStatus === 'closed' ? (
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Scanning Suspended</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Gate Active</span>
+                </span>
+              )}
+            </div>
+
+            {/* Metrics breakdown */}
+            <div className="mt-5 p-4 rounded-xl bg-cream-soft border border-stone-200/60 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <span className="text-xs font-semibold text-ink-soft">Current Status:</span>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-ink flex-wrap">
+                  <span className="font-outfit font-extrabold text-maroon">
+                    {stats.totalAttendees.toLocaleString()}
+                  </span>{' '}
+                  <span className="text-ink-soft font-normal">Registered</span>
+                  <span className="text-stone-300">&bull;</span>
+                  <span className="font-outfit font-extrabold text-emerald-700">
+                    {stats.checkedInCount.toLocaleString()}
+                  </span>{' '}
+                  <span className="text-ink-soft font-normal">Checked In</span>
+                  <span className="text-stone-300">&bull;</span>
+                  <span className="font-outfit font-extrabold text-amber-700">
+                    {stats.pendingCount.toLocaleString()}
+                  </span>{' '}
+                  <span className="text-ink-soft font-normal">Pending</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-bold text-maroon bg-white px-2.5 py-1 rounded-lg border border-maroon/20 font-mono">
+                  {stats.checkInPercentage}% Capacity
+                </span>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-2 mt-5">
+              <div className="flex justify-between text-xs font-semibold text-ink-soft">
+                <span>Gate Check-in Progress</span>
+                <span className="text-maroon font-bold font-outfit">
+                  {stats.checkedInCount.toLocaleString()} / {stats.totalAttendees.toLocaleString()} People ({stats.checkInPercentage}%)
+                </span>
+              </div>
+              <div className="w-full h-3 bg-stone-100 rounded-full overflow-hidden p-0.5 border border-stone-200/50">
+                <div
+                  className="h-full bg-gradient-to-r from-maroon to-gold rounded-full transition-all duration-700 ease-out"
+                  style={{ width: `${Math.min(100, Math.max(0, stats.checkInPercentage))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Workflow Steps */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-5">
+              <div className="p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-maroon font-mono">01</span>
+                  <UploadCloud className="w-3.5 h-3.5 text-maroon" />
+                </div>
+                <div className="font-outfit font-semibold text-sm text-ink">Upload / Add</div>
+                <div className="text-xs text-ink-soft">Import attendees or add employee pass</div>
+              </div>
+              <div className="p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-maroon font-mono">02</span>
+                  <QrCode className="w-3.5 h-3.5 text-maroon" />
+                </div>
+                <div className="font-outfit font-semibold text-sm text-ink">Issue QR Pass</div>
+                <div className="text-xs text-ink-soft">Generate unique secure ticket pass</div>
+              </div>
+              <div className="p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-maroon font-mono">03</span>
+                  <ScanLine className="w-3.5 h-3.5 text-maroon" />
+                </div>
+                <div className="font-outfit font-semibold text-sm text-ink">Gate Scanner</div>
+                <div className="text-xs text-ink-soft">Scan and verify entry instantly</div>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-24 gap-1 items-end h-32 pt-4">
-            {summary.hourlyDistribution.map((h: any) => {
-              const maxVal = Math.max(...summary.hourlyDistribution.map((i: any) => i.count), 1);
-              const heightPct = (h.count / maxVal) * 100;
-              return (
-                <div key={h.hour} className="flex flex-col items-center gap-1 group relative h-full justify-end">
+          {/* Quick Action Links inside Live Capacity Card */}
+          <div className="pt-4 border-t border-stone-100 flex items-center justify-between flex-wrap gap-2">
+            <Link
+              href="/admin/attendees"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cream-soft hover:bg-stone-200/60 text-ink text-xs font-bold transition-colors font-outfit"
+            >
+              <Users className="w-3.5 h-3.5 text-maroon" />
+              <span>VIEW ALL ATTENDEES</span>
+            </Link>
+            <Link
+              href="/scanner"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-colors border border-gold/40 shadow-xs font-outfit"
+            >
+              <ScanLine className="w-3.5 h-3.5 text-gold-light" />
+              <span>OPEN SCANNER</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Recent Check-ins Card (1/3 width) */}
+        <div className="bg-white rounded-2xl p-6 border border-stone-200/70 card-shadow space-y-4 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+              <div>
+                <h3 className="text-base font-outfit font-bold text-ink">Recent Check-ins</h3>
+                <p className="text-xs text-ink-soft mt-0.5">Latest scanned admissions</p>
+              </div>
+              <Link
+                href="/admin/attendees?status=checked_in"
+                className="text-xs text-maroon font-bold hover:underline flex items-center gap-1"
+              >
+                <span>View All</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+
+            <div className="space-y-2.5 mt-4">
+              {stats.recentCheckIns && stats.recentCheckIns.length > 0 ? (
+                stats.recentCheckIns.map((item) => (
                   <div
-                    style={{ height: `${Math.max(heightPct, 4)}%` }}
-                    className={`w-full rounded-t transition-all ${
-                      h.count > 0 ? 'bg-gradient-to-t from-red-600 to-amber-500' : 'bg-slate-800'
-                    }`}
-                  />
-                  <span className="text-[9px] font-mono text-slate-500 -rotate-90 sm:rotate-0 mt-1">
-                    {h.hour.slice(0, 2)}
-                  </span>
-                  {h.count > 0 && (
-                    <div className="absolute -top-7 hidden group-hover:block bg-black px-2 py-0.5 rounded text-[10px] text-white z-10 font-mono">
-                      {h.count}
+                    key={item.id}
+                    className="p-3 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1.5 hover:border-maroon/30 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CHECKED IN
+                        </span>
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-white text-stone-700 border border-stone-200 shrink-0 truncate max-w-[120px]">
+                          {item.category}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-mono font-bold text-maroon shrink-0">
+                        {item.ticket_id}
+                      </div>
                     </div>
-                  )}
+
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <div className="font-outfit font-bold text-xs text-ink truncate">
+                        {item.name}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[11px] font-bold text-ink">{item.checked_in_at}</span>
+                        <span className="text-[10px] text-ink-soft ml-1">&bull; {item.gate}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10 text-ink-soft text-xs space-y-2">
+                  <div className="w-10 h-10 rounded-full bg-cream-soft mx-auto flex items-center justify-center text-stone-400">
+                    <Inbox className="w-5 h-5" />
+                  </div>
+                  <p className="font-medium text-stone-600">
+                    No entries yet — Waiting for the first successful scan.
+                  </p>
+                  <Link
+                    href="/scanner"
+                    className="inline-flex items-center gap-1 text-maroon font-bold hover:underline pt-1"
+                  >
+                    <span>Launch Scanner</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
                 </div>
-              );
-            })}
+              )}
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-stone-100 text-center">
+            <Link
+              href="/admin/attendees?status=checked_in"
+              className="text-xs font-bold text-maroon hover:underline inline-flex items-center gap-1 font-outfit"
+            >
+              <span>View All Checked In Attendees</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. QUICK ADD ATTENDEE MODAL */}
+      {addModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-xs">
+          <div
+            className="bg-white border border-stone-200 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+              <h3 className="text-lg font-outfit font-bold text-ink flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-maroon" />
+                <span>Add Event Attendee</span>
+              </h3>
+              <button
+                onClick={() => setAddModalOpen(false)}
+                className="text-stone-400 hover:text-ink transition-colors p-1"
+                aria-label="Close dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            {formSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{formSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleQuickAdd} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rahul Patel"
+                  value={addForm.name}
+                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft mb-1">
+                  Mobile Number (10 Digits)
+                </label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. 9876543210"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  minLength={10}
+                  inputMode="numeric"
+                  value={addForm.mobile}
+                  onChange={(e) =>
+                    setAddForm({
+                      ...addForm,
+                      mobile: e.target.value.replace(/[^0-9]/g, ''),
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft mb-1">
+                  Email Address (Optional)
+                </label>
+                <input
+                  type="email"
+                  placeholder="e.g. rahul@gmail.com"
+                  value={addForm.email}
+                  onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft mb-1">
+                  Ticket Category
+                </label>
+                <select
+                  value={addForm.category}
+                  onChange={(e) => setAddForm({ ...addForm, category: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+                >
+                  <option value="General">General Pass</option>
+                  <option value="VIP">VIP Pass</option>
+                  <option value="VVIP">VVIP Pass</option>
+                </select>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setAddModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-ink-soft hover:text-ink cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-maroon text-white text-sm font-semibold hover:bg-maroon-dark transition-colors shadow-xs disabled:opacity-60 cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <span>Create &amp; Generate QR</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

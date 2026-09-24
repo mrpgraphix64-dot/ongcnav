@@ -57,25 +57,27 @@ export class HelpDeskService {
         (c) => c.eventDate === activeDate && (c.status as any) === CheckinStatus.SUCCESS,
       );
 
-      const days = Array.isArray(a.employee.bookingDays) ? (a.employee.bookingDays as string[]) : [];
+      const days = a.employee && Array.isArray(a.employee.bookingDays) ? (a.employee.bookingDays as string[]) : [];
 
       return {
         id: a.id.toString(),
         ticketNumber: a.ticketNumber,
         status: a.status,
         isFamily,
-        attendeeName: isFamily ? a.familyMember?.name : a.employee.name,
-        relation: isFamily ? a.familyMember?.relation : 'Primary Employee',
-        employee: {
-          id: a.employee.id.toString(),
-          cpf: a.employee.cpf,
-          name: a.employee.name,
-          designation: a.employee.designation,
-          department: a.employee.department,
-          phone: a.employee.phone,
-          bookingDays: a.employee.bookingDays,
-        },
-        isBookedToday: days.includes(activeDate),
+        attendeeName: isFamily ? a.familyMember?.name : (a.employee?.name || a.name || 'Attendee'),
+        relation: isFamily ? a.familyMember?.relation : (a.employee ? 'Primary Employee' : 'Standalone Attendee'),
+        employee: a.employee
+          ? {
+              id: a.employee.id.toString(),
+              cpf: a.employee.cpf,
+              name: a.employee.name,
+              designation: a.employee.designation,
+              department: a.employee.department,
+              phone: a.employee.phone,
+              bookingDays: a.employee.bookingDays,
+            }
+          : null,
+        isBookedToday: a.employee ? days.includes(activeDate) : true,
         isCheckedInToday: !!todayCheckin,
         todayCheckin: todayCheckin
           ? {
@@ -110,11 +112,13 @@ export class HelpDeskService {
     });
     const activeDate = activeDateSetting?.value || this.getTodayIst();
 
-    const empDays = Array.isArray(attendee.employee.bookingDays)
-      ? (attendee.employee.bookingDays as string[])
-      : [];
-    if (!empDays.includes(activeDate)) {
-      throw new BadRequestException(`Attendee is not registered for active date ${activeDate}`);
+    if (attendee.employee) {
+      const empDays = Array.isArray(attendee.employee.bookingDays)
+        ? (attendee.employee.bookingDays as string[])
+        : [];
+      if (!empDays.includes(activeDate)) {
+        throw new BadRequestException(`Attendee is not registered for active date ${activeDate}`);
+      }
     }
 
     // Check if already checked in
@@ -175,7 +179,9 @@ export class HelpDeskService {
       message: 'Manual check-in completed successfully',
       checkinId: result.id.toString(),
       ticketNumber: attendee.ticketNumber,
-      attendeeName: attendee.familyMember ? attendee.familyMember.name : attendee.employee.name,
+      attendeeName: attendee.familyMember
+        ? attendee.familyMember.name
+        : (attendee.employee?.name || attendee.name || 'Attendee'),
     };
   }
 

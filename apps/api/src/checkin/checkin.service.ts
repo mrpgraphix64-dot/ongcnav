@@ -189,36 +189,40 @@ export class CheckinService {
       };
     }
 
-    // 8. Event Date Booking Check
-    const bookingDays = Array.isArray(attendee.employee.bookingDays)
-      ? (attendee.employee.bookingDays as string[])
-      : [];
-    if (!bookingDays.includes(activeDate)) {
-      await this.recordScanLog({
-        attendeeId: attendee.id,
-        gateId,
-        scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
-        result: CheckinResult.NOT_BOOKED_TODAY,
-        responseTimeMs: Date.now() - startTime,
-        isLoadTest,
-        loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
-      });
+    // 8. Event Date Booking Check (for Employee-linked passes)
+    if (attendee.employee) {
+      const bookingDays = Array.isArray(attendee.employee.bookingDays)
+        ? (attendee.employee.bookingDays as string[])
+        : [];
+      if (!bookingDays.includes(activeDate)) {
+        await this.recordScanLog({
+          attendeeId: attendee.id,
+          gateId,
+          scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+          result: CheckinResult.NOT_BOOKED_TODAY,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: reqMeta?.ip,
+          userAgent: reqMeta?.userAgent,
+        });
 
-      return {
-        success: false,
-        result: CheckinResult.NOT_BOOKED_TODAY,
-        message: `Pass is not registered for today (${activeDate}). Registered for: ${bookingDays.join(', ')}`,
-        statusCode: 403,
-        attendeeName: attendee.familyMember ? attendee.familyMember.name : attendee.employee.name,
-      };
+        return {
+          success: false,
+          result: CheckinResult.NOT_BOOKED_TODAY,
+          message: `Pass is not registered for today (${activeDate}). Registered for: ${bookingDays.join(', ')}`,
+          statusCode: 403,
+          attendeeName: attendee.familyMember
+            ? attendee.familyMember.name
+            : (attendee.employee?.name || attendee.name || 'Attendee'),
+        };
+      }
     }
 
     // 9. Gate Type Privilege Check
-    if (gate.gateType === GateType.VIP && attendee.employee.designation !== 'VIP') {
+    const des = (attendee.employee?.designation || attendee.category || '').toLowerCase();
+    if (gate.gateType === GateType.VIP && attendee.category !== 'VIP' && attendee.category !== 'VVIP' && attendee.employee?.designation !== 'VIP') {
       // Allow if designation contains Executive / Director / GM or special VIP pass
-      const des = attendee.employee.designation.toLowerCase();
       const isVipEligible = des.includes('director') || des.includes('ed') || des.includes('gm') || des.includes('vip');
       if (!isVipEligible) {
         return {
@@ -319,7 +323,7 @@ export class CheckinService {
           statusCode: 409,
           checkedInAt: prev.checkinTime,
           gateName: prev.gate?.name,
-          attendeeName: attendee.familyMember ? attendee.familyMember.name : attendee.employee.name,
+          attendeeName: attendee.familyMember ? attendee.familyMember.name : (attendee.employee?.name || attendee.name || 'Attendee'),
           ticketNumber: attendee.ticketNumber,
         };
       }
@@ -338,7 +342,7 @@ export class CheckinService {
       });
 
       const isFamily = !!attendee.familyMemberId;
-      const attendeeName = isFamily ? attendee.familyMember?.name : attendee.employee.name;
+      const attendeeName = isFamily ? attendee.familyMember?.name : (attendee.employee?.name || attendee.name || 'Attendee');
 
       return {
         success: true,
@@ -350,15 +354,17 @@ export class CheckinService {
           ticketNumber: attendee.ticketNumber,
           attendeeName,
           isFamily,
-          relation: attendee.familyMember?.relation || 'Primary Employee',
-          employee: {
-            id: attendee.employee.id.toString(),
-            cpf: attendee.employee.cpf,
-            name: attendee.employee.name,
-            designation: attendee.employee.designation,
-            department: attendee.employee.department,
-            hasPhoto: !!attendee.employee.photoPath,
-          },
+          relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Standalone Attendee'),
+          employee: attendee.employee
+            ? {
+                id: attendee.employee.id.toString(),
+                cpf: attendee.employee.cpf,
+                name: attendee.employee.name,
+                designation: attendee.employee.designation,
+                department: attendee.employee.department,
+                hasPhoto: !!attendee.employee.photoPath,
+              }
+            : null,
           gate: {
             id: gate.id.toString(),
             name: gate.name,

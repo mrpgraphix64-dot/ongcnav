@@ -25,10 +25,9 @@ import {
   Calendar,
   Menu,
   X,
-  CheckCircle2,
-  ShieldAlert,
   Headphones,
-  Sparkles,
+  ShieldAlert,
+  ArrowLeft,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 
@@ -50,94 +49,95 @@ interface NavItem {
   isSectionHeader?: string;
 }
 
+// Canonical Laravel navigation items
 const ALL_NAV_ITEMS: NavItem[] = [
-  // 1. Event Control
+  // 1. Event Control (Super Admin, Event Admin)
   {
     label: 'Event Control',
     href: '/admin/event-control',
     icon: Gauge,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
   },
-  // 2. Dashboard
+  // 2. Dashboard (Super Admin, Event Admin, Gate Manager)
   {
     label: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
   },
-  // 3. Gates
+  // 3. Gates (Super Admin, Event Admin, Gate Manager)
   {
     label: 'Gates',
     href: '/admin/gates',
     icon: DoorOpen,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
   },
-  // 4. Staff Management
+  // 4. Staff Management (Super Admin, Event Admin)
   {
-    label: 'Staff',
+    label: 'Staff Management',
     href: '/admin/staff',
     icon: Shield,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
   },
-  // 5. Attendee List
+  // 5. Attendees & Passes (Super Admin, Event Admin, Registration Staff)
   {
-    label: 'Attendee List',
+    label: 'Attendees & Passes',
     href: '/admin/attendees',
     icon: Users,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'REGISTRATION_STAFF'],
   },
-  // 6. Bulk Upload
+  // 6. Bulk Upload (Super Admin, Event Admin, Registration Staff)
   {
     label: 'Bulk Upload',
     href: '/admin/bulk-upload',
     icon: UploadCloud,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'REGISTRATION_STAFF'],
   },
-  // 7. Help Desk
+  // 7. Help Desk Overrides (Super Admin, Event Admin, Gate Manager, Registration Staff)
   {
-    label: 'Help Desk',
+    label: 'Help Desk Overrides',
     href: '/admin/helpdesk',
     icon: LifeBuoy,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REGISTRATION_STAFF'],
   },
-  // 8. Live Scanner
+  // 8. Turnstile Scanner (Super Admin, Event Admin, Gate Manager)
   {
-    label: 'Live Scanner',
+    label: 'Turnstile Scanner',
     href: '/scanner',
     icon: ScanLine,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
   },
-  // 9. Incidents
+  // 9. Incident Response (Super Admin, Event Admin, Gate Manager)
   {
-    label: 'Incidents',
+    label: 'Incident Response',
     href: '/admin/incidents',
     icon: AlertTriangle,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
   },
-  // 10. Daily Closing
+  // 10. Daily Closing (Super Admin, Event Admin, Gate Manager, Report Viewer)
   {
     label: 'Daily Closing',
     href: '/admin/daily-closing',
     icon: CalendarCheck,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
   },
-  // 11. Reports
+  // 11. Reports & Export (Super Admin, Event Admin, Gate Manager, Report Viewer)
   {
-    label: 'Reports',
+    label: 'Reports & Export',
     href: '/admin/reports',
     icon: BarChart3,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
   },
-  // 12. Settings
+  // 12. Settings (Super Admin, Event Admin)
   {
     label: 'Settings',
     href: '/admin/settings',
     icon: Settings,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
   },
-  // 13. Traffic Test Lab
+  // 13. Traffic Test Lab (Super Admin, Event Admin)
   {
-    label: 'Traffic / Scanner Test',
+    label: 'Traffic Test Lab',
     href: '/admin/traffic-test',
     icon: FlaskConical,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
@@ -154,19 +154,19 @@ const SCANNER_STAFF_NAV_ITEMS: NavItem[] = [
     roles: ['SCANNER_STAFF'],
   },
   {
-    label: 'Live Scanner',
+    label: 'Turnstile Scanner',
     href: '/scanner',
     icon: ScanLine,
     roles: ['SCANNER_STAFF'],
   },
   {
-    label: 'Help Desk',
+    label: 'Help Desk Overrides',
     href: '/admin/helpdesk',
     icon: LifeBuoy,
     roles: ['SCANNER_STAFF'],
   },
   {
-    label: 'Incidents',
+    label: 'Incident Response',
     href: '/admin/incidents',
     icon: AlertTriangle,
     roles: ['SCANNER_STAFF'],
@@ -187,25 +187,25 @@ function normalizeRole(role?: string): string {
 function getPageMeta(pathname: string): { title: string; subtitle: string } {
   if (pathname === '/admin' || pathname === '/admin/') {
     return {
-      title: 'Operations Dashboard',
-      subtitle: 'Live check-in monitoring, QR verification analytics, and gate operations.',
+      title: 'Dashboard Overview',
+      subtitle: 'Real-time registration, ticket verification, and gate access management.',
     };
   }
   if (pathname.startsWith('/admin/my-gate')) {
     return {
-      title: 'My Gate Operations',
-      subtitle: 'On-ground turnstile scanner station and shift summary.',
+      title: 'My Gate',
+      subtitle: 'Assigned gate turnstile terminal, lane stats, and scanner launch pad.',
     };
   }
   if (pathname.startsWith('/admin/event-control')) {
     return {
-      title: 'Event Control Console',
-      subtitle: 'Central command for gates, scanning states, emergency controls, and operational dates.',
+      title: 'Event Control',
+      subtitle: 'Central command for emergency stops, scanning states, gate statuses, and operational dates.',
     };
   }
   if (pathname.startsWith('/admin/gates')) {
     return {
-      title: 'Gate Management',
+      title: 'Gates',
       subtitle: 'Manage physical turnstiles, capacities, and staff station assignments.',
     };
   }
@@ -217,17 +217,17 @@ function getPageMeta(pathname: string): { title: string; subtitle: string } {
   }
   if (pathname.startsWith('/admin/attendees')) {
     return {
-      title: 'Attendee Passes Directory',
-      subtitle: 'Manage registered employees, family members, QR tickets, and entry status.',
+      title: 'Attendees & Passes',
+      subtitle: 'Registered employees, family members, QR tickets, and entry status.',
     };
   }
   if (pathname.startsWith('/admin/bulk-upload')) {
     return {
-      title: 'Bulk CSV Upload',
+      title: 'Bulk Upload',
       subtitle: 'Upload, validate, and issue ticket batches with dry-run verification.',
     };
   }
-  if (pathname.startsWith('/admin/helpdesk')) {
+  if (pathname.startsWith('/admin/helpdesk') || pathname.startsWith('/admin/help-desk')) {
     return {
       title: 'Help Desk Overrides',
       subtitle: 'Attendee lookup, manual check-in justification, and ticket status reversal.',
@@ -241,40 +241,49 @@ function getPageMeta(pathname: string): { title: string; subtitle: string } {
   }
   if (pathname.startsWith('/admin/daily-closing')) {
     return {
-      title: 'Daily Closing Audit',
+      title: 'Daily Closing',
       subtitle: 'End-of-night operational reconciliation and official closing audit report.',
     };
   }
   if (pathname.startsWith('/admin/reports')) {
     return {
-      title: 'Reports & Analytics',
-      subtitle: 'Comprehensive gate throughput, attendance curves, and data exports.',
+      title: 'Reports & Export',
+      subtitle: 'Event analytics, gate turnstile throughput, and audit reports.',
     };
   }
   if (pathname.startsWith('/admin/settings')) {
     return {
-      title: 'System Settings',
-      subtitle: 'Configure event dates, QR parameters, scanner thresholds, and security policies.',
+      title: 'Settings',
+      subtitle: 'System configuration, operational policies, and scanner parameters.',
     };
   }
   if (pathname.startsWith('/admin/traffic-test')) {
     return {
-      title: 'Traffic / Scanner Test Lab',
-      subtitle: 'High-throughput simulation lab to stress-test turnstiles and check-in APIs.',
+      title: 'Traffic Test Lab',
+      subtitle: 'Turnstile scanner load testing and high-concurrency simulation lab.',
     };
   }
 
   return {
-    title: 'ONGC Entry Control',
-    subtitle: 'Real-time registration, ticket verification, and gate access management.',
+    title: 'ONGC Operations',
+    subtitle: 'Event QR entry control and turnstile management.',
   };
 }
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Authentication & User State
+  // If on /admin/login, bypass the Admin Shell completely so it renders full-screen
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
+
+  // Hydrate user from localStorage first for zero-flash initial render
   const [user, setUser] = useState<AdminUser | null>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -291,11 +300,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Operational Status from /event-control/status
-  const [activeDate, setActiveDate] = useState('11 – 19 Oct 2026');
-  const [eventStatus, setEventStatus] = useState<'open' | 'closed'>('open');
-  const [scanningEnabled, setScanningEnabled] = useState(true);
-  const [emergencyStopped, setEmergencyStopped] = useState(false);
+  // Operational Status from backend (/event-control/status)
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [activeDate, setActiveDate] = useState<string | null>(null);
+  const [eventStatus, setEventStatus] = useState<'open' | 'closed' | null>(null);
+  const [scanningEnabled, setScanningEnabled] = useState<boolean | null>(null);
+  const [emergencyStopped, setEmergencyStopped] = useState<boolean | null>(null);
 
   // Fetch real authenticated user profile
   useEffect(() => {
@@ -310,13 +320,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
           } catch {}
         }
-      } catch (err: any) {
-        // If unauthenticated, redirect to login
+      } catch {
+        // If unauthenticated, redirect to /admin/login
         if (isMounted) {
           try {
             localStorage.removeItem('ongc_admin_user');
           } catch {}
-          router.push('/login');
+          router.push('/admin/login');
         }
       }
     }
@@ -327,7 +337,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
   }, [router]);
 
-  // Fetch real event-control status periodically
+  // Fetch real event-control status periodically from backend
   useEffect(() => {
     let isMounted = true;
 
@@ -335,13 +345,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       try {
         const res = await fetchApi('/event-control/status');
         if (isMounted && res) {
-          if (res.activeDate) setActiveDate(res.activeDate);
-          if (res.eventStatus) setEventStatus(res.eventStatus);
-          if (typeof res.scanningEnabled === 'boolean') setScanningEnabled(res.scanningEnabled);
-          if (typeof res.emergencyStopped === 'boolean') setEmergencyStopped(res.emergencyStopped);
+          setActiveDate(res.activeDate || null);
+          setEventStatus(res.eventStatus || 'open');
+          setScanningEnabled(typeof res.scanningEnabled === 'boolean' ? res.scanningEnabled : true);
+          setEmergencyStopped(typeof res.emergencyStopped === 'boolean' ? res.emergencyStopped : false);
         }
       } catch {
-        // Fallback gracefully without breaking UI
+        // Leave in neutral state if endpoint fails
+      } finally {
+        if (isMounted) {
+          setStatusLoading(false);
+        }
       }
     }
 
@@ -360,7 +374,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     try {
       localStorage.removeItem('ongc_admin_user');
     } catch {}
-    router.push('/login');
+    router.push('/admin/login');
   };
 
   const handleRefresh = () => {
@@ -390,6 +404,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     ? SCANNER_STAFF_NAV_ITEMS
     : ALL_NAV_ITEMS.filter((item) => item.roles.includes(normalizedRole));
 
+  // Role-based route authorization check
+  const isAuthorized = (() => {
+    if (!user) return true; // allow initial paint while validating
+    if (normalizedRole === 'SUPER_ADMIN' || normalizedRole === 'EVENT_ADMIN') return true;
+
+    const matchedNav = ALL_NAV_ITEMS.find(
+      (item) => item.href === pathname || pathname.startsWith(`${item.href}/`),
+    );
+    if (!matchedNav) return true;
+    return matchedNav.roles.includes(normalizedRole);
+  })();
+
   const pageMeta = getPageMeta(pathname);
   const userInitials = (user?.name || user?.staffId || 'Admin')
     .slice(0, 2)
@@ -401,8 +427,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="h-screen w-screen flex flex-col font-sans bg-cream text-ink selection:bg-maroon selection:text-white overflow-hidden">
-      {/* Emergency Stop Top Alert Banner */}
-      {emergencyStopped && (
+      {/* Emergency Stop Top Alert Banner (shown only when emergency stop is active) */}
+      {emergencyStopped === true && (
         <div className="bg-maroon text-white px-4 py-2 text-center text-xs font-black tracking-widest uppercase flex items-center justify-center gap-2 border-b border-gold/40 shadow-md shrink-0 z-50">
           <ShieldAlert className="w-4 h-4 text-gold animate-bounce" />
           <span>ALL GATES EMERGENCY STOP ACTIVATED — ALL SCANNING SUSPENDED</span>
@@ -435,7 +461,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               alt="ONGC Logo"
               className="h-10 w-auto max-w-[160px] object-contain shrink-0"
               onError={(e) => {
-                // If image fails, fallback to maroon badge
                 (e.target as HTMLElement).style.display = 'none';
                 const fallback = (e.target as HTMLElement).nextElementSibling;
                 if (fallback) fallback.classList.remove('hidden');
@@ -454,7 +479,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </Link>
 
-          {/* Navigation Links (Role-Filtered) */}
+          {/* Navigation Links (Strictly Role-Filtered matching Laravel hierarchy) */}
           <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
@@ -536,14 +561,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </button>
             </div>
 
-            {/* Support Hotline */}
+            {/* Support Card: Authentic operational contact label without unverified numbers */}
             <div className="flex items-center gap-2.5 bg-white rounded-xl p-2.5 border border-stone-200/50">
               <div className="w-7 h-7 rounded-full bg-maroon/10 text-maroon flex items-center justify-center shrink-0">
                 <Headphones className="w-3.5 h-3.5" />
               </div>
               <div className="text-[11px] min-w-0">
                 <div className="font-semibold text-ink">Gate Operations Support</div>
-                <div className="text-ink-soft truncate">+91 98250 00000</div>
+                <div className="text-ink-soft truncate">Event Control Room</div>
               </div>
             </div>
           </div>
@@ -579,25 +604,40 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </div>
               </div>
 
-              {/* Right: Operational Status, Event Date, Scanner Shortcut & User Menu */}
+              {/* Right: Real Operational Status, Real Event Date, Scanner Shortcut & User Menu */}
               <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-                {/* Event Operational Status */}
-                {scanningEnabled && !emergencyStopped ? (
+                {/* Event Operational Status (Real backend state or explicit neutral loading) */}
+                {statusLoading ? (
+                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 border border-stone-200 text-xs font-semibold text-stone-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-pulse" />
+                    <span>Checking Status...</span>
+                  </div>
+                ) : emergencyStopped === true ? (
+                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                    <span>Emergency Stop Active</span>
+                  </div>
+                ) : scanningEnabled === false || eventStatus === 'closed' ? (
+                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    <span>Scanning Suspended</span>
+                  </div>
+                ) : eventStatus === 'open' && scanningEnabled === true ? (
                   <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span>Gate Active</span>
                   </div>
                 ) : (
-                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                    <span>Scanning Suspended</span>
+                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 border border-stone-200 text-xs font-semibold text-stone-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+                    <span>Status Neutral</span>
                   </div>
                 )}
 
-                {/* Event Operational Date */}
+                {/* Event Operational Date (From backend settings or neutral indicator) */}
                 <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs font-semibold text-ink shadow-xs">
                   <Calendar className="w-[14px] h-[14px] text-maroon" />
-                  <span>{activeDate}</span>
+                  <span>{activeDate ? activeDate : 'Event Schedule'}</span>
                 </div>
 
                 {/* Quick Scan Button (Mobile) */}
@@ -613,7 +653,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <button
                   onClick={handleRefresh}
                   type="button"
-                  className="w-9 h-9 rounded-lg bg-white border border-stone-200 text-ink flex items-center justify-center hover:border-maroon/40 transition-colors shrink-0 shadow-xs"
+                  className="w-9 h-9 rounded-lg bg-white border border-stone-200 text-ink flex items-center justify-center hover:border-maroon/40 transition-colors shrink-0 shadow-xs cursor-pointer"
                   title="Refresh Page"
                 >
                   <RefreshCw
@@ -628,7 +668,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
                     type="button"
-                    className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-white border border-stone-200 hover:border-maroon/40 transition-colors shrink-0 shadow-xs"
+                    className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-white border border-stone-200 hover:border-maroon/40 transition-colors shrink-0 shadow-xs cursor-pointer"
                   >
                     <div className="w-7 h-7 rounded-lg bg-maroon text-white flex items-center justify-center font-outfit font-bold text-xs shrink-0">
                       {userInitials}
@@ -691,7 +731,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             setUserMenuOpen(false);
                             handleLogout();
                           }}
-                          className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 text-left transition-colors"
+                          className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 text-left transition-colors cursor-pointer"
                         >
                           <LogOut className="w-3.5 h-3.5 text-rose-500" />
                           <span>Sign Out</span>
@@ -704,9 +744,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </header>
 
-          {/* Main Body: The scrollable operational viewport */}
+          {/* Main Body: Operational viewport with RBAC guard */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
-            {children}
+            {!isAuthorized ? (
+              <div className="max-w-xl mx-auto my-12 p-8 bg-white rounded-2xl border border-rose-200 shadow-sm text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <h2 className="text-xl font-outfit font-bold text-ink">403 Access Denied</h2>
+                <p className="text-sm text-ink-soft">
+                  Your assigned role (<strong>{roleBadgeLabel}</strong>) does not have authorization
+                  to access this operational module.
+                </p>
+                <div className="pt-2">
+                  <Link
+                    href={isScannerStaff ? '/scanner' : '/admin'}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-maroon text-white text-xs font-bold font-outfit hover:bg-maroon-dark transition-colors shadow-xs"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Return to {isScannerStaff ? 'Turnstile Scanner' : 'Dashboard'}</span>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              children
+            )}
           </main>
         </div>
       </div>

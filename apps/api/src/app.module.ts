@@ -13,6 +13,7 @@ import { HelpDeskModule } from './helpdesk/helpdesk.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { ReportsModule } from './reports/reports.module';
 import { TrafficTestModule } from './traffic-test/traffic-test.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { TrafficTestModule } from './traffic-test/traffic-test.module';
     IncidentsModule,
     ReportsModule,
     TrafficTestModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

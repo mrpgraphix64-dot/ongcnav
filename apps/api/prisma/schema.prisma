@@ -183,7 +183,11 @@ model FamilyMember {
 
 model Attendee {
   id             BigInt         @id @default(autoincrement())
-  employeeId     BigInt         @map("employee_id")
+  name           String?        @db.VarChar(255)
+  mobile         String?        @db.VarChar(20)
+  email          String?        @db.VarChar(255)
+  category       String?        @default("General") @db.VarChar(50)
+  employeeId     BigInt?        @map("employee_id")
   familyMemberId BigInt?        @unique @map("family_member_id")
   ticketNumber   String         @unique @map("ticket_number") @db.VarChar(100)
   qrCodeToken    String         @unique @map("qr_code_token") @db.VarChar(100)
@@ -191,13 +195,14 @@ model Attendee {
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
-  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee      Employee?     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   familyMember  FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
   dailyCheckins DailyCheckin[]
   scanLogs      ScanLog[]
 
   @@index([ticketNumber])
   @@index([qrCodeToken])
+  @@index([mobile])
   @@map("attendees")
 }
 

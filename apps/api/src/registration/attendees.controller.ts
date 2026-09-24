@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Query,
@@ -25,6 +26,13 @@ import * as fs from 'fs';
 @Controller('admin/attendees')
 export class AttendeesController {
   constructor(private readonly attendeesService: AttendeesService) {}
+
+  @Post()
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EVENT_ADMIN, UserRole.REGISTRATION_STAFF)
+  @ApiOperation({ summary: 'Quick add attendee & issue digital ticket pass' })
+  async create(@Body() body: { name: string; mobile: string; email?: string; category?: string }) {
+    return this.attendeesService.createQuickAttendee(body);
+  }
 
   @Get('search')
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.GATE_SUPERVISOR, UserRole.HELP_DESK)
