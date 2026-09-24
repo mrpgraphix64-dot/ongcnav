@@ -47,11 +47,16 @@ export class AuthService {
       return this.generateTokenResponse(user);
     }
 
-    // 2. Emergency fallback admin
-    const fallbackEmail = this.configService.get<string>('ADMIN_EMAIL', 'admin@ongc.co.in').toLowerCase();
-    const fallbackPassword = this.configService.get<string>('ADMIN_PASSWORD', 'admin123');
+    // 2. Emergency fallback admin — requires ADMIN_EMAIL/ADMIN_PASSWORD to be
+    // explicitly configured. No hardcoded default credentials: if either is
+    // unset, this path can never authenticate (fails closed), rather than
+    // falling back to a well-known default password.
+    const fallbackEmail = this.configService.get<string>('ADMIN_EMAIL')?.toLowerCase();
+    const fallbackPassword = this.configService.get<string>('ADMIN_PASSWORD');
 
     if (
+      fallbackEmail &&
+      fallbackPassword &&
       (cleanIdentifier.toLowerCase() === 'admin' || cleanIdentifier.toLowerCase() === fallbackEmail) &&
       password === fallbackPassword
     ) {
@@ -79,36 +84,6 @@ export class AuthService {
     }
 
     throw new UnauthorizedException('Invalid credentials. Enter your registered Staff Email or Staff ID.');
-  }
-
-  async demoLogin() {
-    const allowDemo = this.configService.get<string>('DEMO_ADMIN_BYPASS', 'false') === 'true';
-    if (!allowDemo) {
-      throw new ForbiddenException('Demo admin login is disabled on this environment.');
-    }
-
-    const payload = {
-      sub: '0',
-      staffId: 'DEMO-ADMIN',
-      email: 'demo.admin@ongc.co.in',
-      name: 'Demo Admin',
-      role: 'SUPER_ADMIN',
-      isDemo: true,
-    };
-
-    const token = this.jwtService.sign(payload);
-
-    return {
-      accessToken: token,
-      user: {
-        id: '0',
-        staffId: 'DEMO-ADMIN',
-        email: 'demo.admin@ongc.co.in',
-        name: 'Demo Admin',
-        role: 'SUPER_ADMIN',
-        assignedGates: [],
-      },
-    };
   }
 
   private generateTokenResponse(user: any) {

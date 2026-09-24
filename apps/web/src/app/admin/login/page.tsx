@@ -6,19 +6,17 @@ import Link from 'next/link';
 import {
   Lock,
   User,
-  ShieldCheck,
   AlertCircle,
   ArrowRight,
   ArrowLeft,
-  Info,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 
 export default function AdminLoginPage() {
   const router = useRouter();
 
-  const [identifier, setIdentifier] = useState('admin@ongc.co.in');
-  const [password, setPassword] = useState('admin123');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,45 +48,6 @@ export default function AdminLoginPage() {
       }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials. Enter your registered Staff Email or Staff ID.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    setError(null);
-    setLoading(true);
-
-    try {
-      // First attempt official demo auth endpoint
-      let res;
-      try {
-        res = await fetchApi('/auth/demo', { method: 'POST' });
-      } catch {
-        // Fallback to standard admin fallback credentials
-        res = await fetchApi('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({
-            identifier: 'admin@ongc.co.in',
-            password: 'admin123',
-          }),
-        });
-      }
-
-      if (res?.user) {
-        try {
-          localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
-        } catch {}
-      }
-
-      const role = String(res?.user?.role || '').toUpperCase();
-      if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
-        router.push('/scanner');
-      } else {
-        router.push('/admin');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to authenticate demo admin session.');
     } finally {
       setLoading(false);
     }
@@ -165,7 +124,8 @@ export default function AdminLoginPage() {
                 <input
                   type="text"
                   required
-                  placeholder="admin@ongc.co.in"
+                  autoComplete="username"
+                  placeholder="Enter your registered email or Staff ID"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
@@ -182,6 +142,7 @@ export default function AdminLoginPage() {
                 <input
                   type="password"
                   required
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -201,31 +162,6 @@ export default function AdminLoginPage() {
               </button>
             </div>
           </form>
-
-          {/* Quick Demo Bypass */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-stone-200" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-white px-3 text-ink-soft font-medium">or quick testing</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            disabled={loading}
-            className="w-full group relative flex flex-col items-center justify-center p-3.5 rounded-xl bg-gradient-to-r from-cream-soft to-gold/15 border-2 border-gold/60 text-maroon font-outfit font-bold hover:border-maroon hover:bg-gold/25 transition-all duration-200 cursor-pointer disabled:opacity-60"
-          >
-            <div className="flex items-center gap-2 text-sm">
-              <ShieldCheck className="w-4 h-4 text-maroon group-hover:scale-110 transition-transform" />
-              <span>CONTINUE AS ADMIN</span>
-            </div>
-            <span className="text-[11px] font-medium text-amber-800 tracking-wide mt-0.5">
-              Demo access &bull; Temporary
-            </span>
-          </button>
 
           {/* Bottom Back link */}
           <div className="mt-6 text-center">

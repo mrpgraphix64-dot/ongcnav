@@ -37,7 +37,6 @@ interface AdminUser {
   name?: string;
   email?: string;
   role?: string;
-  isDemo?: boolean;
   assignedGates?: any[];
 }
 
@@ -421,9 +420,7 @@ export default function AdminLayout({
     .slice(0, 2)
     .toUpperCase();
 
-  const roleBadgeLabel = user?.isDemo
-    ? 'DEMO ADMIN'
-    : normalizedRole.replace(/_/g, ' ');
+  const roleBadgeLabel = normalizedRole.replace(/_/g, ' ');
 
   return (
     <div className="h-screen w-screen flex flex-col font-sans bg-cream text-ink selection:bg-maroon selection:text-white overflow-hidden">
@@ -692,14 +689,12 @@ export default function AdminLayout({
                           {user?.name || user?.staffId || 'Portal Administrator'}
                         </p>
                         <p className="text-[11px] text-ink-soft truncate">
-                          {user?.email || 'admin@ongc.co.in'}
+                          {user?.email || user?.staffId || ''}
                         </p>
                         <div className="mt-1.5">
                           <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            {user?.isDemo
-                              ? 'DEMO ACCESS • TEMPORARY'
-                              : `${roleBadgeLabel} • OFFICIAL`}
+                            {`${roleBadgeLabel} • OFFICIAL`}
                           </span>
                         </div>
                       </div>

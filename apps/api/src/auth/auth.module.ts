@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { getRequiredJwtSecret } from '../common/security/jwt-secret.util';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { JwtStrategy } from './jwt.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET', 'ongc-navratri-jwt-secret-key-2026'),
+        secret: getRequiredJwtSecret(configService),
         signOptions: { expiresIn: '7d' },
       }),
     }),

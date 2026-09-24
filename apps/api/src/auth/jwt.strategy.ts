@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { getRequiredJwtSecret } from '../common/security/jwt-secret.util';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -16,26 +17,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         (req) => req?.cookies?.jwt || req?.cookies?.admin_token,
       ]),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET', 'ongc-navratri-jwt-secret-key-2026'),
+      secretOrKey: getRequiredJwtSecret(configService),
     });
   }
 
   async validate(payload: any) {
     if (!payload || !payload.sub) {
       throw new UnauthorizedException();
-    }
-
-    // Demo admin bypass virtual user
-    if (payload.isDemo) {
-      return {
-        id: BigInt(0),
-        staffId: 'DEMO-ADMIN',
-        name: 'Demo Admin',
-        email: 'demo.admin@ongc.co.in',
-        role: 'SUPER_ADMIN',
-        status: 'active',
-        isDemo: true,
-      };
     }
 
     const user = await this.prisma.user.findUnique({
