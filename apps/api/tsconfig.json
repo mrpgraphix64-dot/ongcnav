@@ -19,5 +19,6 @@
     "paths": {
       "@ongc/shared-types": ["../../packages/shared-types/src/index.ts", "../../packages/shared-types/dist/index.d.ts"]
     }
-  }
+  },
+  "exclude": ["node_modules", "dist", "scripts"]
 }
