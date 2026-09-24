@@ -5,12 +5,13 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   ValidateNested,
   ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { EmployeeCategory } from '@ongc/shared-types';
+import { EmployeeCategory, RegistrationType } from '@ongc/shared-types';
 
 export class FamilyMemberInputDto {
   @ApiProperty({ example: 'Sunita Sharma' })
@@ -22,6 +23,17 @@ export class FamilyMemberInputDto {
   @IsString()
   @IsNotEmpty()
   relation: string;
+
+  @ApiProperty({
+    example: '9876543210',
+    description: 'Family member mobile number — required, exactly 10 digits, must start with 6-9 (Indian mobile format).',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Family member mobile number is required.' })
+  @Matches(/^[6-9][0-9]{9}$/, {
+    message: 'Family member mobile number must be exactly 10 digits and start with 6, 7, 8 or 9.',
+  })
+  phone: string;
 
   @ApiPropertyOptional({ example: 38 })
   @IsOptional()
@@ -93,4 +105,9 @@ export class RegisterEmployeeDto {
   @ValidateNested({ each: true })
   @Type(() => FamilyMemberInputDto)
   familyMembers?: FamilyMemberInputDto[];
+
+  @ApiPropertyOptional({ enum: RegistrationType, example: RegistrationType.EMPLOYEE })
+  @IsOptional()
+  @IsEnum(RegistrationType)
+  registrationType?: RegistrationType;
 }

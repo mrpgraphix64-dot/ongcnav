@@ -94,4 +94,12 @@ describe('RegistrationController', () => {
     expect(result.employee.cpf).toBe('123456');
     expect(service.findByCpf).toHaveBeenCalledWith('123456', '3210');
   });
+
+  it('does not expose a direct commercial registration route (payment bypass removed)', () => {
+    // Commercial passes must only be issued via the verified Razorpay flow
+    // (CommercialController: /commercial/orders -> /commercial/orders/verify).
+    // This controller must never regain a method that creates an active
+    // commercial attendee/QR without payment verification.
+    expect((controller as any).registerCommercial).toBeUndefined();
+  });
 });

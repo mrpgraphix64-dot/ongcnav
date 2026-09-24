@@ -52,9 +52,86 @@ describe('RegisterEmployeeDto validation', () => {
   it("allows a family member's bookingDays to be a valid array without one on the employee's own family member DTO required list", async () => {
     const dto = plainToInstance(RegisterEmployeeDto, {
       ...baseInput(),
-      familyMembers: [{ name: 'Sunita', relation: 'Spouse', bookingDays: ['2026-10-13'] }],
+      familyMembers: [{ name: 'Sunita', relation: 'Spouse', phone: '9876543210', bookingDays: ['2026-10-13'] }],
     });
     const errors = await validate(dto, { whitelist: true });
     expect(errors).toHaveLength(0);
+  });
+
+  describe('family member mobile number (mandatory)', () => {
+    function withFamilyMember(overrides: Record<string, unknown>) {
+      return plainToInstance(RegisterEmployeeDto, {
+        ...baseInput(),
+        familyMembers: [{ name: 'Sunita', relation: 'Spouse', ...overrides }],
+      });
+    }
+
+    async function familyPhoneErrors(overrides: Record<string, unknown>) {
+      const dto = withFamilyMember(overrides);
+      const errors = await validate(dto);
+      const familyErrors = errors.find((e) => e.property === 'familyMembers');
+      const nested = familyErrors?.children?.[0]?.children ?? [];
+      return nested.filter((e: any) => e.property === 'phone');
+    }
+
+    it('passes with a valid 10-digit family mobile number', async () => {
+      const phoneErrors = await familyPhoneErrors({ phone: '9876543210' });
+      expect(phoneErrors).toHaveLength(0);
+    });
+
+    it('fails when the family mobile number is missing', async () => {
+      const phoneErrors = await familyPhoneErrors({});
+      expect(phoneErrors.length).toBeGreaterThan(0);
+    });
+
+    it('fails when the family mobile number is empty', async () => {
+      const phoneErrors = await familyPhoneErrors({ phone: '' });
+      expect(phoneErrors.length).toBeGreaterThan(0);
+    });
+
+    it('fails with only 9 digits', async () => {
+      const phoneErrors = await familyPhoneErrors({ phone: '987654321' });
+      expect(phoneErrors.length).toBeGreaterThan(0);
+    });
+
+    it('fails with 11 digits', async () => {
+      const phoneErrors = await familyPhoneErrors({ phone: '98765432101' });
+      expect(phoneErrors.length).toBeGreaterThan(0);
+    });
+
+    it('fails with alphabet characters', async () => {
+      const phoneErrors = await familyPhoneErrors({ phone: '98765abcde' });
+      expect(phoneErrors.length).toBeGreaterThan(0);
+    });
+
+    it('fails with symbol characters', async () => {
+      const phoneErrors = await familyPhoneErrors({ phone: '98765-4321' });
+      expect(phoneErrors.length).toBeGreaterThan(0);
+    });
+
+    it('fails when the number does not start with 6-9 (matches the Indian mobile format used elsewhere in the app)', async () => {
+      const phoneErrors = await familyPhoneErrors({ phone: '1234567890' });
+      expect(phoneErrors.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('registrationType validation', () => {
+    it('accepts EMPLOYEE registrationType', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, {
+        ...baseInput(),
+        registrationType: 'EMPLOYEE',
+      });
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('rejects invalid registrationType values', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, {
+        ...baseInput(),
+        registrationType: 'INVALID_TYPE',
+      });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'registrationType')).toBe(true);
+    });
   });
 });

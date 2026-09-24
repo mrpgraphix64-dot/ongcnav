@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AttendeesService } from './attendees.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendeeStatus } from '@ongc/shared-types';
+import { AttendeeStatus, EmployeeCategory, RegistrationType } from '@ongc/shared-types';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('AttendeesService Parity & Functional Tests', () => {
@@ -10,6 +10,7 @@ describe('AttendeesService Parity & Functional Tests', () => {
 
   const mockAttendee = {
     id: BigInt(1),
+    registrationType: RegistrationType.EMPLOYEE,
     name: 'Suresh Patel',
     mobile: '9876543210',
     email: 'suresh@ongc.co.in',
@@ -28,6 +29,7 @@ describe('AttendeesService Parity & Functional Tests', () => {
       phone: '9876543210',
       designation: 'Chief Engineer',
       department: 'Operations',
+      employeeCategory: EmployeeCategory.RETIRED,
       bookingDays: ['2026-09-24'],
       photoPath: null,
     },
@@ -44,6 +46,7 @@ describe('AttendeesService Parity & Functional Tests', () => {
 
   const mockFamilyAttendee = {
     id: BigInt(2),
+    registrationType: RegistrationType.EMPLOYEE,
     name: 'Meena Patel',
     mobile: '9876543211',
     email: null,
@@ -141,6 +144,17 @@ describe('AttendeesService Parity & Functional Tests', () => {
       expect(primary.status).toBe('checked_in');
       expect(primary.family_tickets).toHaveLength(1);
       expect(primary.family_tickets[0].name).toBe('Meena Patel');
+    });
+
+    it('exposes the employee category in the admin attendee listing', async () => {
+      const res = await service.index({ page: 1, limit: 10 });
+      expect(res.primaryAttendees[0].employee?.employeeCategory).toBe(EmployeeCategory.RETIRED);
+    });
+
+    it('exposes registrationType in the attendee listing', async () => {
+      const res = await service.index({ page: 1, limit: 10 });
+      expect(res.primaryAttendees[0].registrationType).toBe(RegistrationType.EMPLOYEE);
+      expect(res.primaryAttendees[0].family_tickets[0].registrationType).toBe(RegistrationType.EMPLOYEE);
     });
   });
 

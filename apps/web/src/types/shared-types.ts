@@ -49,6 +49,34 @@ export enum AttendeeStatus {
   REVOKED = 'revoked',
 }
 
+export enum RegistrationType {
+  EMPLOYEE = 'EMPLOYEE',
+  COMMERCIAL = 'COMMERCIAL',
+  FREE = 'FREE',
+}
+
+export enum EmployeeCategory {
+  REGULAR = 'REGULAR',
+  RETIRED = 'RETIRED',
+  CONTRACT = 'CONTRACT',
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum PaymentStatus {
+  CREATED = 'CREATED',
+  AUTHORIZED = 'AUTHORIZED',
+  CAPTURED = 'CAPTURED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+}
+
 export enum CheckinStatus {
   ACTIVE = 'active',
   SUCCESS = 'active',

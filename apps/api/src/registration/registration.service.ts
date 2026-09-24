@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
-import { AttendeeStatus } from '@ongc/shared-types';
+import { AttendeeStatus, RegistrationType } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
@@ -33,6 +33,10 @@ export class RegistrationService {
     photoPath?: string,
     familyPhotoPaths?: (string | undefined)[],
   ) {
+    if (dto.registrationType && dto.registrationType !== RegistrationType.EMPLOYEE) {
+      throw new BadRequestException('Cannot register as non-employee via employee registration.');
+    }
+
     const cleanCpf = dto.cpf.trim().toUpperCase();
 
     // Check if employee already registered
@@ -80,6 +84,7 @@ export class RegistrationService {
       // the real, authoritative source check-in reads from.
       const employeeAttendee = await tx.attendee.create({
         data: {
+          registrationType: RegistrationType.EMPLOYEE as any,
           employeeId: employee.id,
           ticketNumber: employeeTicketNumber,
           qrCodeToken: employeeQrToken,
@@ -104,12 +109,14 @@ export class RegistrationService {
               relation: famDto.relation.trim(),
               age: famDto.age || null,
               gender: famDto.gender || null,
+              phone: famDto.phone.trim(),
               photoPath: famPhotoPath || null,
             },
           });
 
           const famAttendee = await tx.attendee.create({
             data: {
+              registrationType: RegistrationType.EMPLOYEE as any,
               employeeId: employee.id,
               familyMemberId: familyMember.id,
               ticketNumber: famTicketNumber,
@@ -207,8 +214,9 @@ export class RegistrationService {
       qrCodeToken: attendee.qrCodeToken,
       qrSvg,
       status: attendee.status,
+      registrationType: attendee.registrationType,
       isFamily,
-      relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Standalone Attendee'),
+      relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Commercial Pass'),
       attendeeName,
       hasPhoto,
       // This person's own dates, not the employee's — falls back to the

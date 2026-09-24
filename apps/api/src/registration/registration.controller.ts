@@ -53,7 +53,7 @@ function photoFilename(req: any, file: Express.Multer.File, cb: (error: Error | 
 export class RegistrationController {
   constructor(private readonly registrationService: RegistrationService) {}
 
-  @Post('register')
+  @Post(['register', 'register/employee', 'employee/register'])
   @ApiOperation({ summary: 'Register employee with optional family members, each with their own dates and photo' })
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'photo', maxCount: 1 }, ...FAMILY_PHOTO_FIELDS], {
@@ -104,6 +104,7 @@ export class RegistrationController {
       employeeCategory: body.employeeCategory,
       bookingDays: bookingDays || [],
       familyMembers,
+      registrationType: body.registrationType,
     };
 
     const employeePhotoFile = files?.['photo']?.[0];
@@ -119,6 +120,12 @@ export class RegistrationController {
 
     return this.registrationService.register(dto, photoPath, familyPhotoPaths);
   }
+
+  // NOTE: There is intentionally no direct commercial registration endpoint
+  // here. Commercial passes are ONLY issued after verified Razorpay payment
+  // via CommercialController (POST /commercial/orders -> Razorpay Checkout ->
+  // POST /commercial/orders/verify). Do not add a route that creates an
+  // active commercial attendee/QR without payment verification.
 
   @Get('ticket/:token')
   @ApiOperation({ summary: 'Lookup ticket/pass by QR token or ticket number' })
