@@ -94,6 +94,12 @@ enum LoadTestScenario {
   MIXED
 }
 
+enum EmployeeCategory {
+  REGULAR
+  RETIRED
+  CONTRACT
+}
+
 model User {
   id        BigInt   @id @default(autoincrement())
   name      String   @db.VarChar(255)
@@ -156,17 +162,22 @@ model GateUser {
 }
 
 model Employee {
-  id          BigInt   @id @default(autoincrement())
-  cpf         String   @unique @db.VarChar(50)
-  name        String   @db.VarChar(255)
-  designation String   @db.VarChar(255)
-  department  String   @db.VarChar(255)
-  phone       String   @db.VarChar(20)
-  email       String   @db.VarChar(255)
-  photoPath   String?  @map("photo_path") @db.VarChar(500)
-  bookingDays Json     @map("booking_days")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id               BigInt           @id @default(autoincrement())
+  cpf              String           @unique @db.VarChar(50)
+  name             String           @db.VarChar(255)
+  designation      String           @db.VarChar(255)
+  department       String           @db.VarChar(255)
+  phone            String           @db.VarChar(20)
+  email            String           @db.VarChar(255)
+  photoPath        String?          @map("photo_path") @db.VarChar(500)
+  // Legacy/summary field — the employee's own selected dates. No longer the
+  // authoritative source for check-in gating; see Attendee.bookingDays for
+  // the real per-person value. Kept for backward compatibility with
+  // existing data/reads that haven't been migrated to the resolver yet.
+  bookingDays      Json             @map("booking_days")
+  employeeCategory EmployeeCategory @default(REGULAR) @map("employee_category")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
 
   familyMembers FamilyMember[]
   attendees     Attendee[]
@@ -183,6 +194,7 @@ model FamilyMember {
   relation   String   @db.VarChar(100)
   age        Int?
   gender     String?  @db.VarChar(20)
+  photoPath  String?  @map("photo_path") @db.VarChar(500)
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -203,6 +215,10 @@ model Attendee {
   ticketNumber   String         @unique @map("ticket_number") @db.VarChar(100)
   qrCodeToken    String         @unique @map("qr_code_token") @db.VarChar(100)
   status         AttendeeStatus @default(ACTIVE)
+  // This person's own selected event dates — independent of their employee
+  // or other family members. Nullable so pre-migration rows fall back to
+  // the legacy Employee.bookingDays via resolveBookingDays().
+  bookingDays    Json?          @map("booking_days")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 

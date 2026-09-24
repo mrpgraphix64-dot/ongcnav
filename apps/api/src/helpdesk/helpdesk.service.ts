@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ManualCheckinDto, VoidCheckinDto } from './dto/helpdesk.dto';
 import { CheckinStatus, CheckinResult, AttendeeStatus } from '@ongc/shared-types';
+import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 
 @Injectable()
 export class HelpDeskService {
@@ -93,9 +94,7 @@ export class HelpDeskService {
         (c) => (c.status as any) === CheckinStatus.VOIDED || (c.status as any) === 'VOIDED',
       );
 
-      const days = a.employee && Array.isArray(a.employee.bookingDays)
-        ? (a.employee.bookingDays as string[])
-        : [];
+      const days = resolveBookingDays(a);
 
       return {
         id: a.id.toString(),
@@ -234,9 +233,7 @@ export class HelpDeskService {
     const activeDate = activeDateSetting || this.getTodayIst();
 
     if (attendee.employee) {
-      const empDays = Array.isArray(attendee.employee.bookingDays)
-        ? (attendee.employee.bookingDays as string[])
-        : [];
+      const empDays = resolveBookingDays(attendee);
       if (empDays.length > 0 && !empDays.includes(activeDate)) {
         throw new BadRequestException(`Attendee is not registered for active event date ${activeDate}`);
       }

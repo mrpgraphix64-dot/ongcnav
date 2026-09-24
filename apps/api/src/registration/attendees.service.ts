@@ -8,6 +8,7 @@ import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttendeeStatus } from '@ongc/shared-types';
+import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 
 const VALID_CATEGORIES = ['General', 'VIP', 'VVIP', 'ONGC STAFF', 'FAMILY MEMBER'];
 
@@ -227,7 +228,7 @@ export class AttendeesService {
                 mobile_no: p.employee.phone,
                 designation: p.employee.designation,
                 department: p.employee.department,
-                bookingDays: p.employee.bookingDays,
+                bookingDays: resolveBookingDays(p),
                 has_photo: !!p.employee.photoPath,
                 photo_url: p.employee.photoPath ? `/admin/employees/${p.employee.id}/photo` : null,
               }
@@ -329,7 +330,7 @@ export class AttendeesService {
                 phone: a.employee.phone,
                 department: a.employee.department,
                 designation: a.employee.designation,
-                bookingDays: a.employee.bookingDays,
+                bookingDays: resolveBookingDays(a),
                 hasPhoto: !!a.employee.photoPath,
               }
             : null,
@@ -386,7 +387,7 @@ export class AttendeesService {
             phone: attendee.employee.phone,
             department: attendee.employee.department,
             designation: attendee.employee.designation,
-            bookingDays: attendee.employee.bookingDays,
+            bookingDays: resolveBookingDays(attendee),
             hasPhoto: !!attendee.employee.photoPath,
             photoPath: attendee.employee.photoPath,
           }
@@ -727,7 +728,7 @@ export class AttendeesService {
           qr_svg: qrSvg,
           cpf: a.employee?.cpf || null,
           mobile: a.mobile || a.employee?.phone || '',
-          bookingDays: a.employee?.bookingDays || [],
+          bookingDays: resolveBookingDays(a),
         };
       }),
     );

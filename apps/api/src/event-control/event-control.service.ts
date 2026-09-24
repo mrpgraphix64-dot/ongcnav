@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@ongc/shared-types';
+import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 
 @Injectable()
 export class EventControlService {
@@ -82,6 +83,7 @@ export class EventControlService {
     const attendees = await this.prisma.attendee.findMany({
       select: {
         id: true,
+        bookingDays: true,
         employee: {
           select: {
             bookingDays: true,
@@ -92,9 +94,7 @@ export class EventControlService {
 
     const bookedForToday = attendees.filter((a) => {
       if (!a.employee) return true; // Standalone attendee is registered for event
-      const days = Array.isArray(a.employee.bookingDays)
-        ? (a.employee.bookingDays as string[])
-        : [];
+      const days = resolveBookingDays(a);
       return days.includes(activeDate);
     }).length;
 

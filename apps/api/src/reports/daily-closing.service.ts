@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckinStatus, IncidentStatus } from '@ongc/shared-types';
+import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 
 export function sanitizeCsvValue(value: any): string {
   if (value === null || value === undefined) return '';
@@ -42,8 +43,8 @@ export class DailyClosingService {
     });
 
     const bookedForDate = allAttendees.filter((a) => {
-      if (a.employee && Array.isArray(a.employee.bookingDays)) {
-        const days = a.employee.bookingDays as string[];
+      if (a.employee) {
+        const days = resolveBookingDays(a);
         return days.length === 0 || days.includes(selectedDate);
       }
       return true;

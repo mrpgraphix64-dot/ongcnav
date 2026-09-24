@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
 import { AttendeeStatus } from '@ongc/shared-types';
+import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 
@@ -27,7 +28,11 @@ export class RegistrationService {
     return `TK-${prefix}-${timeSuffix}${randomSuffix}`;
   }
 
-  async register(dto: RegisterEmployeeDto, photoPath?: string) {
+  async register(
+    dto: RegisterEmployeeDto,
+    photoPath?: string,
+    familyPhotoPaths?: (string | undefined)[],
+  ) {
     const cleanCpf = dto.cpf.trim().toUpperCase();
 
     // Check if employee already registered
@@ -63,17 +68,23 @@ export class RegistrationService {
           phone: dto.phone.trim(),
           email: dto.email.trim().toLowerCase(),
           photoPath: photoPath || null,
+          employeeCategory: dto.employeeCategory as any,
+          // Legacy/summary value — the employee's OWN dates only, kept for
+          // backward-compatible reads that haven't moved to
+          // resolveBookingDays() yet. Not used for check-in gating anymore.
           bookingDays: dto.bookingDays,
         },
       });
 
-      // Create attendee for employee
+      // Create attendee for employee, with their own bookingDays — this is
+      // the real, authoritative source check-in reads from.
       const employeeAttendee = await tx.attendee.create({
         data: {
           employeeId: employee.id,
           ticketNumber: employeeTicketNumber,
           qrCodeToken: employeeQrToken,
           status: AttendeeStatus.ACTIVE as any,
+          bookingDays: dto.bookingDays,
         },
       });
 
@@ -84,6 +95,7 @@ export class RegistrationService {
           const famDto = dto.familyMembers[i];
           const famToken = this.generateSecureQrToken();
           const famTicketNumber = this.generateTicketNumber(cleanCpf, i);
+          const famPhotoPath = familyPhotoPaths?.[i];
 
           const familyMember = await tx.familyMember.create({
             data: {
@@ -92,6 +104,7 @@ export class RegistrationService {
               relation: famDto.relation.trim(),
               age: famDto.age || null,
               gender: famDto.gender || null,
+              photoPath: famPhotoPath || null,
             },
           });
 
@@ -102,6 +115,9 @@ export class RegistrationService {
               ticketNumber: famTicketNumber,
               qrCodeToken: famToken,
               status: AttendeeStatus.ACTIVE as any,
+              // This family member's OWN dates — independent of the
+              // employee and every other family member.
+              bookingDays: Array.isArray(famDto.bookingDays) ? famDto.bookingDays : [],
             },
           });
 
@@ -184,6 +200,7 @@ export class RegistrationService {
     const attendeeName = isFamily
       ? attendee.familyMember?.name
       : (attendee.employee?.name || attendee.name || 'Attendee');
+    const hasPhoto = isFamily ? !!attendee.familyMember?.photoPath : !!attendee.employee?.photoPath;
 
     return {
       ticketNumber: attendee.ticketNumber,
@@ -193,6 +210,10 @@ export class RegistrationService {
       isFamily,
       relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Standalone Attendee'),
       attendeeName,
+      hasPhoto,
+      // This person's own dates, not the employee's — falls back to the
+      // employee's legacy value for attendees created before this change.
+      bookingDays: resolveBookingDays(attendee),
       employee: attendee.employee
         ? {
             id: attendee.employee.id.toString(),
@@ -200,7 +221,7 @@ export class RegistrationService {
             name: attendee.employee.name,
             designation: attendee.employee.designation,
             department: attendee.employee.department,
-            bookingDays: attendee.employee.bookingDays,
+            employeeCategory: attendee.employee.employeeCategory,
             hasPhoto: !!attendee.employee.photoPath,
           }
         : null,
@@ -244,8 +265,8 @@ export class RegistrationService {
         name: employee.name,
         designation: employee.designation,
         department: employee.department,
+        employeeCategory: employee.employeeCategory,
         phone: employee.phone.replace(/.(?=.{4})/g, '*'), // Mask phone for security
-        bookingDays: employee.bookingDays,
         hasPhoto: !!employee.photoPath,
       },
       passes: employee.attendees.map((att) => ({
@@ -256,6 +277,9 @@ export class RegistrationService {
         isFamily: !!att.familyMemberId,
         attendeeName: att.familyMember ? att.familyMember.name : employee.name,
         relation: att.familyMember ? att.familyMember.relation : 'Primary Employee',
+        // Each pass's own dates — independent per person.
+        bookingDays: resolveBookingDays({ bookingDays: att.bookingDays, employee }),
+        hasPhoto: att.familyMember ? !!att.familyMember.photoPath : !!employee.photoPath,
       })),
     };
   }

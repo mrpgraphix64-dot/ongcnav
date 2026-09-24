@@ -397,4 +397,100 @@ describe('CheckinService Concurrency & Security Tests', () => {
     expect(duplicateCount).toBe(99);
     expect(responses.length).toBe(100);
   });
+
+  describe('Per-person independent attendance dates', () => {
+    it('11. employee with their own multiple dates is accepted on any of those dates', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        ...mockAttendee,
+        bookingDays: ['2026-10-11', '2026-10-13', '2026-10-15'],
+        employee: { ...mockAttendee.employee, bookingDays: ['2026-09-23'] }, // legacy value deliberately different
+      });
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-13' });
+        return Promise.resolve(null);
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+    });
+
+    it('12. a family member with their own date is accepted on that date even though the employee is not booked for it', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        ...mockAttendee,
+        familyMemberId: BigInt(200),
+        familyMember: { id: BigInt(200), name: 'Sunita Sharma', relation: 'Spouse' },
+        bookingDays: ['2026-10-14'],
+        employee: { ...mockAttendee.employee, bookingDays: ['2026-10-11'] }, // employee's own dates differ
+      });
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-14' });
+        return Promise.resolve(null);
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+    });
+
+    it('13. two family members with different dates are evaluated independently — one passes, one is rejected for the same active date', async () => {
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-16' });
+        return Promise.resolve(null);
+      });
+
+      // Family member A: booked for the active date
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        ...mockAttendee,
+        familyMemberId: BigInt(201),
+        familyMember: { id: BigInt(201), name: 'Family A', relation: 'Spouse' },
+        bookingDays: ['2026-10-16'],
+      });
+      const resA = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+      expect(resA.success).toBe(true);
+      expect(resA.result).toBe(CheckinResult.SUCCESS);
+
+      // Family member B: NOT booked for the active date — must be
+      // independently rejected, unaffected by Family member A's dates.
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        ...mockAttendee,
+        familyMemberId: BigInt(202),
+        familyMember: { id: BigInt(202), name: 'Family B', relation: 'Child' },
+        bookingDays: ['2026-10-11'],
+      });
+      const resB = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+      expect(resB.success).toBe(false);
+      expect(resB.result).toBe(CheckinResult.NOT_BOOKED_TODAY);
+    });
+
+    it('14. falls back to the legacy employee.bookingDays when the attendee has no per-person dates set (pre-migration data)', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        ...mockAttendee,
+        bookingDays: null, // not yet backfilled/set
+        employee: { ...mockAttendee.employee, bookingDays: ['2026-09-23'] },
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+    });
+  });
 });

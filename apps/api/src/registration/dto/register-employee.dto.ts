@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsEmail,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -9,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { EmployeeCategory } from '@ongc/shared-types';
 
 export class FamilyMemberInputDto {
   @ApiProperty({ example: 'Sunita Sharma' })
@@ -29,6 +31,15 @@ export class FamilyMemberInputDto {
   @IsString()
   @IsOptional()
   gender?: string;
+
+  @ApiPropertyOptional({
+    example: ['2026-10-11', '2026-10-13'],
+    description: "This family member's own selected event dates (YYYY-MM-DD), independent of the employee and any other family member.",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  bookingDays?: string[];
 }
 
 export class RegisterEmployeeDto {
@@ -62,9 +73,14 @@ export class RegisterEmployeeDto {
   @IsNotEmpty()
   email: string;
 
+  @ApiProperty({ enum: EmployeeCategory, example: EmployeeCategory.REGULAR })
+  @IsEnum(EmployeeCategory)
+  @IsNotEmpty()
+  employeeCategory: EmployeeCategory;
+
   @ApiProperty({
-    example: ['2026-09-23', '2026-09-24', '2026-09-25'],
-    description: 'Selected event dates (YYYY-MM-DD)',
+    example: ['2026-10-11', '2026-10-12'],
+    description: "The employee's own selected event dates (YYYY-MM-DD). Family members carry their own bookingDays independently — see FamilyMemberInputDto.",
   })
   @IsArray()
   @IsString({ each: true })

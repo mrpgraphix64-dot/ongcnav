@@ -49,6 +49,12 @@ export enum AttendeeStatus {
   REVOKED = 'REVOKED',
 }
 
+export enum EmployeeCategory {
+  REGULAR = 'REGULAR',
+  RETIRED = 'RETIRED',
+  CONTRACT = 'CONTRACT',
+}
+
 export enum CheckinStatus {
   ACTIVE = 'ACTIVE',
   SUCCESS = 'SUCCESS',

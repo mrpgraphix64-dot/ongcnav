@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import { ProcessCheckinDto, ScannerHeartbeatDto } from './dto/checkin.dto';
 import {
   CheckinResult,
@@ -230,11 +231,12 @@ export class CheckinService {
       };
     }
 
-    // 8. Event Date Booking Check (for Employee-linked passes)
+    // 8. Event Date Booking Check — this person's OWN dates, independent of
+    // the employee they're linked to and any other family member. Falls
+    // back to the employee's legacy shared bookingDays for attendees
+    // created before per-person dates existed.
     if (attendee.employee) {
-      const bookingDays = Array.isArray(attendee.employee.bookingDays)
-        ? (attendee.employee.bookingDays as string[])
-        : [];
+      const bookingDays = resolveBookingDays(attendee);
       if (!bookingDays.includes(activeDate)) {
         await this.recordScanLog({
           attendeeId: attendee.id,
