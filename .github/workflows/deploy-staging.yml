@@ -1,11 +1,19 @@
 name: Deploy Staging
 
 # STAGING ONLY. This workflow never touches the production directory,
-# production PM2 processes, or the production Nginx site. It deploys the
-# NestJS API (apps/api) to a separate staging directory on the VPS.
-# The Next.js web app is built (build-and-verify job, and again on the VPS
-# for completeness) but is NOT served from the VPS — it stays on Hostinger
-# Web App (see docs/STAGING_DEPLOYMENT.md).
+# production PM2 processes, or the production Nginx site. It deploys both
+# the NestJS API (apps/api) AND the Next.js web app (apps/web) to a
+# separate staging directory on the VPS (see docs/STAGING_DEPLOYMENT.md).
+#
+# The API is deployed in place (rebuilt directly in the staging directory,
+# same as always). The web app is deployed as an independent, atomic
+# release: deploy/staging-deploy.sh builds a brand-new copy under
+# releases-web/<release-id>/, verifies it (including a local smoke test)
+# BEFORE switching any traffic to it, then atomically repoints the
+# current-web symlink and reloads PM2 — it never rebuilds in place
+# underneath the process serving live traffic. RELEASE_ID (this workflow's
+# commit SHA) is passed to that script below so each release is named
+# after the exact commit it was built from.
 #
 # Deployment mechanism: the runner checks out the exact commit being
 # deployed and rsyncs it over SSH straight into the VPS staging directory
@@ -166,7 +174,7 @@ jobs:
           script_stop: true
           script: |
             cd /var/www/ongcnavratri-staging
-            bash deploy/staging-deploy.sh
+            RELEASE_ID="${{ github.sha }}" bash deploy/staging-deploy.sh
 
       - name: Roll back to previous release on failure
         if: failure()

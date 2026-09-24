@@ -1,13 +1,18 @@
 # Staging Deployment Guide
 
-Automated staging deployment for the NestJS API (`apps/api`) to a Hostinger
-Ubuntu 24.04 VPS, driven by GitHub Actions. This is **separate from and
-does not touch** the existing production deployment documented in
+Automated staging deployment for both the NestJS API (`apps/api`) and the
+Next.js web app (`apps/web`) to a Hostinger Ubuntu 24.04 VPS, driven by
+GitHub Actions. This is **separate from and does not touch** the existing
+production deployment documented in
 [`PRODUCTION_DEPLOYMENT.md`](./PRODUCTION_DEPLOYMENT.md).
 
-The Next.js web app (`apps/web`) stays on Hostinger Web App and is **not**
-deployed by this pipeline. If a decision is later made to host it on the
-VPS too, this doc will need a PM2 + Nginx entry for it, mirroring the API's.
+The API is deployed **in place** (rebuilt directly inside the staging
+directory, same as it always has been). The web app is deployed as an
+**independent, atomic release** — see
+[Web release / atomic deployment](#7a-web-release--atomic-deployment) below
+for why and how. Both run from the same VPS staging directory but are
+otherwise fully decoupled: a web deploy never touches the API's PM2
+process, and vice versa.
 
 ## 1. What this pipeline does
 
@@ -15,12 +20,17 @@ On every push to `main` (or manual trigger):
 
 1. **`build-and-verify` job** (GitHub-hosted runner): `npm ci`, build
    shared-types, build API, build web, run API tests. If any step fails,
-   nothing is deployed.
+   nothing is deployed. (This build is only a fail-fast check — it is not
+   what ends up running on the VPS; the VPS builds its own copies of both
+   apps, per the steps below.)
 2. **`deploy` job** (GitHub-hosted runner + SSH/rsync to the VPS):
    - checks out the exact commit that triggered the workflow,
    - backs up the current live release on the VPS (a full local copy on
      the VPS, including its already-built `node_modules`/`dist`, so a
-     rollback doesn't need to rebuild — no-op on the very first deploy),
+     rollback doesn't need to rebuild — no-op on the very first deploy;
+     this backup covers the API's in-place release only, see
+     [Web release / atomic deployment](#7a-web-release--atomic-deployment)
+     for how the web app's own history is kept separately),
    - `rsync`s that commit's source straight into the staging directory,
      excluding `node_modules`, `dist`, `.next`, `.env*`, `.git`, `.github`,
      `coverage`, and logs — nothing built or secret ever crosses the wire.
@@ -28,19 +38,22 @@ On every push to `main` (or manual trigger):
      never removes) until the pipeline has a track record against the
      real VPS — see the comment above the rsync step in the workflow,
    - SSHes in and runs
-     [`deploy/staging-deploy.sh`](../deploy/staging-deploy.sh), which:
-     - `npm ci`,
-     - builds shared-types,
-     - `prisma generate`,
-     - `prisma migrate deploy` (never `db push`, never `reset`),
-     - builds the API,
-     - builds the web app (verification only — still not served from the VPS),
-     - `pm2 startOrReload ecosystem.staging.config.js`,
-     - polls `GET /health` until it reports healthy, exiting non-zero if it
-       never does,
+     [`deploy/staging-deploy.sh`](../deploy/staging-deploy.sh) with
+     `RELEASE_ID` set to the deployed commit SHA, which:
+     - **API (in place):** `npm ci`, builds shared-types, `prisma
+       generate`, `prisma migrate deploy` (never `db push`, never
+       `reset`), builds the API, `pm2 startOrReload
+       ecosystem.staging.config.js`, polls `GET /health` until it reports
+       healthy, exiting non-zero if it never does;
+     - **Web (atomic release):** builds a brand-new, independent copy of
+       the web app under `releases-web/<RELEASE_ID>/`, verifies it
+       (including a local smoke test on a scratch port) *before* any
+       traffic is switched to it, atomically repoints the `current-web`
+       symlink, reloads `ongc-web-staging`, then health-checks the real
+       public port. See section 7a for the full sequence.
    - if the deploy step fails, runs
      [`deploy/staging-rollback.sh`](../deploy/staging-rollback.sh), which
-     restores the pre-deploy backup and reloads PM2 (see
+     rolls back the API and the web app **independently** (see
      [Rollback](#7-rollback) below).
 
 The workflow — not the VPS — is what decides which commit gets deployed.
@@ -223,6 +236,15 @@ exists — `nginx -t` will fail on a missing cert path.
 This is entirely separate from the production `nginx.conf` /
 `ongc-laravel.conf` sites already on the box — do not edit those.
 
+The web app has its own, separate Nginx site —
+[`nginx/staging-web.conf`](../nginx/staging-web.conf) — applied the same
+way (its own file has the exact `cp`/`ln -s`/`nginx -t`/`certbot` steps in
+a comment at its top). It is **not** applied or reloaded by the automated
+pipeline (the deploy user has no `sudo`), so any change to that file must
+be re-applied on the VPS by hand. `releases-web/` and `current-web` need
+no manual setup — `deploy/staging-deploy.sh` creates them automatically on
+the first web deploy.
+
 ### 2.8 SSH key for GitHub Actions
 
 Generate a dedicated deploy key (don't reuse a personal key):
@@ -363,7 +385,14 @@ build or touch PM2 — see [Health check](#5-health-check) and the deploy
 script itself for the exact preflight. If this ever needs doing manually
 on the VPS, that same command is safe to re-run standalone.
 
-## 7. Rollback
+## 7. Rollback (API)
+
+`deploy/staging-rollback.sh` now rolls back the API and the web app
+**independently, and only the half that actually failed** — this section
+covers the API half, which is unchanged in its own logic from before the
+web atomic-release work. See
+[7a. Web release / atomic deployment](#7a-web-release--atomic-deployment)
+for the web half.
 
 Before every `rsync`, the workflow makes a full local copy of the current
 live release into `/var/www/ongcnavratri-staging/.backup` — **inside**
@@ -373,39 +402,132 @@ and this pipeline never uses `sudo` (including its already-built
 `node_modules`/`dist` — no-op on the first deployment, since there's
 nothing yet to back up). The main "Sync repository to VPS" `rsync` step
 explicitly excludes `.backup` (and `.backup.new`, its short-lived staging
-name while being built) so the application sync never touches it.
+name while being built) so the application sync never touches it. This
+backup covers everything in the staging directory *except* the web app's
+own `releases-web/`, `current-web`, and `.previous-web-release` — those
+belong to the web atomic-release mechanism and must never be touched by
+an API-only backup/restore.
 
 If `deploy/staging-deploy.sh` fails for any reason — a build error, a
-failed migration, or the health check never passing — the workflow's
-"Roll back to previous release on failure" step runs
-[`deploy/staging-rollback.sh`](../deploy/staging-rollback.sh) on the VPS.
-Because the backup is nested inside the staging directory, rollback can't
-just delete the staging directory and swap the backup in (that would
-delete the backup too); instead it removes everything in the staging
-directory *except* `.backup`, moves `.backup`'s contents back up to the
-top level, and reloads PM2. Because the backup already has its
-dependencies installed and its build output in place, rollback doesn't
-need to reinstall or rebuild anything, which keeps it reliable even if
-the failure was caused by a broken dependency install.
+failed migration, or a health check never passing — it records which half
+it was in (`api` or `web`) into `.deploy-failure-phase` immediately before
+exiting non-zero. The workflow's "Roll back to previous release on
+failure" step then runs
+[`deploy/staging-rollback.sh`](../deploy/staging-rollback.sh) on the VPS,
+which reads that marker and calls **only** the matching rollback — an API
+failure never touches `current-web`/`ongc-web-staging`, and a web failure
+never touches the API's release or `ongc-api-staging`. If the marker is
+missing or unrecognized, the script does not guess: it rolls back neither
+side and reports that manual investigation is needed, since acting on the
+wrong side would discard a working release for no reason. Because the
+backup is nested inside the staging directory, the API restore can't just
+delete the staging directory and swap the backup in (that would delete
+the backup too); instead it removes everything in the staging directory
+*except* `.backup` and the web release state, moves `.backup`'s contents
+back up to the top level, and reloads the API's PM2 process. Because the
+backup already has its dependencies installed and its build output in
+place, rollback doesn't need to reinstall or rebuild anything, which keeps
+it reliable even if the failure was caused by a broken dependency install.
 
-**Limitation:** rollback restores **code, `node_modules`, and the PM2
-process** only — it does not revert Prisma migrations. If a failed deploy
-already applied a new migration before a later step failed, the database
-schema stays on the new migration even though the code rolls back. Check
-`deploy.log` in the staging directory after any rollback to see exactly
-which step failed and whether a migration ran before assuming the
-database matches the rolled-back code.
+**Limitation:** the API rollback restores **code, `node_modules`, and the
+PM2 process** only — it does not revert Prisma migrations. If a failed
+deploy already applied a new migration before a later step failed, the
+database schema stays on the new migration even though the code rolls
+back. Check `deploy.log` in the staging directory after any rollback to
+see exactly which step failed and whether a migration ran before assuming
+the database matches the rolled-back code.
 
-Manual rollback (if needed outside the automated path):
+Manual API-only rollback (if needed outside the automated path):
 
 ```bash
 cd /var/www/ongcnavratri-staging
 [ -d .backup ] || echo "No backup available — nothing to restore"
-find . -mindepth 1 -maxdepth 1 ! -name '.backup' -exec rm -rf {} +
+find . -mindepth 1 -maxdepth 1 ! -name '.backup' ! -name 'releases-web' ! -name 'current-web' ! -name '.previous-web-release' -exec rm -rf {} +
 find .backup -mindepth 1 -maxdepth 1 -exec mv {} . \;
 rmdir .backup 2>/dev/null || rm -rf .backup
 pm2 startOrReload ecosystem.staging.config.js --update-env
 ```
+
+## 7a. Web release / atomic deployment
+
+**Why:** the web app used to be rebuilt *in place* — `rm -rf apps/web/.next
+&& npm run build` directly inside the same directory the live PM2 process
+(`ongc-web-staging`) was actively serving `_next/static/*` requests from.
+Combined with a Next.js build cache (`.next/cache`) that was never cleared
+between builds (since `.next` is deliberately excluded from every
+`rsync`), this repeatedly produced a build whose HTML referenced a
+`_next/static` chunk hash that either wasn't correctly (re-)emitted or
+wasn't copied into the standalone output before the process kept serving
+from it — the recurring "chunk 400/404" bug. Atomic releases eliminate
+the in-place rebuild entirely.
+
+**Structure**, under the staging directory:
+
+```
+releases-web/
+  <release-id>/            # one full, independent copy per deploy
+    apps/web/.next/standalone/apps/web/   # server.js, .next/static, public
+current-web -> releases-web/<active-release>   # symlink, swapped atomically
+.previous-web-release        # plain text file: the release current-web
+                              # pointed to before the most recent switch
+```
+
+`<release-id>` is the deployed Git SHA (passed in by the GitHub Actions
+workflow as `RELEASE_ID`), falling back to a UTC timestamp if run without
+one (e.g. manually).
+
+`ecosystem.staging-web.config.js`'s `cwd` resolves via `path.join(__dirname,
+'current-web', ...)` — `__dirname` is always the staging directory itself
+(where this file lives), so it always resolves to
+`<DEPLOY_DIR>/current-web/apps/web/.next/standalone/apps/web` regardless of
+what directory `pm2` happens to be invoked from.
+
+**Deploy sequence** (all inside `deploy/staging-deploy.sh`, after the API
+half has already deployed and passed its own health check):
+
+1. Copy the current source (already rsynced into the staging directory by
+   the workflow) into a fresh `releases-web/<RELEASE_ID>/` — a full
+   npm-workspace root, not just `apps/web/`, since the build depends on
+   the hoisted root `node_modules` and the sibling
+   `packages/shared-types` workspace.
+2. `npm ci` and `npm run build:types`, run *inside that new release
+   directory only*.
+3. `NEXT_PUBLIC_API_URL=... npm run build --workspace=apps/web` — the
+   existing, unmodified `apps/web/package.json` build script, which
+   already runs `next build && node ./scripts/copy-standalone-assets.js`.
+4. Verify `server.js`, a non-empty `.next/static`, and `public/` all exist
+   in the new release's standalone output.
+5. **Smoke test the new release before any traffic switch**: start it on
+   a scratch port (3098), confirm the homepage responds, extract every
+   `_next/static/css/*.css` chunk it references, and confirm each one
+   individually returns HTTP 200 from that same instance — the exact
+   check that would have caught the historical bug. The scratch-port
+   process is always killed afterward.
+6. Only after the smoke test passes: record the current `current-web`
+   target to `.previous-web-release` (for rollback), then atomically
+   repoint `current-web` (`ln -sfn` into a temp name + `mv -T`, i.e.
+   `rename(2)` — never a window where the symlink is half-updated).
+7. Only *after* the symlink switch: `pm2 startOrReload
+   ecosystem.staging-web.config.js --update-env`.
+8. Health-check the real public port (`127.0.0.1:3012`) with the same
+   retry pattern the API uses. The deployment is only reported successful
+   once this passes.
+9. Retention: delete `releases-web/` directories older than the latest 3,
+   always keeping whatever `current-web` currently points to regardless of
+   its age (e.g. after a rollback repoints it to an older release).
+
+**Rollback (web):** never rebuilds. Reads `.previous-web-release` (or,
+if that's missing, picks the second-most-recent `releases-web/` directory
+by modification time) and atomically repoints `current-web` back to it,
+reloads `ongc-web-staging`, and health-checks port 3012.
+
+**Note on `nginx/staging-web.conf`:** this file is applied to the VPS
+manually (`sudo cp` + `nginx -t` + reload — see the comment block at the
+top of that file), it is not copied or reloaded by the automated
+pipeline, since the deploy user does not have `sudo`. After any change to
+this file (such as the `Cache-Control: no-cache` addition for HTML
+responses added alongside this atomic-release work), it must be
+re-applied on the VPS by hand.
 
 ## 8. Manual VPS checklist (summary)
 
@@ -415,7 +537,7 @@ pm2 startOrReload ecosystem.staging.config.js --update-env
 - [ ] Redis running (section 2.4)
 - [ ] `apps/api/.env` created with real staging secrets (section 2.5)
 - [ ] Initial build + `pm2 start` + `pm2 save` + `pm2 startup` done (section 2.6)
-- [ ] Nginx site configured with real hostname + certbot HTTPS (section 2.7)
+- [ ] Nginx site configured with real hostname + certbot HTTPS, for both the API (`nginx/staging-api.conf`) and the web app (`nginx/staging-web.conf`) (section 2.7)
 - [ ] Dedicated SSH deploy key generated and authorized (section 2.8)
 
 ## 9. GitHub Secrets checklist (summary)
