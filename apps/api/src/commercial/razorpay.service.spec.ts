@@ -128,7 +128,7 @@ describe('RazorpayService', () => {
       const prodService = prodModule.get<RazorpayService>(RazorpayService);
       expect(prodService.isMockPaymentAllowed()).toBe(false);
       await expect(
-        prodService.createRazorpayOrder(50000, 'ORD-PROD-TEST'),
+        prodService.createRazorpayOrder(24900, 'ORD-PROD-TEST'),
       ).rejects.toThrow('Razorpay credentials are not configured on the production server.');
       expect(
         prodService.verifyPaymentSignature('order_mock_123', 'pay_123', 'valid_mock_signature'),

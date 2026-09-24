@@ -88,7 +88,7 @@ describe('CommercialService', () => {
       quantity: 2,
     };
 
-    it('calculates price strictly on server (2 nights * ₹500 = ₹1,000 * 2 qty = ₹2,000) and creates order in PENDING status', async () => {
+    it('calculates price strictly on server (2 nights * ₹249 = ₹498 * 2 qty = ₹996 / 99,600 paise) and creates order in PENDING status', async () => {
       prisma.commercialOrder.create.mockImplementation(({ data }: any) =>
         Promise.resolve({ id: BigInt(1), ...data }),
       );
@@ -96,16 +96,17 @@ describe('CommercialService', () => {
       const res = await service.createOrder(validDto);
 
       expect(res.success).toBe(true);
-      expect(res.order.amountInr).toBe(2000);
-      expect(res.order.amountPaise).toBe(200000);
+      expect(res.order.amountInr).toBe(996);
+      expect(res.order.amountPaise).toBe(99600);
       expect(res.order.quantity).toBe(2);
 
-      // Verify DB persistence
+      // Verify DB persistence with server-computed paise
       expect(prisma.commercialOrder.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             registrationType: RegistrationType.COMMERCIAL,
-            amountPaise: 200000,
+            unitPricePaise: 49800,
+            amountPaise: 99600,
             orderStatus: OrderStatus.PENDING,
             paymentStatus: PaymentStatus.CREATED,
             quantity: 2,
@@ -115,6 +116,54 @@ describe('CommercialService', () => {
 
       // Verify that NO passes/QRs are generated before payment
       expect(prisma.attendee.create).not.toHaveBeenCalled();
+    });
+
+    it('calculates Season pass at ₹1,750 (175,000 paise) strictly on server', async () => {
+      prisma.commercialOrder.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: BigInt(2), ...data }),
+      );
+
+      const res = await service.createOrder({
+        ...validDto,
+        ticketType: 'COMMERCIAL_SEASON',
+        quantity: 1,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.order.amountInr).toBe(1750);
+      expect(res.order.amountPaise).toBe(175000);
+      expect(res.order.quantity).toBe(1);
+    });
+
+    it('ignores any client-supplied amount or price tampering and enforces server calculation', async () => {
+      prisma.commercialOrder.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: BigInt(3), ...data }),
+      );
+
+      // Malicious client attempts to inject custom pricing
+      const maliciousDto: any = {
+        ...validDto,
+        amount: 1,
+        amountPaise: 100,
+        unitPricePaise: 50,
+        discount: 9999,
+        quantity: 1,
+        selectedDates: ['2026-10-11'],
+      };
+
+      const res = await service.createOrder(maliciousDto);
+
+      // Must strictly be 1 night * ₹249 = ₹249 (24,900 paise)
+      expect(res.order.amountInr).toBe(249);
+      expect(res.order.amountPaise).toBe(24900);
+      expect(prisma.commercialOrder.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            amountPaise: 24900,
+            unitPricePaise: 24900,
+          }),
+        }),
+      );
     });
 
     it('rejects order creation when registration is closed in settings', async () => {
@@ -522,7 +571,7 @@ describe('CommercialService', () => {
       ticketType: 'COMMERCIAL_DAILY',
       selectedDates: ['2026-10-11'],
       quantity: 1,
-      amountPaise: 50000,
+      amountPaise: 24900,
       currency: 'INR',
       razorpayOrderId: 'order_123',
       createdAt: new Date(),

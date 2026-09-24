@@ -59,8 +59,14 @@ export class CommercialService {
         code: t.code,
         name: t.name,
         description: t.description,
+        originalPriceInr: t.originalPricePaise / 100,
+        originalPricePaise: t.originalPricePaise,
         priceInr: t.unitPricePaise / 100,
         unitPricePaise: t.unitPricePaise,
+        discountPercent: t.discountPercent,
+        discountLabel: t.discountLabel,
+        offerLabel: t.offerLabel,
+        subtitle: t.subtitle,
         isSeasonPass: t.isSeasonPass,
       })),
       currency: 'INR',
@@ -108,7 +114,13 @@ export class CommercialService {
     try {
       // 3. Server-side authoritative price calculation — NEVER trust client-submitted amount
       const ticketTypeCode = dto.ticketType || 'COMMERCIAL_DAILY';
-      let pricing: { unitPricePaise: number; totalAmountPaise: number; validDates: string[] };
+      let pricing: {
+        unitPricePaise: number;
+        originalPricePaise: number;
+        totalAmountPaise: number;
+        totalOriginalAmountPaise: number;
+        validDates: string[];
+      };
       try {
         pricing = calculateServerPricePaise(ticketTypeCode, dto.selectedDates, dto.quantity);
       } catch (err: any) {
@@ -147,6 +159,12 @@ export class CommercialService {
           orderStatus: OrderStatus.PENDING,
           paymentStatus: PaymentStatus.CREATED,
           razorpayOrderId: rzpOrder.id,
+          metadata: {
+            originalUnitPricePaise: pricing.originalPricePaise,
+            totalOriginalAmountPaise: pricing.totalOriginalAmountPaise,
+            discountPercent: 50,
+            offer: 'EARLY_BIRD',
+          },
         },
       });
 

@@ -79,14 +79,21 @@ export default function RegisterPage() {
   const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
   const [confirmedPasses, setConfirmedPasses] = useState<GeneratedPass[]>([]);
 
+  // Server-synced pricing config
+  const [serverPricing, setServerPricing] = useState<Record<string, any> | null>(null);
+
   // Load server-side commercial pricing & dates on mount
   useEffect(() => {
     async function loadConfig() {
       try {
         setLoadingConfig(true);
         const res = await fetchApi('/commercial/config');
-        if (res?.data?.dates) {
-          // Keep dates synchronized with server
+        if (res?.ticketTypes) {
+          const map: Record<string, any> = {};
+          res.ticketTypes.forEach((t: any) => {
+            map[t.code] = t;
+          });
+          setServerPricing(map);
         }
       } catch {
         // Fallback to constants
@@ -111,9 +118,20 @@ export default function RegisterPage() {
     setSelectedDates([...EVENT_DATES]);
   };
 
+  // Server-authoritative fallback constants (Daily: ₹249 vs ₹499; Season: ₹1,750 vs ₹3,500)
+  const dailyPrice = serverPricing?.COMMERCIAL_DAILY?.priceInr ?? 249;
+  const dailyOriginalPrice = serverPricing?.COMMERCIAL_DAILY?.originalPriceInr ?? 499;
+  const seasonPrice = serverPricing?.COMMERCIAL_SEASON?.priceInr ?? 1750;
+  const seasonOriginalPrice = serverPricing?.COMMERCIAL_SEASON?.originalPriceInr ?? 3500;
+
   // Live estimated pricing (strictly re-verified and enforced server-side)
-  const estimatedUnitPrice = ticketType === 'COMMERCIAL_SEASON' ? 3500 : 500 * selectedDates.length;
+  const estimatedUnitPrice =
+    ticketType === 'COMMERCIAL_SEASON' ? seasonPrice : dailyPrice * selectedDates.length;
+  const estimatedOriginalUnitPrice =
+    ticketType === 'COMMERCIAL_SEASON' ? seasonOriginalPrice : dailyOriginalPrice * selectedDates.length;
   const estimatedTotal = estimatedUnitPrice * quantity;
+  const estimatedOriginalTotal = estimatedOriginalUnitPrice * quantity;
+  const estimatedSavings = estimatedOriginalTotal - estimatedTotal;
 
   // Step 1: Initiate order & launch Razorpay Checkout
   const handleInitiatePayment = async (e: React.FormEvent) => {
@@ -157,7 +175,7 @@ export default function RegisterPage() {
         }),
       });
 
-      const orderData = res.data?.order;
+      const orderData = res.order;
       if (!orderData || !orderData.orderNumber) {
         throw new Error('Could not initiate order. Please try again.');
       }
@@ -252,9 +270,9 @@ export default function RegisterPage() {
         body: JSON.stringify(verificationPayload),
       });
 
-      if (res?.data?.passes && res.data.passes.length > 0) {
-        setConfirmedOrderNumber(res.data.orderNumber);
-        setConfirmedPasses(res.data.passes);
+      if (res?.passes && res.passes.length > 0) {
+        setConfirmedOrderNumber(res.orderNumber);
+        setConfirmedPasses(res.passes);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         throw new Error('Payment confirmation succeeded but passes could not be loaded.');
@@ -452,44 +470,102 @@ export default function RegisterPage() {
                     <button
                       type="button"
                       onClick={() => setTicketType('COMMERCIAL_DAILY')}
-                      className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                      className={`relative p-5 sm:p-6 rounded-3xl border-2 text-left transition-all duration-200 overflow-hidden ${
                         ticketType === 'COMMERCIAL_DAILY'
-                          ? 'border-maroon bg-maroon-soft text-maroon shadow-md scale-[1.01]'
-                          : 'border-stone-200 bg-cream-light hover:border-maroon/40 text-ink'
+                          ? 'border-[#7A1930] bg-gradient-to-b from-[#FAF7F2] via-amber-50/40 to-[#FAF7F2] shadow-xl ring-2 ring-[#7A1930]/15'
+                          : 'border-stone-200/90 bg-white hover:border-[#7A1930]/40 hover:shadow-md'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-outfit font-extrabold text-sm">
-                          Single Night Pass
+                      <div className="absolute -top-10 -right-10 w-24 h-24 rounded-full bg-gradient-to-br from-[#D4AF37]/20 via-[#E65100]/10 to-transparent pointer-events-none blur-sm" />
+
+                      <div className="flex items-center justify-between gap-2 mb-3.5 relative z-10">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500/15 via-[#D4AF37]/20 to-amber-500/15 text-[#7A1930] border border-[#D4AF37]/50 shadow-xs">
+                          <Sparkles className="w-3 h-3 text-[#E65100]" />
+                          <span>EARLY BIRD OFFER</span>
+                        </div>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-[#7A1930] text-[#FAF7F2] shadow-xs">
+                          50% OFF
                         </span>
-                        <span className="font-bold text-xs text-maroon">₹500 / night</span>
                       </div>
-                      <p className="text-[11px] text-ink-soft leading-snug">
-                        Customizable pass valid for your chosen night(s).
-                      </p>
+
+                      <div className="mb-2 relative z-10">
+                        <h4 className="font-outfit font-black text-base sm:text-lg text-ink tracking-tight">
+                          DAILY ENTRY PASS
+                        </h4>
+                        <p className="text-[11px] font-medium text-ink-soft">
+                          Customizable pass valid for your chosen night(s)
+                        </p>
+                      </div>
+
+                      <div className="pt-2.5 pb-1 border-t border-stone-200/70 flex items-baseline gap-2.5 flex-wrap relative z-10">
+                        <span className="text-xs sm:text-sm text-stone-400 font-bold line-through decoration-rose-600 decoration-2">
+                          ₹{dailyOriginalPrice}
+                        </span>
+                        <span className="font-outfit font-black text-2xl sm:text-3xl text-[#7A1930] tracking-tight">
+                          ₹{dailyPrice}
+                        </span>
+                        <span className="text-xs font-semibold text-ink-soft">
+                          / person
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#E65100] mt-1 relative z-10">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#E65100] animate-pulse" />
+                        <span>Early Bird Price &bull; Limited Time</span>
+                      </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setTicketType('COMMERCIAL_SEASON')}
-                      className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                      className={`relative p-5 sm:p-6 rounded-3xl border-2 text-left transition-all duration-200 overflow-hidden ${
                         ticketType === 'COMMERCIAL_SEASON'
-                          ? 'border-maroon bg-maroon-soft text-maroon shadow-md scale-[1.01]'
-                          : 'border-stone-200 bg-cream-light hover:border-maroon/40 text-ink'
+                          ? 'border-[#7A1930] bg-gradient-to-b from-[#FAF7F2] via-amber-50/40 to-[#FAF7F2] shadow-xl ring-2 ring-[#7A1930]/15'
+                          : 'border-stone-200/90 bg-white hover:border-[#7A1930]/40 hover:shadow-md'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-outfit font-extrabold text-sm flex items-center gap-1.5">
-                          <span>Season Pass</span>
-                          <span className="text-[10px] font-bold text-gold-deep bg-gold/25 px-2 py-0.2 rounded-full">
+                      <div className="absolute -top-10 -right-10 w-24 h-24 rounded-full bg-gradient-to-br from-[#D4AF37]/25 via-[#E65100]/15 to-transparent pointer-events-none blur-sm" />
+
+                      <div className="flex items-center justify-between gap-2 mb-3.5 relative z-10">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500/15 via-[#D4AF37]/20 to-amber-500/15 text-[#7A1930] border border-[#D4AF37]/50 shadow-xs">
+                          <Sparkles className="w-3 h-3 text-[#E65100]" />
+                          <span>EARLY BIRD OFFER</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-[#7A1930] text-[#FAF7F2] shadow-xs">
+                            50% OFF
+                          </span>
+                          <span className="text-[10px] font-bold text-[#7A1930] bg-[#D4AF37]/35 border border-[#D4AF37]/60 px-2 py-0.5 rounded-full">
                             Best Value
                           </span>
-                        </span>
-                        <span className="font-bold text-xs text-maroon">₹3,500</span>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-ink-soft leading-snug">
-                        All 9 Nights of authentic Garba (saves ₹1,000).
-                      </p>
+
+                      <div className="mb-2 relative z-10">
+                        <h4 className="font-outfit font-black text-base sm:text-lg text-ink tracking-tight">
+                          SEASON PASS
+                        </h4>
+                        <p className="text-[11px] font-medium text-ink-soft">
+                          All 9 Nights of authentic Garba &bull; Full festival pass
+                        </p>
+                      </div>
+
+                      <div className="pt-2.5 pb-1 border-t border-stone-200/70 flex items-baseline gap-2.5 flex-wrap relative z-10">
+                        <span className="text-xs sm:text-sm text-stone-400 font-bold line-through decoration-rose-600 decoration-2">
+                          ₹{seasonOriginalPrice.toLocaleString('en-IN')}
+                        </span>
+                        <span className="font-outfit font-black text-2xl sm:text-3xl text-[#7A1930] tracking-tight">
+                          ₹{seasonPrice.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-xs font-semibold text-ink-soft">
+                          / person
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#E65100] mt-1 relative z-10">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#E65100] animate-pulse" />
+                        <span>Early Bird Price &bull; Limited Time</span>
+                      </div>
                     </button>
                   </div>
                 </div>
@@ -556,10 +632,17 @@ export default function RegisterPage() {
                         );
                       })}
                     </div>
-                    <p className="text-[11px] text-ink-soft">
-                      Selected: {selectedDates.length} of {EVENT_DATES.length} nights &bull; ₹
-                      {500 * selectedDates.length} per pass
-                    </p>
+                    <div className="p-2.5 rounded-xl bg-amber-50/60 border border-[#D4AF37]/30 flex items-center justify-between text-[11px] text-ink-soft flex-wrap gap-2">
+                      <span>
+                        Selected: <strong className="text-ink">{selectedDates.length}</strong> of {EVENT_DATES.length} nights
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-stone-400 line-through">₹{dailyOriginalPrice * selectedDates.length}</span>
+                        <strong className="text-[#7A1930] font-black text-xs">₹{dailyPrice * selectedDates.length}</strong>
+                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/80 px-1.5 py-0.2 rounded">50% OFF</span>
+                        <span>per pass</span>
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -644,11 +727,11 @@ export default function RegisterPage() {
                 </div>
 
                 {/* 5. ORDER SUMMARY & TOTAL */}
-                <div className="p-4 sm:p-5 rounded-2xl bg-cream-light border border-gold/30 space-y-2.5 text-xs">
+                <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-br from-[#FAF7F2] to-amber-50/40 border border-[#D4AF37]/40 space-y-3 text-xs shadow-sm">
                   <div className="flex items-center justify-between text-ink-soft">
                     <span>Pass Type:</span>
                     <span className="font-bold text-ink">
-                      {ticketType === 'COMMERCIAL_SEASON' ? 'All 9 Nights Season Pass' : 'Single Night Entry Pass'}
+                      {ticketType === 'COMMERCIAL_SEASON' ? 'All 9 Nights Season Pass' : 'Daily Entry Pass'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-ink-soft">
@@ -661,13 +744,29 @@ export default function RegisterPage() {
                     <span>Quantity:</span>
                     <span className="font-bold text-ink">{quantity} Pass(es)</span>
                   </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-stone-200/80 text-sm">
-                    <span className="font-outfit font-extrabold text-ink">Payable Amount:</span>
-                    <span className="font-outfit font-black text-xl text-maroon">
+                  <div className="flex items-center justify-between text-ink-soft">
+                    <span>Original Price:</span>
+                    <span className="font-semibold text-stone-400 line-through decoration-rose-600 decoration-1.5">
+                      ₹{estimatedOriginalTotal.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#E65100] font-bold">
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      Early Bird Discount (50% OFF):
+                    </span>
+                    <span>-₹{estimatedSavings.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-3 border-t border-stone-200/80 text-sm">
+                    <div>
+                      <span className="font-outfit font-extrabold text-ink text-base">Payable Amount:</span>
+                      <p className="text-[10px] font-bold text-emerald-700">You save ₹{estimatedSavings.toLocaleString('en-IN')}</p>
+                    </div>
+                    <span className="font-outfit font-black text-2xl sm:text-3xl text-[#7A1930] tracking-tight">
                       ₹{estimatedTotal.toLocaleString('en-IN')}
                     </span>
                   </div>
-                  <p className="text-[10px] text-ink-soft italic">
+                  <p className="text-[10px] text-ink-soft italic pt-1">
                     *Final amount is strictly computed and verified on the server.
                   </p>
                 </div>
@@ -677,7 +776,7 @@ export default function RegisterPage() {
                   <button
                     type="submit"
                     disabled={submitting || verifying}
-                    className="w-full py-4 rounded-xl bg-gold text-maroon-deep font-extrabold text-base hover:bg-gold-light transition-all shadow-md flex items-center justify-center gap-2.5 border border-maroon/20 disabled:opacity-50"
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-105 text-[#7A1930] font-outfit font-black text-base sm:text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2.5 border border-[#7A1930]/20 disabled:opacity-50 cursor-pointer"
                   >
                     {submitting ? (
                       <>
@@ -686,14 +785,14 @@ export default function RegisterPage() {
                       </>
                     ) : (
                       <>
-                        <CreditCard className="w-5 h-5" />
-                        <span>Proceed to Pay ₹{estimatedTotal.toLocaleString('en-IN')}</span>
+                        <Ticket className="w-5 h-5 text-[#7A1930]" />
+                        <span>Book Your Pass &bull; ₹{estimatedTotal.toLocaleString('en-IN')}</span>
                       </>
                     )}
                   </button>
                   <div className="flex items-center justify-center gap-2 text-[11px] text-ink-soft mt-3">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Razorpay Standard Checkout &bull; UPI, Cards, NetBanking Supported</span>
+                    <span>256-bit Encrypted Payment via Razorpay &bull; Instant Digital QR Delivery</span>
                   </div>
                 </div>
               </form>
