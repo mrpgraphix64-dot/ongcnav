@@ -30,6 +30,16 @@ export class CheckinService {
     return istString;
   }
 
+  private async getSetting(key: string, altKey?: string): Promise<string | null> {
+    const s = await this.prisma.setting.findUnique({ where: { key } });
+    if (s?.value) return s.value;
+    if (altKey) {
+      const alt = await this.prisma.setting.findUnique({ where: { key: altKey } });
+      if (alt?.value) return alt.value;
+    }
+    return null;
+  }
+
   async processCheckin(
     dto: ProcessCheckinDto,
     scannedByUser?: { id: string; role: UserRole },
@@ -41,15 +51,40 @@ export class CheckinService {
     const isLoadTest = !!dto.isLoadTest;
     const loadTestRunId = dto.loadTestRunId ? BigInt(dto.loadTestRunId) : null;
 
-    // 1. Emergency Stop Check
-    const emergencyStopSetting = await this.prisma.setting.findUnique({
-      where: { key: 'emergency_stop' },
-    });
-    if (emergencyStopSetting && emergencyStopSetting.value === 'true') {
-      const reasonSetting = await this.prisma.setting.findUnique({
-        where: { key: 'emergency_stop_reason' },
+    // 1. Master Event Status Check (Laravel parity)
+    const eventStatus = await this.getSetting('event_control.event_status', 'event_status');
+    if (eventStatus === 'closed') {
+      await this.recordScanLog({
+        gateId,
+        scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+        result: CheckinResult.EVENT_CLOSED,
+        responseTimeMs: Date.now() - startTime,
+        isLoadTest,
+        loadTestRunId,
+        ipAddress: reqMeta?.ip,
+        userAgent: reqMeta?.userAgent,
       });
-      const reason = reasonSetting?.value || 'Emergency stop is active across all gates';
+
+      return {
+        success: false,
+        result: CheckinResult.EVENT_CLOSED,
+        message: 'EVENT CLOSED: Entry scanning is not open at this time.',
+        statusCode: 403,
+      };
+    }
+
+    // 2. Emergency Stop & System Scanning Enabled Check
+    const emergencyVal = await this.getSetting('event_control.emergency_stopped', 'emergency_stop');
+    const isEmergency = emergencyVal === '1' || emergencyVal === 'true';
+
+    const scanningVal = await this.getSetting('event_control.scanning_enabled', 'scanning_enabled');
+    const isScanningDisabled = scanningVal === '0' || scanningVal === 'false';
+
+    if (isEmergency || isScanningDisabled) {
+      const reasonVal = await this.getSetting('emergency_stop_reason', 'event_control.emergency_stop_reason');
+      const message = isEmergency
+        ? (reasonVal || 'EMERGENCY STOP ACTIVATED: All entry scanning is immediately halted.')
+        : 'SCANNING SUSPENDED: Entry scanning is temporarily stopped.';
 
       await this.recordScanLog({
         gateId,
@@ -65,18 +100,16 @@ export class CheckinService {
       return {
         success: false,
         result: CheckinResult.EVENT_CLOSED,
-        message: reason,
+        message,
         statusCode: 403,
       };
     }
 
-    // 2. Active Event Date
-    const activeDateSetting = await this.prisma.setting.findUnique({
-      where: { key: 'active_event_date' },
-    });
-    const activeDate = activeDateSetting?.value || this.getTodayIst();
+    // 3. Active Event Date Resolution
+    const activeDateVal = await this.getSetting('event_control.active_event_date', 'active_event_date');
+    const activeDate = activeDateVal && activeDateVal.trim() !== '' ? activeDateVal.trim() : this.getTodayIst();
 
-    // 3. Gate Verification
+    // 4. Gate Verification & Operational Status
     const gate = await this.prisma.gate.findUnique({ where: { id: gateId } });
     if (!gate) {
       return {
@@ -91,7 +124,7 @@ export class CheckinService {
       return {
         success: false,
         result: CheckinResult.GATE_CLOSED,
-        message: `Gate ${gate.name} is currently closed`,
+        message: `GATE CLOSED: Gate ${gate.name} is currently closed for entry`,
         statusCode: 403,
       };
     }
@@ -105,7 +138,7 @@ export class CheckinService {
       };
     }
 
-    // 4. Operator Gate Authorization Check
+    // 5. Operator Gate Authorization Check
     if (
       scannedByUser &&
       scannedByUser.role !== UserRole.SUPER_ADMIN &&
@@ -128,21 +161,29 @@ export class CheckinService {
       }
     }
 
-    // 5. Gate Capacity Check
-    if (gate.totalCapacity) {
+    // 6. Gate Capacity & Block-when-full Check
+    const isCapacityRuleActive =
+      gate.capacityEnabled &&
+      gate.blockWhenFull &&
+      gate.totalCapacity !== null &&
+      gate.totalCapacity !== undefined &&
+      gate.totalCapacity >= 0;
+
+    if (isCapacityRuleActive) {
       const todayTotal = await this.prisma.dailyCheckin.count({
         where: {
           gateId: gate.id,
           eventDate: activeDate,
+          status: 'SUCCESS' as any,
           isLoadTest: false,
         },
       });
 
-      if (todayTotal >= gate.totalCapacity) {
+      if (todayTotal >= gate.totalCapacity!) {
         return {
           success: false,
           result: CheckinResult.GATE_FULL,
-          message: `Gate ${gate.name} has reached its total capacity for today (${gate.totalCapacity})`,
+          message: `GATE CAPACITY REACHED: Gate ${gate.name} has reached maximum capacity (${gate.totalCapacity})`,
           statusCode: 403,
         };
       }

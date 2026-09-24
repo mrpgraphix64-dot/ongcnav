@@ -118,6 +118,8 @@ model Gate {
   status           GateStatus @default(ACTIVE)
   capacityPerHour  Int?       @map("capacity_per_hour")
   totalCapacity    Int?       @map("total_capacity")
+  capacityEnabled  Boolean    @default(false) @map("capacity_enabled")
+  blockWhenFull    Boolean    @default(false) @map("block_when_full")
   isOpen           Boolean    @default(true) @map("is_open")
   isScanningPaused Boolean    @default(false) @map("is_scanning_paused")
   createdAt        DateTime   @default(now()) @map("created_at")

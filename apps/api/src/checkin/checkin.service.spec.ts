@@ -199,6 +199,60 @@ describe('CheckinService Concurrency & Security Tests', () => {
     expect(res.message).toBe('Severe Weather Alert');
   });
 
+  it('6b. should reject check-in when Event Status is CLOSED', async () => {
+    prisma.setting.findUnique.mockImplementation(({ where }) => {
+      if (where.key === 'event_control.event_status') return Promise.resolve({ value: 'closed' });
+      return Promise.resolve(null);
+    });
+
+    const res = await service.processCheckin(
+      { token: 'test-token-valid-123', gateId: '1' },
+      { id: '1', role: UserRole.GATE_OPERATOR },
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.result).toBe(CheckinResult.EVENT_CLOSED);
+    expect(res.statusCode).toBe(403);
+    expect(res.message).toContain('EVENT CLOSED');
+  });
+
+  it('6c. should reject check-in when System Scanning is SUSPENDED', async () => {
+    prisma.setting.findUnique.mockImplementation(({ where }) => {
+      if (where.key === 'event_control.scanning_enabled') return Promise.resolve({ value: '0' });
+      return Promise.resolve(null);
+    });
+
+    const res = await service.processCheckin(
+      { token: 'test-token-valid-123', gateId: '1' },
+      { id: '1', role: UserRole.GATE_OPERATOR },
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.result).toBe(CheckinResult.EVENT_CLOSED);
+    expect(res.statusCode).toBe(403);
+    expect(res.message).toContain('SCANNING SUSPENDED');
+  });
+
+  it('6d. should reject check-in when Gate is FULL and blockWhenFull is enabled', async () => {
+    prisma.gate.findUnique.mockResolvedValue({
+      ...mockGate,
+      capacityEnabled: true,
+      blockWhenFull: true,
+      totalCapacity: 50,
+    });
+    prisma.dailyCheckin.count.mockResolvedValue(50);
+
+    const res = await service.processCheckin(
+      { token: 'test-token-valid-123', gateId: '1' },
+      { id: '1', role: UserRole.GATE_OPERATOR },
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.result).toBe(CheckinResult.GATE_FULL);
+    expect(res.statusCode).toBe(403);
+    expect(res.message).toContain('GATE CAPACITY REACHED');
+  });
+
   it('7. should flag load test requests with isLoadTest=true and loadTestRunId', async () => {
     const res = await service.processCheckin(
       {
