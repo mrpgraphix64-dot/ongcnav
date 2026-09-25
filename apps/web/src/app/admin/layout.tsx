@@ -78,26 +78,47 @@ const ALL_NAV_ITEMS: NavItem[] = [
     icon: Shield,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
   },
-  // 5. Attendees & Passes (Super Admin, Event Admin, Registration Staff)
+  // 5. Attendees & Passes (Super Admin, Employee Admin, Registration Staff ONLY - employee-only)
   {
     label: 'Attendees & Passes',
     href: '/admin/attendees',
     icon: Users,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'REGISTRATION_STAFF'],
+    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'REGISTRATION_STAFF'],
   },
-  // 6. Bulk Upload (Super Admin, Event Admin, Registration Staff)
+  // 6. Bulk Upload (Super Admin, Employee Admin, Registration Staff ONLY - employee-only)
   {
     label: 'Bulk Upload',
     href: '/admin/bulk-upload',
     icon: UploadCloud,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'REGISTRATION_STAFF'],
+    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'REGISTRATION_STAFF'],
   },
-  // 7. Help Desk Overrides (Super Admin, Event Admin, Gate Manager, Registration Staff)
+  // Commercial Orders (Super Admin, Commercial Admin)
+  {
+    label: 'Commercial Orders',
+    href: '/admin/commercial/orders',
+    icon: CalendarCheck,
+    roles: ['SUPER_ADMIN', 'COMMERCIAL_ADMIN'],
+  },
+  // Commercial Agents (Super Admin, Commercial Admin)
+  {
+    label: 'Commercial Agents',
+    href: '/admin/commercial/agents',
+    icon: Shield,
+    roles: ['SUPER_ADMIN', 'COMMERCIAL_ADMIN'],
+  },
+  // Agent Portal (Commercial Agent, Commercial Sub Agent)
+  {
+    label: 'Agent Portal',
+    href: '/agent',
+    icon: Calendar,
+    roles: ['COMMERCIAL_AGENT', 'COMMERCIAL_SUB_AGENT'],
+  },
+  // 7. Help Desk Overrides (Super Admin, Employee Admin, Event Admin, Gate Manager, Registration Staff)
   {
     label: 'Help Desk Overrides',
     href: '/admin/helpdesk',
     icon: LifeBuoy,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REGISTRATION_STAFF'],
+    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REGISTRATION_STAFF'],
   },
   // 8. Turnstile Scanner (Super Admin, Event Admin, Gate Manager)
   {
@@ -256,6 +277,24 @@ function getPageMeta(pathname: string): { title: string; subtitle: string } {
       subtitle: 'System configuration, operational policies, and scanner parameters.',
     };
   }
+  if (pathname.startsWith('/admin/commercial/orders')) {
+    return {
+      title: 'Commercial Orders',
+      subtitle: 'Audit public and agent ticket sales, payment verification, and pass delivery.',
+    };
+  }
+  if (pathname.startsWith('/admin/commercial/agents')) {
+    return {
+      title: 'Commercial Agents',
+      subtitle: 'Agent directory, master inventory allocations, and sub-agent network oversight.',
+    };
+  }
+  if (pathname.startsWith('/agent')) {
+    return {
+      title: 'Commercial Agent Portal',
+      subtitle: 'Offline pass booking, inventory balances, and sub-agent distribution.',
+    };
+  }
   if (pathname.startsWith('/admin/traffic-test')) {
     return {
       title: 'Traffic Test Lab',
@@ -406,7 +445,7 @@ export default function AdminLayout({
   // Role-based route authorization check
   const isAuthorized = (() => {
     if (!user) return true; // allow initial paint while validating
-    if (normalizedRole === 'SUPER_ADMIN' || normalizedRole === 'EVENT_ADMIN') return true;
+    if (normalizedRole === 'SUPER_ADMIN') return true;
 
     const matchedNav = ALL_NAV_ITEMS.find(
       (item) => item.href === pathname || pathname.startsWith(`${item.href}/`),

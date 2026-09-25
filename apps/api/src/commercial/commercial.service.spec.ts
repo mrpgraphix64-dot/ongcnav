@@ -12,6 +12,7 @@ import {
 } from '@ongc/shared-types';
 import { BadRequestException, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
+import { COMMERCIAL_EVENT_DATES } from './commercial.constants';
 
 describe('CommercialService', () => {
   let service: CommercialService;
@@ -95,11 +96,12 @@ describe('CommercialService', () => {
       customerMobile: '9876543210',
       customerEmail: 'kishore@example.com',
       ticketType: 'COMMERCIAL_DAILY',
-      selectedDates: ['2026-10-11', '2026-10-12'],
+      selectedDates: ['2026-10-11'],
       quantity: 2,
+      termsAccepted: true,
     };
 
-    it('calculates price strictly on server (2 nights * ₹249 = ₹498 * 2 qty = ₹996 / 99,600 paise) and creates order in PENDING status', async () => {
+    it('calculates price strictly on server (1 night * ₹249 = ₹249 * 2 qty = ₹498 / 49,800 paise) and creates order in PENDING status', async () => {
       prisma.commercialOrder.create.mockImplementation(({ data }: any) =>
         Promise.resolve({ id: BigInt(1), ...data }),
       );
@@ -107,8 +109,8 @@ describe('CommercialService', () => {
       const res = await service.createOrder(validDto);
 
       expect(res.success).toBe(true);
-      expect(res.order.amountInr).toBe(996);
-      expect(res.order.amountPaise).toBe(99600);
+      expect(res.order.amountInr).toBe(498);
+      expect(res.order.amountPaise).toBe(49800);
       expect(res.order.quantity).toBe(2);
 
       // Verify DB persistence with server-computed paise
@@ -116,8 +118,8 @@ describe('CommercialService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             registrationType: RegistrationType.COMMERCIAL,
-            unitPricePaise: 49800,
-            amountPaise: 99600,
+            unitPricePaise: 24900,
+            amountPaise: 49800,
             orderStatus: OrderStatus.PENDING,
             paymentStatus: PaymentStatus.CREATED,
             quantity: 2,
@@ -189,6 +191,153 @@ describe('CommercialService', () => {
           selectedDates: ['2026-12-31'], // Not a Navratri date
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    describe('Commercial Booking Date Authority & Single-Date Rules', () => {
+      it('1. Daily Pass accepts exactly one selected booking date', async () => {
+        prisma.commercialOrder.create.mockImplementationOnce(({ data }: any) =>
+          Promise.resolve({ id: BigInt(11), ...data }),
+        );
+        const res = await service.createOrder({
+          ...validDto,
+          ticketType: 'COMMERCIAL_DAILY',
+          selectedDates: ['2026-10-12'],
+          quantity: 1,
+        });
+        expect(res.success).toBe(true);
+        expect(res.order.selectedDates).toEqual(['2026-10-12']);
+        expect(res.order.amountInr).toBe(249);
+      });
+
+      it('2. Mandli Pass accepts exactly one selected booking date', async () => {
+        prisma.commercialOrder.create.mockImplementationOnce(({ data }: any) =>
+          Promise.resolve({ id: BigInt(12), ...data }),
+        );
+        const res = await service.createOrder({
+          ...validDto,
+          ticketType: 'COMMERCIAL_MANDLI',
+          selectedDates: ['2026-10-13'],
+          quantity: 2,
+        });
+        expect(res.success).toBe(true);
+        expect(res.order.selectedDates).toEqual(['2026-10-13']);
+        expect(res.order.amountInr).toBe(298); // 149 * 2
+      });
+
+      it('3. Any Day Pass accepts exactly one selected booking date', async () => {
+        prisma.commercialOrder.create.mockImplementationOnce(({ data }: any) =>
+          Promise.resolve({ id: BigInt(13), ...data }),
+        );
+        const res = await service.createOrder({
+          ...validDto,
+          ticketType: 'COMMERCIAL_ANY_DAY',
+          selectedDates: ['2026-10-16'],
+          quantity: 1,
+        });
+        expect(res.success).toBe(true);
+        expect(res.order.selectedDates).toEqual(['2026-10-16']);
+        expect(res.order.amountInr).toBe(279);
+      });
+
+      it('4. Season Pass automatically and authoritatively covers all configured event dates regardless of client submission', async () => {
+        prisma.commercialOrder.create.mockImplementationOnce(({ data }: any) =>
+          Promise.resolve({ id: BigInt(14), ...data }),
+        );
+        // Frontend attempts to submit an arbitrary single date for Season Pass
+        const res = await service.createOrder({
+          ...validDto,
+          ticketType: 'COMMERCIAL_SEASON',
+          selectedDates: ['2026-10-19'],
+          quantity: 1,
+        });
+        expect(res.success).toBe(true);
+        // Backend authoritatively set all 9 dates
+        expect(res.order.selectedDates).toHaveLength(9);
+        expect(res.order.selectedDates).toEqual(COMMERCIAL_EVENT_DATES);
+        expect(res.order.amountInr).toBe(1750);
+      });
+
+      it('5. A commercial order cannot contain multiple different booking dates', async () => {
+        // Daily pass with multiple dates
+        await expect(
+          service.createOrder({
+            ...validDto,
+            ticketType: 'COMMERCIAL_DAILY',
+            selectedDates: ['2026-10-11', '2026-10-12'],
+          }),
+        ).rejects.toThrow(
+          'A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.',
+        );
+
+        // Mandli pass with multiple dates
+        await expect(
+          service.createOrder({
+            ...validDto,
+            ticketType: 'COMMERCIAL_MANDLI',
+            selectedDates: ['2026-10-11', '2026-10-13'],
+          }),
+        ).rejects.toThrow(
+          'A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.',
+        );
+
+        // Any Day pass with multiple dates
+        await expect(
+          service.createOrder({
+            ...validDto,
+            ticketType: 'COMMERCIAL_ANY_DAY',
+            selectedDates: ['2026-10-14', '2026-10-15'],
+          }),
+        ).rejects.toThrow(
+          'A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.',
+        );
+      });
+
+      it('6. The backend remains the final authority regardless of what the frontend submits', async () => {
+        prisma.commercialOrder.create.mockImplementationOnce(({ data }: any) =>
+          Promise.resolve({ id: BigInt(15), ...data }),
+        );
+        // Client tries to submit invalid dates mixed with one valid date
+        const res = await service.createOrder({
+          ...validDto,
+          ticketType: 'COMMERCIAL_DAILY',
+          selectedDates: ['2026-10-15', '2026-12-25', 'fake-date'],
+          quantity: 1,
+        });
+        expect(res.success).toBe(true);
+        expect(res.order.selectedDates).toEqual(['2026-10-15']);
+        expect(res.order.amountInr).toBe(249);
+      });
+    });
+
+    it('rejects order without terms acceptance (termsAccepted: false)', async () => {
+      await expect(
+        service.createOrder({
+          ...validDto,
+          termsAccepted: false,
+        }),
+      ).rejects.toThrow('Please accept the ticket terms & conditions to continue.');
+    });
+
+    it('rejects order when termsAccepted is missing (undefined)', async () => {
+      const dtoWithoutTerms: any = { ...validDto };
+      delete dtoWithoutTerms.termsAccepted;
+      await expect(service.createOrder(dtoWithoutTerms)).rejects.toThrow(
+        'Please accept the ticket terms & conditions to continue.',
+      );
+    });
+
+    it('accepts order with terms acceptance (termsAccepted: true) and stores it in metadata', async () => {
+      let createdData: any = null;
+      prisma.commercialOrder.create.mockImplementationOnce(({ data }: any) => {
+        createdData = data;
+        return Promise.resolve({ id: BigInt(99), ...data });
+      });
+
+      const res = await service.createOrder(validDto);
+      expect(res.success).toBe(true);
+      expect(createdData).toBeDefined();
+      expect(createdData.metadata.termsAccepted).toBe(true);
+      expect(createdData.metadata.termsAcceptedAt).toBeDefined();
     });
   });
 
@@ -565,6 +714,7 @@ describe('CommercialService', () => {
           customerEmail: 'user@example.com',
           selectedDates: ['2026-10-11'],
           quantity: 1,
+          termsAccepted: true,
         }),
       ).rejects.toThrow(BadRequestException);
     });

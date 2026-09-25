@@ -3,11 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendeeStatus } from '@ongc/shared-types';
+import { AttendeeStatus, UserRole } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 
 const VALID_CATEGORIES = ['General', 'VIP', 'VVIP', 'ONGC STAFF', 'FAMILY MEMBER'];
@@ -33,41 +34,110 @@ export class AttendeesService {
   /**
    * Primary attendee listing with summary metrics, pagination, and family tickets
    */
-  async index(query: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    status?: string;
-    category?: string;
-  }) {
+  async index(
+    query: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+      category?: string;
+    },
+    userRole?: string,
+  ) {
+    if (
+      userRole === UserRole.EVENT_ADMIN ||
+      userRole === UserRole.COMMERCIAL_ADMIN ||
+      userRole === UserRole.COMMERCIAL_AGENT ||
+      userRole === UserRole.COMMERCIAL_SUB_AGENT
+    ) {
+      throw new ForbiddenException(
+        `${userRole} is not permitted to access attendee or employee personal information.`,
+      );
+    }
+
+    const isEmployeeOnlyStaff =
+      userRole === UserRole.REGISTRATION_STAFF ||
+      userRole === UserRole.EMPLOYEE_ADMIN;
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
     const skip = (page - 1) * limit;
 
-    const [totalEmployees, standaloneCount, totalPeople, staffCount, familyCount] =
-      await Promise.all([
-        this.prisma.employee.count(),
-        this.prisma.attendee.count({ where: { employeeId: null } }),
-        this.prisma.attendee.count(),
-        this.prisma.attendee.count({ where: { category: 'ONGC STAFF' } }),
-        this.prisma.attendee.count({ where: { category: 'FAMILY MEMBER' } }),
-      ]);
+    const [totalEmployees, totalCommercialOrders, standaloneCount, totalPeople, staffCount, familyCount] =
+      isEmployeeOnlyStaff
+        ? await Promise.all([
+            this.prisma.employee.count(),
+            Promise.resolve(0),
+            Promise.resolve(0),
+            this.prisma.attendee.count({ where: { orderId: null } }),
+            this.prisma.attendee.count({ where: { category: 'ONGC STAFF' } }),
+            this.prisma.attendee.count({ where: { category: 'FAMILY MEMBER' } }),
+          ])
+        : await Promise.all([
+            this.prisma.employee.count(),
+            this.prisma.commercialOrder.count(),
+            this.prisma.attendee.count({ where: { employeeId: null, orderId: null } }),
+            this.prisma.attendee.count(),
+            this.prisma.attendee.count({ where: { category: 'ONGC STAFF' } }),
+            this.prisma.attendee.count({ where: { category: 'FAMILY MEMBER' } }),
+          ]);
 
     const metrics = {
-      total_registrations: totalEmployees + standaloneCount,
+      total_registrations: isEmployeeOnlyStaff
+        ? totalEmployees
+        : totalEmployees + totalCommercialOrders + standaloneCount,
       total_people: totalPeople,
       total_employees: staffCount || totalEmployees,
       total_family_members: familyCount,
+      total_commercial_orders: isEmployeeOnlyStaff ? 0 : totalCommercialOrders,
     };
 
-    // Primary attendees query: whereNull('family_member_id')
+    // 1. Identify non-primary commercial passes (passes after the first one in an order)
+    // so they are grouped under their parent order rather than showing as independent primary rows.
+    let secondaryCommercialAttendeeIds: bigint[] = [];
+    try {
+      const groupedOrders = await this.prisma.attendee.groupBy({
+        by: ['orderId'],
+        where: {
+          orderId: { not: null },
+        },
+        _min: {
+          id: true,
+        },
+      });
+
+      const primaryCommercialIds = groupedOrders
+        .map((g) => g._min?.id)
+        .filter((id): id is bigint => id !== null && id !== undefined);
+
+      if (primaryCommercialIds.length > 0) {
+        const secondary = await this.prisma.attendee.findMany({
+          where: {
+            orderId: { not: null },
+            id: { notIn: primaryCommercialIds },
+          },
+          select: { id: true },
+        });
+        secondaryCommercialAttendeeIds = secondary.map((s) => s.id);
+      }
+    } catch {
+      secondaryCommercialAttendeeIds = [];
+    }
+
+    // Primary attendees query: whereNull('family_member_id') and not a secondary pass of a commercial order
     const where: any = {
       familyMemberId: null,
     };
 
+    if (isEmployeeOnlyStaff) {
+      where.orderId = null;
+      where.employeeId = { not: null };
+    } else if (secondaryCommercialAttendeeIds.length > 0) {
+      where.id = { notIn: secondaryCommercialAttendeeIds };
+    }
+
     const search = query.search?.trim();
     if (search && search !== '') {
-      where.OR = [
+      const searchConditions: any[] = [
         { name: { contains: search, mode: 'insensitive' } },
         { mobile: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
@@ -93,6 +163,32 @@ export class AttendeesService {
           },
         },
       ];
+
+      if (!isEmployeeOnlyStaff) {
+        searchConditions.push({
+          order: {
+            OR: [
+              { orderNumber: { contains: search, mode: 'insensitive' } },
+              { customerName: { contains: search, mode: 'insensitive' } },
+              { customerMobile: { contains: search, mode: 'insensitive' } },
+              { customerEmail: { contains: search, mode: 'insensitive' } },
+              {
+                attendees: {
+                  some: {
+                    OR: [
+                      { ticketNumber: { contains: search, mode: 'insensitive' } },
+                      { name: { contains: search, mode: 'insensitive' } },
+                      { mobile: { contains: search, mode: 'insensitive' } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        });
+      }
+
+      where.OR = searchConditions;
     }
 
     if (query.status && query.status !== 'all' && query.status !== '') {
@@ -111,7 +207,18 @@ export class AttendeesService {
     }
 
     if (query.category && query.category !== 'all' && query.category !== '') {
-      where.category = { equals: query.category, mode: 'insensitive' };
+      if (
+        query.category.toLowerCase() === 'commercial pass' ||
+        query.category.toLowerCase().startsWith('commercial')
+      ) {
+        where.OR = [
+          { category: { equals: query.category, mode: 'insensitive' } },
+          { registrationType: 'COMMERCIAL' },
+          { order: { ticketType: { equals: query.category, mode: 'insensitive' } } },
+        ];
+      } else {
+        where.category = { equals: query.category, mode: 'insensitive' };
+      }
     }
 
     const [total, primaryRecords] = await Promise.all([
@@ -123,6 +230,24 @@ export class AttendeesService {
         orderBy: { id: 'desc' },
         include: {
           employee: true,
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              customerName: true,
+              customerMobile: true,
+              customerEmail: true,
+              ticketType: true,
+              selectedDates: true,
+              quantity: true,
+              unitPricePaise: true,
+              amountPaise: true,
+              currency: true,
+              orderStatus: true,
+              paymentStatus: true,
+              paidAt: true,
+            },
+          },
           dailyCheckins: {
             where: { isLoadTest: false },
             orderBy: { checkinTime: 'desc' },
@@ -165,16 +290,132 @@ export class AttendeesService {
       }
     }
 
+    // Fetch individual passes for each commercial order on this page
+    const orderIds = primaryRecords
+      .map((p) => p.orderId)
+      .filter((id): id is bigint => id !== null && id !== undefined);
+
+    let orderPassesMap = new Map<string, any[]>();
+    if (orderIds.length > 0) {
+      const orderPasses = await this.prisma.attendee.findMany({
+        where: {
+          orderId: { in: orderIds },
+        },
+        include: {
+          dailyCheckins: {
+            where: { isLoadTest: false },
+            orderBy: { checkinTime: 'desc' },
+            take: 1,
+            include: { gate: true },
+          },
+        },
+        orderBy: { id: 'asc' },
+      });
+
+      for (const pass of orderPasses) {
+        const orderIdStr = pass.orderId!.toString();
+        const list = orderPassesMap.get(orderIdStr) || [];
+        list.push(pass);
+        orderPassesMap.set(orderIdStr, list);
+      }
+    }
+
     const mappedPrimary = await Promise.all(
       primaryRecords.map(async (p) => {
-        const latestCheckin = p.dailyCheckins[0];
+        const latestCheckin = p.dailyCheckins?.[0];
         const isCheckedIn = !!latestCheckin;
         const employeeIdStr = p.employeeId ? p.employeeId.toString() : null;
 
+        const primaryQrSvg = await QRCode.toString(p.qrCodeToken || p.ticketNumber, {
+          type: 'svg',
+          margin: 1,
+        });
+
+        // 1. Commercial Order Booking Group
+        if (p.orderId && p.order) {
+          const rawPasses = orderPassesMap.get(p.orderId.toString()) || [p];
+          const formattedPasses = await Promise.all(
+            rawPasses.map(async (pass) => {
+              const passCheckin = pass.dailyCheckins?.[0];
+              const passCheckedIn = !!passCheckin;
+              const passQrSvg = await QRCode.toString(pass.qrCodeToken || pass.ticketNumber, {
+                type: 'svg',
+                margin: 1,
+              });
+
+              return {
+                id: pass.id.toString(),
+                name: pass.name || p.order!.customerName,
+                mobile: pass.mobile || p.order!.customerMobile,
+                email: pass.email || p.order!.customerEmail,
+                ticket_id: pass.ticketNumber,
+                ticketNumber: pass.ticketNumber,
+                secure_token: pass.qrCodeToken,
+                category: pass.category || p.order!.ticketType || 'Commercial Pass',
+                registrationType: pass.registrationType,
+                status: passCheckedIn ? 'checked_in' : pass.status.toLowerCase(),
+                rawStatus: pass.status,
+                bookingDays: pass.bookingDays || p.order!.selectedDates,
+                checked_in_at: passCheckin ? passCheckin.checkinTime.toISOString() : null,
+                gate: passCheckin?.gate?.name || null,
+                qr_svg: passQrSvg,
+                order_id: p.orderId!.toString(),
+              };
+            }),
+          );
+
+          const anyPassCheckedIn = formattedPasses.some((pass) => pass.status === 'checked_in');
+
+          return {
+            id: p.id.toString(),
+            name: p.order.customerName,
+            mobile: p.order.customerMobile,
+            email: p.order.customerEmail,
+            ticket_id: p.order.orderNumber,
+            ticketNumber: p.order.orderNumber,
+            secure_token: p.qrCodeToken,
+            category: p.order.ticketType || 'Commercial Order',
+            registrationType: 'COMMERCIAL',
+            status: anyPassCheckedIn
+              ? 'checked_in'
+              : p.order.orderStatus === 'PAID'
+              ? 'active'
+              : p.order.orderStatus.toLowerCase(),
+            rawStatus: p.order.orderStatus,
+            checked_in_at: formattedPasses.find((pass) => pass.checked_in_at)?.checked_in_at || null,
+            gate: formattedPasses.find((pass) => pass.gate)?.gate || null,
+            employee_id: null,
+            employee: null,
+            isCommercialOrder: true,
+            order_id: p.order.id.toString(),
+            order: {
+              id: p.order.id.toString(),
+              orderNumber: p.order.orderNumber,
+              customerName: p.order.customerName,
+              customerMobile: p.order.customerMobile,
+              customerEmail: p.order.customerEmail,
+              ticketType: p.order.ticketType,
+              quantity: p.order.quantity,
+              unitPricePaise: p.order.unitPricePaise,
+              amountPaise: p.order.amountPaise,
+              amountInr: p.order.amountPaise / 100,
+              orderStatus: p.order.orderStatus,
+              paymentStatus: p.order.paymentStatus,
+              selectedDates: p.order.selectedDates,
+              paidAt: p.order.paidAt ? p.order.paidAt.toISOString() : null,
+            },
+            passes: formattedPasses,
+            family_tickets: formattedPasses,
+            passesCount: formattedPasses.length,
+            qr_svg: primaryQrSvg,
+          };
+        }
+
+        // 2. Employee or Standalone registration
         const rawFamily = employeeIdStr ? familyTicketsMap.get(employeeIdStr) || [] : [];
         const family_tickets = await Promise.all(
           rawFamily.map(async (fam) => {
-            const famCheckin = fam.dailyCheckins[0];
+            const famCheckin = fam.dailyCheckins?.[0];
             const famCheckedIn = !!famCheckin;
             const famQrSvg = await QRCode.toString(fam.qrCodeToken || fam.ticketNumber, {
               type: 'svg',
@@ -185,6 +426,7 @@ export class AttendeesService {
               id: fam.id.toString(),
               name: fam.name || fam.familyMember?.name || 'Family Member',
               mobile: fam.mobile || fam.familyMember?.phone || '',
+              email: fam.email || p.employee?.email || '',
               ticket_id: fam.ticketNumber,
               ticketNumber: fam.ticketNumber,
               secure_token: fam.qrCodeToken,
@@ -201,11 +443,6 @@ export class AttendeesService {
             };
           }),
         );
-
-        const primaryQrSvg = await QRCode.toString(p.qrCodeToken || p.ticketNumber, {
-          type: 'svg',
-          margin: 1,
-        });
 
         return {
           id: p.id.toString(),
@@ -434,9 +671,18 @@ export class AttendeesService {
       );
     }
 
-    const cleanEmail = data.email?.trim() || null;
-    if (cleanEmail && cleanEmail.length > 255) {
+    const cleanEmail = data.email?.trim()?.toLowerCase() || null;
+    if (!cleanEmail) {
+      throw new BadRequestException(
+        'Email address is required because your digital QR pass will be sent here.',
+      );
+    }
+    if (cleanEmail.length > 255) {
       throw new BadRequestException('Email address must not exceed 255 characters.');
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      throw new BadRequestException('Please enter a valid email address.');
     }
 
     const cleanCategory = data.category?.trim() || 'General';
@@ -494,6 +740,7 @@ export class AttendeesService {
         name: attendee.name,
         phone: attendee.mobile,
         mobile: attendee.mobile,
+        email: attendee.email,
         category: attendee.category,
         employeeId: attendee.employeeId,
       },
@@ -505,7 +752,7 @@ export class AttendeesService {
 
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name.trim();
-    if (data.email !== undefined) updateData.email = data.email?.trim() || null;
+    if (data.email !== undefined) updateData.email = data.email?.trim()?.toLowerCase() || null;
     if (data.category !== undefined) updateData.category = data.category;
     if (data.status !== undefined) {
       updateData.status =
@@ -824,6 +1071,8 @@ export class AttendeesService {
           duplicate_mobile: 0,
           duplicate_email: 0,
           missing_category: 0,
+          missing_email: 0,
+          invalid_email: 0,
         },
         validRows: [],
       };
@@ -841,6 +1090,8 @@ export class AttendeesService {
       duplicate_mobile: 0,
       duplicate_email: 0,
       missing_category: 0,
+      missing_email: 0,
+      invalid_email: 0,
     };
     const validRows: any[] = [];
 
@@ -892,10 +1143,16 @@ export class AttendeesService {
       } else if (!/^\d{10}$/.test(cleanMobile)) {
         issue = 'Invalid Mobile Format';
         errorBreakdown.invalid_mobile++;
+      } else if (!email) {
+        issue = 'Missing Email';
+        errorBreakdown.missing_email++;
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        issue = 'Invalid Email Format';
+        errorBreakdown.invalid_email++;
       } else if (seenMobiles.has(cleanMobile) || dbMobiles.has(cleanMobile)) {
         issue = 'Duplicate mobile number';
         errorBreakdown.duplicate_mobile++;
-      } else if (email && (seenEmails.has(email) || dbEmails.has(email))) {
+      } else if (seenEmails.has(email) || dbEmails.has(email)) {
         issue = 'Duplicate email';
         errorBreakdown.duplicate_email++;
       }
@@ -983,7 +1240,8 @@ export class AttendeesService {
       const cleanEmail = c.email?.trim() ? AttendeesService.sanitizeCsvValue(c.email.trim().toLowerCase()) : null;
       const cleanCategory = ['General', 'VIP', 'VVIP'].includes(c.category || '') ? c.category! : 'General';
 
-      if (!cleanName || !/^\d{10}$/.test(cleanMobile)) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!cleanName || !/^\d{10}$/.test(cleanMobile) || !cleanEmail || !emailRegex.test(cleanEmail)) {
         continue;
       }
 

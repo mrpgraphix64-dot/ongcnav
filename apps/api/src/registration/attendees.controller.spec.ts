@@ -39,14 +39,18 @@ describe('AttendeesController & RBAC Parity Tests', () => {
   });
 
   describe('RBAC Authorization Matrix', () => {
-    it('has @Roles metadata matching Laravel (SUPER_ADMIN, EVENT_ADMIN, REGISTRATION_STAFF)', () => {
+    it('has @Roles metadata matching domain isolation (SUPER_ADMIN, EMPLOYEE_ADMIN, REGISTRATION_STAFF)', () => {
       const roles = reflector.get<UserRole[]>(ROLES_KEY, AttendeesController);
       expect(roles).toBeDefined();
       expect(roles).toEqual([
         UserRole.SUPER_ADMIN,
-        UserRole.EVENT_ADMIN,
+        UserRole.EMPLOYEE_ADMIN,
         UserRole.REGISTRATION_STAFF,
       ]);
+      expect(roles).not.toContain(UserRole.EVENT_ADMIN);
+      expect(roles).not.toContain(UserRole.COMMERCIAL_ADMIN);
+      expect(roles).not.toContain(UserRole.COMMERCIAL_AGENT);
+      expect(roles).not.toContain(UserRole.COMMERCIAL_SUB_AGENT);
       expect(roles).not.toContain(UserRole.GATE_MANAGER);
       expect(roles).not.toContain(UserRole.SCANNER_STAFF);
       expect(roles).not.toContain(UserRole.REPORT_VIEWER);
@@ -68,14 +72,32 @@ describe('AttendeesController & RBAC Parity Tests', () => {
       expect(rolesGuard.canActivate(context)).toBe(true);
     });
 
-    it('allows EVENT_ADMIN access via RolesGuard', () => {
-      const context = createMockExecutionContext(UserRole.EVENT_ADMIN);
+    it('allows EMPLOYEE_ADMIN access via RolesGuard', () => {
+      const context = createMockExecutionContext(UserRole.EMPLOYEE_ADMIN);
       expect(rolesGuard.canActivate(context)).toBe(true);
     });
 
     it('allows REGISTRATION_STAFF access via RolesGuard', () => {
       const context = createMockExecutionContext(UserRole.REGISTRATION_STAFF);
       expect(rolesGuard.canActivate(context)).toBe(true);
+    });
+
+    it('throws ForbiddenException for EVENT_ADMIN (domain isolation: operational only, no employee PII)', () => {
+      const context = createMockExecutionContext(UserRole.EVENT_ADMIN);
+      expect(() => rolesGuard.canActivate(context)).toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException for COMMERCIAL_ADMIN (domain isolation: commercial only, no employee domain)', () => {
+      const context = createMockExecutionContext(UserRole.COMMERCIAL_ADMIN);
+      expect(() => rolesGuard.canActivate(context)).toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException for COMMERCIAL_AGENT and COMMERCIAL_SUB_AGENT', () => {
+      const agentCtx = createMockExecutionContext(UserRole.COMMERCIAL_AGENT);
+      expect(() => rolesGuard.canActivate(agentCtx)).toThrow(ForbiddenException);
+
+      const subAgentCtx = createMockExecutionContext(UserRole.COMMERCIAL_SUB_AGENT);
+      expect(() => rolesGuard.canActivate(subAgentCtx)).toThrow(ForbiddenException);
     });
 
     it('throws ForbiddenException for GATE_MANAGER', () => {
@@ -108,18 +130,22 @@ describe('AttendeesController & RBAC Parity Tests', () => {
         pagination: {} as any,
       });
 
-      await controller.index('2', '15', 'Rahul', 'active', 'General');
-      expect(service.index).toHaveBeenCalledWith({
-        page: 2,
-        limit: 15,
-        search: 'Rahul',
-        status: 'active',
-        category: 'General',
-      });
+      const mockReq = { user: { role: UserRole.REGISTRATION_STAFF } } as any;
+      await controller.index(mockReq, '2', '15', 'Rahul', 'active', 'General');
+      expect(service.index).toHaveBeenCalledWith(
+        {
+          page: 2,
+          limit: 15,
+          search: 'Rahul',
+          status: 'active',
+          category: 'General',
+        },
+        UserRole.REGISTRATION_STAFF,
+      );
     });
 
     it('create delegates to createQuickAttendee', async () => {
-      const payload = { name: 'Priya', mobile: '9876543210' };
+      const payload = { name: 'Priya', mobile: '9876543210', email: 'priya@example.com' };
       service.createQuickAttendee.mockResolvedValueOnce({ success: true } as any);
 
       await controller.create(payload);

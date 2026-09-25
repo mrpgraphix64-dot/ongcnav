@@ -25,6 +25,11 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        source: '/register',
+        destination: '/bookpass',
+        permanent: true,
+      },
+      {
         source: '/admin/help-desk',
         destination: '/admin/helpdesk',
         permanent: false,

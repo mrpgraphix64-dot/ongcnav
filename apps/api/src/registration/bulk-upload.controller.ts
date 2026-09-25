@@ -20,7 +20,7 @@ import { UserRole } from '@ongc/shared-types';
 @ApiTags('Admin Bulk Upload')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.REGISTRATION_STAFF)
+@Roles(UserRole.SUPER_ADMIN, UserRole.EMPLOYEE_ADMIN, UserRole.REGISTRATION_STAFF)
 @Controller('admin/bulk-upload')
 export class BulkUploadController {
   constructor(private readonly attendeesService: AttendeesService) {}

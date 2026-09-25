@@ -75,7 +75,7 @@ export class CommercialAdminController {
   constructor(private readonly commercialService: CommercialService) {}
 
   @Get('orders')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN, UserRole.REPORT_VIEWER)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.COMMERCIAL_ADMIN)
   @ApiOperation({ summary: 'Admin audit list of commercial transactions and payments' })
   async listOrders(
     @Query('page') page?: string,

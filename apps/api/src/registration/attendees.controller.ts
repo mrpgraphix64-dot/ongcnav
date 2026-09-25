@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   Body,
+  Req,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -15,7 +16,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { AttendeesService } from './attendees.service';
@@ -29,7 +30,7 @@ import * as fs from 'fs';
 @ApiTags('Admin Attendees')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.REGISTRATION_STAFF)
+@Roles(UserRole.SUPER_ADMIN, UserRole.EMPLOYEE_ADMIN, UserRole.REGISTRATION_STAFF)
 @Controller('admin/attendees')
 export class AttendeesController {
   constructor(private readonly attendeesService: AttendeesService) {}
@@ -37,24 +38,29 @@ export class AttendeesController {
   @Get()
   @ApiOperation({ summary: 'List primary attendees with metrics and family passes' })
   async index(
+    @Req() req: Request,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('category') category?: string,
   ) {
-    return this.attendeesService.index({
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 10,
-      search,
-      status,
-      category,
-    });
+    const userRole = (req as any).user?.role;
+    return this.attendeesService.index(
+      {
+        page: page ? parseInt(page, 10) : 1,
+        limit: limit ? parseInt(limit, 10) : 10,
+        search,
+        status,
+        category,
+      },
+      userRole,
+    );
   }
 
   @Post()
   @ApiOperation({ summary: 'Quick add attendee & issue digital ticket pass' })
-  async create(@Body() body: { name: string; mobile: string; email?: string; category?: string }) {
+  async create(@Body() body: { name: string; mobile: string; email: string; category?: string }) {
     return this.attendeesService.createQuickAttendee(body);
   }
 

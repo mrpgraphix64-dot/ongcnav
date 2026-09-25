@@ -22,6 +22,8 @@ import {
 import { isCommercialTestPaymentEnabled } from './commercial-test-payment.util';
 import {
   AttendeeStatus,
+  CommercialOrderSource,
+  CommercialPaymentMode,
   OrderStatus,
   PaymentStatus,
   RegistrationType,
@@ -56,11 +58,11 @@ export class CommercialService {
     return isCommercialTestPaymentEnabled(nodeEnv, testPaymentEnv);
   }
 
-  private generateSecureQrToken(): string {
+  generateSecureQrToken(): string {
     return crypto.randomBytes(32).toString('hex');
   }
 
-  private generateTicketNumber(orderNumber: string, index: number): string {
+  generateTicketNumber(orderNumber: string, index: number): string {
     const cleanRef = orderNumber.replace(/[^A-Z0-9]/gi, '').slice(-6).toUpperCase();
     const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
     return `TK-COMM-${cleanRef}-${index + 1}-${rand}`;
@@ -83,7 +85,7 @@ export class CommercialService {
    * Runs in background so payment confirmation is never delayed or blocked by email dispatch.
    * Logs safely without exposing secrets, QR tokens, or email bodies.
    */
-  private sendTicketEmailSafe(order: any, passes: any[]): void {
+  sendTicketEmailSafe(order: any, passes: any[]): void {
     if (!order?.customerEmail) return;
 
     setImmediate(async () => {
@@ -177,9 +179,18 @@ export class CommercialService {
       );
     }
 
+    // 2b. Mandatory terms acceptance verification
+    if (!dto.termsAccepted) {
+      throw new BadRequestException('Please accept the ticket terms & conditions to continue.');
+    }
+
     try {
       // 3. Server-side authoritative price calculation — NEVER trust client-submitted amount
       const ticketTypeCode = dto.ticketType || 'COMMERCIAL_DAILY';
+      if (!COMMERCIAL_TICKET_TYPES[ticketTypeCode]) {
+        throw new BadRequestException(`Invalid commercial pass category: ${ticketTypeCode}`);
+      }
+
       let pricing: {
         unitPricePaise: number;
         originalPricePaise: number;
@@ -210,6 +221,8 @@ export class CommercialService {
             data: {
               orderNumber,
               registrationType: RegistrationType.COMMERCIAL,
+              source: CommercialOrderSource.PUBLIC,
+              paymentMode: CommercialPaymentMode.RAZORPAY,
               customerName: dto.customerName.trim(),
               customerMobile: cleanMobile,
               customerEmail: dto.customerEmail.trim().toLowerCase(),
@@ -234,6 +247,8 @@ export class CommercialService {
                 testMode: 'STAGING_TEST_PAYMENT',
                 testPaymentReference: testPaymentId,
                 gateway: 'STAGING_TEST_MODE',
+                termsAccepted: true,
+                termsAcceptedAt: new Date().toISOString(),
               },
             },
           });
@@ -315,6 +330,8 @@ export class CommercialService {
         data: {
           orderNumber,
           registrationType: RegistrationType.COMMERCIAL,
+          source: CommercialOrderSource.PUBLIC,
+          paymentMode: CommercialPaymentMode.RAZORPAY,
           customerName: dto.customerName.trim(),
           customerMobile: cleanMobile,
           customerEmail: dto.customerEmail.trim().toLowerCase(),
@@ -332,6 +349,8 @@ export class CommercialService {
             totalOriginalAmountPaise: pricing.totalOriginalAmountPaise,
             discountPercent: 50,
             offer: 'EARLY_BIRD',
+            termsAccepted: true,
+            termsAcceptedAt: new Date().toISOString(),
           },
         },
       });
@@ -676,6 +695,9 @@ export class CommercialService {
         orderBy: { createdAt: 'desc' },
         include: {
           _count: { select: { attendees: true } },
+          agent: {
+            select: { id: true, name: true, email: true },
+          },
         },
       }),
     ]);
@@ -690,6 +712,16 @@ export class CommercialService {
           id: o.id.toString(),
           orderNumber: o.orderNumber,
           registrationType: o.registrationType,
+          source: o.source,
+          paymentMode: o.paymentMode,
+          agentId: o.agentId ? o.agentId.toString() : null,
+          agent: o.agent
+            ? {
+                id: o.agent.id.toString(),
+                name: o.agent.name,
+                email: o.agent.email,
+              }
+            : null,
           customerName: o.customerName,
           customerMobile: o.customerMobile,
           customerEmail: o.customerEmail,
@@ -830,7 +862,7 @@ export class CommercialService {
     };
   }
 
-  private async formatPasses(attendees: any[]) {
+  async formatPasses(attendees: any[]) {
     return Promise.all(
       attendees.map(async (a) => {
         let qrSvg: string | null = null;
