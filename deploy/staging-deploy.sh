@@ -263,21 +263,98 @@ log "Web release verified: server.js, .next/static, and public/ all present at $
 SMOKE_PID=""
 cleanup_smoke_test() {
   if [ -n "$SMOKE_PID" ] && kill -0 "$SMOKE_PID" 2>/dev/null; then
-    kill "$SMOKE_PID" 2>/dev/null || true
+    kill -15 "$SMOKE_PID" 2>/dev/null || true
+    for _ in 1 2; do
+      kill -0 "$SMOKE_PID" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$SMOKE_PID" 2>/dev/null; then
+      kill -9 "$SMOKE_PID" 2>/dev/null || true
+    fi
     wait "$SMOKE_PID" 2>/dev/null || true
   fi
 }
 trap cleanup_smoke_test EXIT
 
-log "Starting local smoke test of the new release on port $WEB_SMOKE_TEST_PORT..."
-(cd "$WEB_STANDALONE_DIR" && PORT="$WEB_SMOKE_TEST_PORT" HOSTNAME=127.0.0.1 NODE_ENV=staging node server.js \
-  >>"$DEPLOY_DIR/logs/web-smoke-test.log" 2>&1 &
-  echo $! > "$DEPLOY_DIR/.web-smoke-test.pid")
-sleep 1
-SMOKE_PID=$(cat "$DEPLOY_DIR/.web-smoke-test.pid" 2>/dev/null || true)
-rm -f "$DEPLOY_DIR/.web-smoke-test.pid"
-[ -n "$SMOKE_PID" ] || fail "Could not start the smoke-test server process for the new web release."
+# 1. Pre-flight check: ensure $WEB_SMOKE_TEST_PORT is not occupied by a stale process.
+CURRENT_USER=$(whoami)
+stale_pids=$(ss -ltnp "sport = :$WEB_SMOKE_TEST_PORT" 2>/dev/null | grep -oE "pid=[0-9]+" | cut -d= -f2 | sort -u)
+if [ -z "$stale_pids" ]; then
+  stale_pids=$(fuser "${WEB_SMOKE_TEST_PORT}/tcp" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true)
+fi
 
+if [ -n "$stale_pids" ]; then
+  log "Detected existing listener on smoke-test port $WEB_SMOKE_TEST_PORT (PID(s): $stale_pids). Inspecting ownership..."
+  for pid in $stale_pids; do
+    [ -z "$pid" ] && continue
+    pid_owner=$(ps -o user= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)
+    pid_cmd=$(ps -o cmd= -p "$pid" 2>/dev/null || true)
+    if [ "$pid_owner" = "$CURRENT_USER" ]; then
+      log "Terminating stale deployment process on port $WEB_SMOKE_TEST_PORT (PID $pid: $pid_cmd)..."
+      kill -15 "$pid" 2>/dev/null || true
+      sleep 1
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    else
+      fail "Port $WEB_SMOKE_TEST_PORT is occupied by PID $pid owned by '$pid_owner' (expected '$CURRENT_USER'). Refusing to kill unrelated process."
+    fi
+  done
+
+  sleep 1
+  remaining_pids=$(ss -ltnp "sport = :$WEB_SMOKE_TEST_PORT" 2>/dev/null | grep -oE "pid=[0-9]+" | cut -d= -f2 | sort -u)
+  if [ -n "$remaining_pids" ]; then
+    fail "Port $WEB_SMOKE_TEST_PORT is still occupied by PID(s): $remaining_pids after cleanup. Cannot proceed with smoke test."
+  fi
+  log "Port $WEB_SMOKE_TEST_PORT is verified free."
+fi
+
+# 2. Start the smoke-test Next.js server and capture its PID.
+log "Starting local smoke test of the new release on port $WEB_SMOKE_TEST_PORT..."
+(cd "$WEB_STANDALONE_DIR" && PORT="$WEB_SMOKE_TEST_PORT" HOSTNAME=127.0.0.1 NODE_ENV=staging exec node server.js \
+  >>"$DEPLOY_DIR/logs/web-smoke-test.log" 2>&1) &
+SMOKE_PID=$!
+sleep 1
+
+# 3 & 4. Immediately verify the PID is alive; if exited, print log and fail immediately without curling.
+if ! kill -0 "$SMOKE_PID" 2>/dev/null; then
+  log "--- Smoke test server startup log ($DEPLOY_DIR/logs/web-smoke-test.log) ---"
+  tail -n 25 "$DEPLOY_DIR/logs/web-smoke-test.log" 2>/dev/null | tee -a "$LOG_FILE" || true
+  fail "Smoke-test server process ($SMOKE_PID) exited immediately after startup. Check logs/web-smoke-test.log."
+fi
+
+# 5. Verify the listener on the smoke-test port belongs to SMOKE_PID.
+port_bound=0
+for _ in 1 2 3 4 5; do
+  if ! kill -0 "$SMOKE_PID" 2>/dev/null; then
+    log "--- Smoke test server startup log ($DEPLOY_DIR/logs/web-smoke-test.log) ---"
+    tail -n 25 "$DEPLOY_DIR/logs/web-smoke-test.log" 2>/dev/null | tee -a "$LOG_FILE" || true
+    fail "Smoke-test server process ($SMOKE_PID) died before binding to port $WEB_SMOKE_TEST_PORT."
+  fi
+  bound_pids=$(ss -ltnp "sport = :$WEB_SMOKE_TEST_PORT" 2>/dev/null | grep -oE "pid=[0-9]+" | cut -d= -f2 | sort -u)
+  if [ -z "$bound_pids" ]; then
+    bound_pids=$(fuser "${WEB_SMOKE_TEST_PORT}/tcp" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u || true)
+  fi
+  if [ -n "$bound_pids" ]; then
+    if echo "$bound_pids" | grep -qw "$SMOKE_PID"; then
+      port_bound=1
+      break
+    fi
+    # Also allow if the listening process is a direct child of SMOKE_PID
+    for b_pid in $bound_pids; do
+      b_ppid=$(ps -o ppid= -p "$b_pid" 2>/dev/null | tr -d '[:space:]' || true)
+      if [ "$b_ppid" = "$SMOKE_PID" ]; then
+        port_bound=1
+        break 2
+      fi
+    done
+    fail "Port $WEB_SMOKE_TEST_PORT is listening, but owned by unexpected PID(s): $bound_pids (expected smoke PID $SMOKE_PID). Refusing to smoke-test wrong process."
+  fi
+  sleep 1
+done
+[ "$port_bound" = "1" ] || fail "Smoke-test server ($SMOKE_PID) did not bind to port $WEB_SMOKE_TEST_PORT within timeout."
+
+# 6. Existing smoke-test checks: homepage and all referenced CSS chunks.
 smoke_ok=0
 smoke_attempt=1
 smoke_html=""
