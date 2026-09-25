@@ -36,36 +36,41 @@ export default function EmployeeLayout({
       {/* DEDICATED EMPLOYEE HEADER — strictly isolated from public navigation */}
       <header className="sticky top-0 z-50 bg-cream-light/95 backdrop-blur-md border-b border-gold/40 shadow-xs">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          {/* min-h (not a fixed h-20) lets this row grow if the title wraps
+              on very narrow screens, instead of clipping into the banner
+              below it. gap-2 guarantees breathing room between the identity
+              block and the action button even when both are near their
+              natural width. */}
+          <div className="flex items-center justify-between gap-2 min-h-[5rem] py-2.5">
             {/* BRAND / PORTAL IDENTITY */}
-            <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
               <img
                 src="/images/logo-web.png"
                 alt="ONGC Logo"
-                className="h-10 sm:h-12 w-auto object-contain shrink-0"
+                className="h-9 sm:h-12 w-auto object-contain shrink-0"
               />
-              <div className="h-8 w-px bg-gold/50 hidden sm:block" />
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="font-cinzel font-bold text-base sm:text-lg text-maroon leading-tight tracking-wide">
+              <div className="h-8 w-px bg-gold/50 hidden sm:block shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-cinzel font-bold text-sm sm:text-lg text-maroon leading-tight tracking-wide">
                     ONGC NAVRATRI 2026
                   </span>
-                  <span className="text-[10px] font-bold text-maroon-dark bg-maroon-soft px-2 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline-flex items-center gap-1 border border-maroon/20">
+                  <span className="text-[10px] font-bold text-maroon-dark bg-maroon-soft px-2 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline-flex items-center gap-1 border border-maroon/20 shrink-0">
                     <ShieldCheck className="w-3 h-3" />
                     Employee Portal
                   </span>
                 </div>
-                <span className="text-[11px] font-medium text-ink-soft">
+                <span className="text-[11px] font-medium text-ink-soft hidden min-[420px]:block">
                   Official Personnel &amp; Family Pass Issuance
                 </span>
               </div>
             </div>
 
             {/* ACTION: PASS LOOKUP */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <Link
                 href="/my-tickets"
-                className="px-3.5 py-2 rounded-xl text-xs font-bold text-maroon border border-maroon/30 hover:bg-maroon-soft transition-colors flex items-center gap-1.5"
+                className="px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-maroon border border-maroon/30 hover:bg-maroon-soft transition-colors flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Search className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Find Existing</span> Pass

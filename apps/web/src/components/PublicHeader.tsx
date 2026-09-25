@@ -22,17 +22,20 @@ export default function PublicHeader() {
   return (
     <header className="sticky top-0 z-50 bg-cream-light/95 backdrop-blur-md border-b border-gold/30 shadow-xs transition-all duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          
+        {/* gap-2 guarantees a minimum gutter between the logo block and the
+            mobile controls even at the narrowest widths, where both sides
+            are otherwise close to their natural size. */}
+        <div className="flex items-center justify-between gap-2 h-20">
+
           {/* BRAND LOGO */}
-          <Link href="/" className="flex items-center gap-2 sm:gap-3.5 group shrink-0">
-            <img 
-              src="/images/logo-web.png" 
-              alt="ONGC Navratri Logo" 
-              className="h-9 sm:h-12 w-auto object-contain transition-transform group-hover:scale-105 duration-300"
+          <Link href="/" className="flex items-center gap-2 sm:gap-3.5 group min-w-0">
+            <img
+              src="/images/logo-web.png"
+              alt="ONGC Navratri Logo"
+              className="h-9 sm:h-12 w-auto object-contain shrink-0 transition-transform group-hover:scale-105 duration-300"
             />
-            <div className="flex flex-col">
-              <span className="font-cinzel font-bold text-base sm:text-xl text-maroon leading-tight tracking-wide">
+            <div className="flex flex-col min-w-0">
+              <span className="font-cinzel font-bold text-sm sm:text-xl text-maroon leading-tight tracking-wide truncate">
                 NAVRATRI
               </span>
               <span className="text-[10px] sm:text-[11px] font-semibold text-gold-muted tracking-widest uppercase">
@@ -42,7 +45,11 @@ export default function PublicHeader() {
           </Link>
 
           {/* DESKTOP NAVIGATION */}
-          <nav className="hidden lg:flex items-center gap-6 xl:gap-7">
+          {/* gap-4 at the lg boundary keeps the full row (logo + 7 links +
+              2 action buttons) from squeezing the logo wordmark into a
+              truncated ellipsis at exactly 1024px; it opens back up to a
+              roomier gap-7 once xl gives everything more breathing space. */}
+          <nav className="hidden lg:flex items-center gap-3 xl:gap-7">
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               return (
@@ -63,10 +70,14 @@ export default function PublicHeader() {
           </nav>
 
           {/* DESKTOP ACTIONS */}
-          <div className="hidden lg:flex items-center gap-3">
+          {/* Same lg-vs-xl spacing treatment as the nav above: tighter
+              padding/gap right at the lg boundary so these two buttons
+              don't force the logo wordmark to truncate, opening back up
+              once xl gives the row more room. */}
+          <div className="hidden lg:flex items-center gap-2 xl:gap-3">
             <Link
               href="/my-tickets"
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 border ${
+              className={`px-3 xl:px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 border ${
                 pathname === '/my-tickets'
                   ? 'bg-maroon-soft text-maroon border-maroon'
                   : 'text-maroon border-maroon/30 hover:bg-maroon-soft'
@@ -76,7 +87,7 @@ export default function PublicHeader() {
             </Link>
             <Link
               href="/register"
-              className="px-5 py-2.5 rounded-xl text-xs font-bold bg-maroon text-white shadow-md hover:bg-maroon-dark hover:shadow-lg transition-all duration-200 border border-gold/40 flex items-center gap-2"
+              className="px-4 xl:px-5 py-2.5 rounded-xl text-xs font-bold bg-maroon text-white shadow-md hover:bg-maroon-dark hover:shadow-lg transition-all duration-200 border border-gold/40 flex items-center gap-2"
             >
               <QrCode className="w-4 h-4 text-gold-light" />
               <span>GET YOUR QR PASS</span>
@@ -87,15 +98,19 @@ export default function PublicHeader() {
           <div className="lg:hidden flex items-center gap-1.5 sm:gap-2 shrink-0">
             <Link
               href="/register"
-              className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold bg-maroon text-white shadow-sm flex items-center gap-1 sm:gap-1.5"
+              aria-label="Get your QR pass"
+              className="px-2.5 sm:px-3 py-2 rounded-lg text-xs font-bold bg-maroon text-white shadow-sm flex items-center gap-1 sm:gap-1.5"
             >
-              <QrCode className="w-3.5 h-3.5 text-gold-light" />
-              <span>QR Pass</span>
+              <QrCode className="w-4 h-4 text-gold-light" />
+              {/* Icon-only on the narrowest phones (<380px) so it never
+                  competes for space with the logo wordmark; full label
+                  returns as soon as there's room. */}
+              <span className="hidden min-[380px]:inline">QR Pass</span>
             </Link>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               type="button"
-              className="p-1.5 sm:p-2 rounded-xl text-maroon hover:bg-maroon-soft transition-colors focus:outline-none"
+              className="p-2 rounded-xl text-maroon hover:bg-maroon-soft transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-maroon focus-visible:ring-offset-1"
               aria-label="Toggle Navigation Menu"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

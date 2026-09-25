@@ -738,13 +738,14 @@ export default function EmployeeRegisterPage() {
                   <div className="space-y-4 pt-4 border-t border-stone-100">
                     {/* CPF Field */}
                     <div>
-                      <label className="block text-xs font-bold text-ink mb-1.5">
+                      <label htmlFor="emp-cpf" className="block text-xs font-bold text-ink mb-1.5">
                         CPF No. <span className="text-rose-600">*</span>
                         <span className="ml-2 text-[10px] font-bold text-maroon-dark bg-maroon-soft px-2 py-0.5 rounded-full uppercase tracking-wide">
                           Primary Identifier
                         </span>
                       </label>
                       <input
+                        id="emp-cpf"
                         type="text"
                         value={common.cpf}
                         onChange={(e) =>
@@ -762,14 +763,16 @@ export default function EmployeeRegisterPage() {
 
                     {/* Employee Name */}
                     <div>
-                      <label className="block text-xs font-bold text-ink mb-1.5">
+                      <label htmlFor="emp-name" className="block text-xs font-bold text-ink mb-1.5">
                         Employee Full Name <span className="text-rose-600">*</span>
                       </label>
                       <input
+                        id="emp-name"
                         type="text"
                         value={common.name}
                         onChange={(e) => setCommon((prev) => ({ ...prev, name: e.target.value }))}
                         required
+                        autoComplete="name"
                         placeholder="e.g. Ramesh Kumar Patel"
                         className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                       />
@@ -777,10 +780,11 @@ export default function EmployeeRegisterPage() {
 
                     {/* Mobile Number */}
                     <div>
-                      <label className="block text-xs font-bold text-ink mb-1.5">
+                      <label htmlFor="emp-mobile" className="block text-xs font-bold text-ink mb-1.5">
                         Mobile No. (10 Digits) <span className="text-rose-600">*</span>
                       </label>
                       <input
+                        id="emp-mobile"
                         type="tel"
                         value={common.mobile}
                         onChange={(e) =>
@@ -794,6 +798,7 @@ export default function EmployeeRegisterPage() {
                         maxLength={10}
                         minLength={10}
                         inputMode="numeric"
+                        autoComplete="tel"
                         placeholder="e.g. 9876543210"
                         className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                       />
@@ -876,23 +881,26 @@ export default function EmployeeRegisterPage() {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-[11px] font-bold text-ink mb-1">
+                            <label htmlFor={`fam-name-${idx}`} className="block text-[11px] font-bold text-ink mb-1">
                               Full Name <span className="text-rose-600">*</span>
                             </label>
                             <input
+                              id={`fam-name-${idx}`}
                               type="text"
                               value={fam.name}
                               onChange={(e) => updateFamilyMemberName(idx, e.target.value)}
                               required
+                              autoComplete="name"
                               placeholder="e.g. Meena Patel"
                               className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                             />
                           </div>
                           <div>
-                            <label className="block text-[11px] font-bold text-ink mb-1">
+                            <label htmlFor={`fam-mobile-${idx}`} className="block text-[11px] font-bold text-ink mb-1">
                               Mobile No. (10 Digits) <span className="text-rose-600">*</span>
                             </label>
                             <input
+                              id={`fam-mobile-${idx}`}
                               type="tel"
                               value={fam.mobileNo}
                               onChange={(e) => updateFamilyMemberMobile(idx, e.target.value)}
@@ -901,6 +909,7 @@ export default function EmployeeRegisterPage() {
                               maxLength={10}
                               minLength={10}
                               inputMode="numeric"
+                              autoComplete="tel"
                               placeholder="e.g. 9876543210"
                               className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                             />

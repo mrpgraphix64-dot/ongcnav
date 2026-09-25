@@ -676,14 +676,16 @@ export default function RegisterPage() {
                   </h3>
 
                   <div>
-                    <label className="block text-xs font-bold text-ink mb-1.5">
+                    <label htmlFor="reg-name" className="block text-xs font-bold text-ink mb-1.5">
                       Full Name <span className="text-rose-600">*</span>
                     </label>
                     <input
+                      id="reg-name"
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       required
+                      autoComplete="name"
                       placeholder="e.g. Priyesh Shah"
                       className="w-full px-4 py-3 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                     />
@@ -691,10 +693,11 @@ export default function RegisterPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-ink mb-1.5">
+                      <label htmlFor="reg-phone" className="block text-xs font-bold text-ink mb-1.5">
                         Mobile No. (10 Digits) <span className="text-rose-600">*</span>
                       </label>
                       <input
+                        id="reg-phone"
                         type="tel"
                         value={phone}
                         onChange={(e) =>
@@ -705,20 +708,24 @@ export default function RegisterPage() {
                         maxLength={10}
                         minLength={10}
                         inputMode="numeric"
+                        autoComplete="tel"
                         placeholder="e.g. 9876543210"
                         className="w-full px-4 py-3 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-ink mb-1.5">
+                      <label htmlFor="reg-email" className="block text-xs font-bold text-ink mb-1.5">
                         Email Address <span className="text-rose-600">*</span>
                       </label>
                       <input
+                        id="reg-email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
+                        inputMode="email"
+                        autoComplete="email"
                         placeholder="e.g. priyesh@example.com"
                         className="w-full px-4 py-3 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                       />
