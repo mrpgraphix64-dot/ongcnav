@@ -681,18 +681,18 @@ export default function ScannerPage() {
               </div>
 
               {/* Viewport Box — html5-qrcode renders the live camera feed
-                  directly into #qr-scanner-viewport. Using explicit non-flex
-                  block container with hardened video styling overrides to prevent
-                  black screen collapsing on mobile Chrome. */}
-              <div className="relative w-full aspect-square max-h-[min(46vh,400px)] min-h-[260px] bg-black rounded-2xl overflow-hidden">
+                  directly into #qr-scanner-viewport. Preserves native video
+                  aspect ratio (w-full, h-auto, no object-cover) to guarantee
+                  accurate geometric mapping between displayed video and decoding canvas. */}
+              <div className="relative w-full aspect-[4/3] max-h-[min(50vh,420px)] min-h-[260px] bg-black rounded-2xl overflow-hidden flex items-center justify-center">
                 <div
                   id={SCANNER_ELEMENT_ID}
-                  className="w-full h-full min-h-[260px] [&_video]:!w-full [&_video]:!h-full [&_video]:!object-cover [&_video]:!block [&_video]:!m-0 [&_canvas]:!hidden [&_#qr-shaded-region]:!hidden"
+                  className="w-full [&_video]:!w-full [&_video]:!h-auto [&_video]:!block [&_video]:!m-0 [&_canvas]:!hidden [&_#qr-shaded-region]:!hidden"
                 />
 
                 {!cameraError && cameraReady && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-                    <div className="relative w-[70%] aspect-square">
+                    <div className="relative w-[70%] max-h-[85%] aspect-square">
                       <span className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-gold rounded-tl-xl" />
                       <span className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-gold rounded-tr-xl" />
                       <span className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-gold rounded-bl-xl" />
