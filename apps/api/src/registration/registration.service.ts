@@ -86,6 +86,7 @@ export class RegistrationService {
         data: {
           registrationType: RegistrationType.EMPLOYEE as any,
           employeeId: employee.id,
+          email: dto.email.trim().toLowerCase(),
           ticketNumber: employeeTicketNumber,
           qrCodeToken: employeeQrToken,
           status: AttendeeStatus.ACTIVE as any,

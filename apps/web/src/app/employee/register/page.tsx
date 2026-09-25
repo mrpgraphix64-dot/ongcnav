@@ -99,6 +99,7 @@ interface CommonEmployeeData {
   cpf: string;
   name: string;
   mobile: string;
+  email: string;
   photo: PhotoState;
 }
 
@@ -329,6 +330,7 @@ export default function EmployeeRegisterPage() {
     cpf: '',
     name: '',
     mobile: '',
+    email: '',
     photo: { ...EMPTY_PHOTO },
   });
 
@@ -487,6 +489,10 @@ export default function EmployeeRegisterPage() {
     const mobile = common.mobile.trim();
     if (!mobile) return 'Please enter the employee 10-digit mobile number.';
     if (!INDIAN_MOBILE_REGEX.test(mobile)) return 'Employee mobile number must be exactly 10 digits starting with 6, 7, 8, or 9.';
+    const email = common.email.trim();
+    if (!email) return 'Email address is required because your digital QR pass will be sent here.';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return 'Please enter a valid email address.';
     return null;
   };
 
@@ -550,7 +556,7 @@ export default function EmployeeRegisterPage() {
       formData.append('name', common.name.trim());
       formData.append('phone', cleanMobile);
       formData.append('cpf', common.cpf.trim().toUpperCase());
-      formData.append('email', `${common.cpf.trim().toLowerCase()}@ongc.co.in`);
+      formData.append('email', common.email.trim().toLowerCase());
       formData.append('designation', 'ONGC Employee');
       formData.append('department', 'EWC Ahmedabad');
       formData.append('employeeCategory', category);
@@ -599,7 +605,7 @@ export default function EmployeeRegisterPage() {
     setStepError('');
     setStep(1);
     removeEmployeePhoto();
-    setCommon({ cpf: '', name: '', mobile: '', photo: { ...EMPTY_PHOTO } });
+    setCommon({ cpf: '', name: '', mobile: '', email: '', photo: { ...EMPTY_PHOTO } });
     setCategory(null);
     setEmployeeDates([]);
     familyMembers.forEach((m) => {
@@ -802,6 +808,27 @@ export default function EmployeeRegisterPage() {
                         placeholder="e.g. 9876543210"
                         className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                       />
+                    </div>
+
+                    {/* Email Address */}
+                    <div>
+                      <label htmlFor="emp-email" className="block text-xs font-bold text-ink mb-1.5">
+                        Email Address <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        id="emp-email"
+                        type="email"
+                        value={common.email}
+                        onChange={(e) => setCommon((prev) => ({ ...prev, email: e.target.value }))}
+                        required
+                        inputMode="email"
+                        autoComplete="email"
+                        placeholder="e.g. ramesh.patel@ongc.co.in"
+                        className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
+                      />
+                      <p className="text-[11px] text-stone-500 mt-1">
+                        Your QR pass will be sent to this email.
+                      </p>
                     </div>
 
                     {/* Photo Upload */}
@@ -1020,7 +1047,7 @@ export default function EmployeeRegisterPage() {
                   <div className="flex-1 space-y-1 text-center sm:text-left">
                     <div className="font-outfit font-extrabold text-base text-ink">{common.name}</div>
                     <div className="text-xs text-ink-soft">
-                      CPF: <span className="font-mono font-bold text-ink">{common.cpf}</span> &bull; Mobile: {common.mobile}
+                      CPF: <span className="font-mono font-bold text-ink">{common.cpf}</span> &bull; Mobile: {common.mobile} &bull; Email: {common.email}
                     </div>
                     <div className="text-xs font-bold text-maroon-dark bg-maroon-soft inline-block px-2.5 py-0.5 rounded-full mt-1">
                       {EMPLOYEE_CATEGORIES.find((c) => c.value === category)?.label}
