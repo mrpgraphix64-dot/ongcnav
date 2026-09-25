@@ -243,13 +243,30 @@ export class RegistrationService {
     };
   }
 
-  async findByCpf(cpf: string, phoneLast4?: string) {
-    const cleanCpf = cpf.trim().toUpperCase();
+  async findByCpf(cpf: string, phoneLast4: string) {
+    const cleanCpf = (cpf || '').trim().toUpperCase();
+    if (!cleanCpf) {
+      throw new BadRequestException('CPF number is required');
+    }
+
+    const cleanPhone4 = (phoneLast4 || '').trim();
+    if (!cleanPhone4) {
+      throw new BadRequestException(
+        'Security verification required: registered phone last 4 digits must be provided.',
+      );
+    }
+    if (!/^\d{4}$/.test(cleanPhone4)) {
+      throw new BadRequestException(
+        'Security verification failed: phone verification requires exactly 4 digits.',
+      );
+    }
+
     const employee = await this.prisma.employee.findUnique({
       where: { cpf: cleanCpf },
       include: {
         familyMembers: true,
         attendees: {
+          where: { registrationType: RegistrationType.EMPLOYEE },
           include: {
             familyMember: true,
           },
@@ -261,8 +278,7 @@ export class RegistrationService {
       throw new NotFoundException(`No registration found for CPF: ${cleanCpf}`);
     }
 
-    // If phoneLast4 is provided, verify it matches
-    if (phoneLast4 && !employee.phone.endsWith(phoneLast4)) {
+    if (!employee.phone.endsWith(cleanPhone4)) {
       throw new BadRequestException('Security verification failed. Phone number does not match.');
     }
 

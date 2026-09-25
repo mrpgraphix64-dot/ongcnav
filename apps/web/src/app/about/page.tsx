@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
 import PageHero from '@/components/PageHero';
-import { Sparkles, QrCode, ArrowRight, Users, Flame, Music, ShieldCheck, HeartHandshake, Ticket } from 'lucide-react';
+import { Sparkles, ArrowRight, Users, Flame, Music, ShieldCheck, HeartHandshake, Ticket } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'About ONGC Navratri 2026 | Ahmedabad',
@@ -51,15 +51,16 @@ export default function AboutPage() {
 
                 <div className="pt-2 flex flex-wrap gap-4">
                   <Link
-                    href="/register"
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-maroon text-white shadow-md hover:bg-maroon-dark transition-all border border-gold/40"
+                    href="/bookpass"
+                    aria-label="Book your pass"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-gold text-maroon-dark shadow-md hover:bg-gold-light transition-all border border-gold/40"
                   >
-                    <QrCode className="w-4 h-4 text-gold-light" />
-                    <span>GET YOUR QR PASS</span>
+                    <Ticket className="w-4 h-4 text-maroon-dark" />
+                    <span>BOOK YOUR PASS</span>
                   </Link>
                   <Link
                     href="/event"
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold text-maroon bg-white hover:bg-cream-soft border border-maroon/30 transition-all"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-maroon text-white shadow-md hover:bg-maroon-dark transition-all border border-gold/40"
                   >
                     <span>Explore Event Features</span>
                     <ArrowRight className="w-4 h-4" />
@@ -174,15 +175,22 @@ export default function AboutPage() {
                   </div>
                   <h4 className="font-cinzel font-bold text-lg text-ink">Join The Celebration</h4>
                   <p className="text-xs text-ink-soft max-w-sm mx-auto">
-                    Ensure a seamless entry for you and your family members by generating your official digital QR pass in advance.
+                    Ensure a seamless entry for you and your family members by verifying your official digital pass in advance.
                   </p>
-                  <div className="pt-2">
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
                     <Link
-                      href="/register"
+                      href="/bookpass"
+                      aria-label="Book your pass"
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-colors shadow-md border border-gold/40"
+                    >
+                      <Ticket className="w-4 h-4 text-maroon-dark" />
+                      <span>BOOK YOUR PASS</span>
+                    </Link>
+                    <Link
+                      href="/my-tickets"
                       className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-maroon text-white hover:bg-maroon-dark transition-colors shadow-md border border-gold/40"
                     >
-                      <QrCode className="w-4 h-4 text-gold-light" />
-                      <span>Register for Passes</span>
+                      <span>Check Ticket Status</span>
                     </Link>
                   </div>
                 </div>

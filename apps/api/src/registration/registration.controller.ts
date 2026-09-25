@@ -134,10 +134,10 @@ export class RegistrationController {
   }
 
   @Get('my-registration/:cpf')
-  @ApiOperation({ summary: 'Lookup all registered passes by CPF' })
+  @ApiOperation({ summary: 'Lookup all registered passes by CPF with phone last 4 digits verification' })
   async getMyRegistration(
     @Param('cpf') cpf: string,
-    @Query('phoneLast4') phoneLast4?: string,
+    @Query('phoneLast4') phoneLast4: string,
   ) {
     return this.registrationService.findByCpf(cpf, phoneLast4);
   }

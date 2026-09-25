@@ -18,7 +18,7 @@ import {
   Cross,
   Car,
   HelpCircle,
-  QrCode,
+  Search,
 } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -200,19 +200,19 @@ export default function EventPage() {
             {/* IMPORTANT GUIDELINES BANNER */}
             <div className="spirit-festive-bg rounded-3xl p-8 sm:p-12 text-cream-light border-2 border-gold/40 shadow-xl flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="space-y-3 max-w-xl text-center md:text-left">
-                <span className="text-xs font-bold text-gold uppercase tracking-widest">Entry Passes Required</span>
+                <span className="text-xs font-bold text-gold uppercase tracking-widest">Entry Guidelines</span>
                 <h3 className="font-cinzel font-bold text-2xl sm:text-3xl text-gold-light">Ready to join the Garba circles?</h3>
                 <p className="text-xs sm:text-sm text-cream/80 leading-relaxed">
-                  Entry to the ONGC Ground is strictly governed by authorized digital QR passes. Register yourself and your family members now to obtain instant digital passes.
+                  Entry to the ONGC Ground is strictly governed by authorized digital passes. Check your ticket status or review entry guidelines before you arrive.
                 </p>
               </div>
               <div className="shrink-0 flex flex-col sm:flex-row gap-3.5">
                 <Link
-                  href="/register"
+                  href="/my-tickets"
                   className="px-7 py-3.5 rounded-xl text-xs font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-all shadow-md flex items-center justify-center gap-2"
                 >
-                  <QrCode className="w-4 h-4" />
-                  <span>GET YOUR QR PASS</span>
+                  <Search className="w-4 h-4" />
+                  <span>CHECK TICKET STATUS</span>
                 </Link>
                 <Link
                   href="/information"

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { QrCode, Menu, X } from 'lucide-react';
+import { Menu, X, Ticket } from 'lucide-react';
 
 export default function PublicHeader() {
   const pathname = usePathname();
@@ -70,10 +70,6 @@ export default function PublicHeader() {
           </nav>
 
           {/* DESKTOP ACTIONS */}
-          {/* Same lg-vs-xl spacing treatment as the nav above: tighter
-              padding/gap right at the lg boundary so these two buttons
-              don't force the logo wordmark to truncate, opening back up
-              once xl gives the row more room. */}
           <div className="hidden lg:flex items-center gap-2 xl:gap-3">
             <Link
               href="/my-tickets"
@@ -86,26 +82,26 @@ export default function PublicHeader() {
               Check Ticket
             </Link>
             <Link
-              href="/register"
+              href="/bookpass"
+              aria-label="Book your pass"
+              data-testid="book-pass-button"
               className="px-4 xl:px-5 py-2.5 rounded-xl text-xs font-bold bg-maroon text-white shadow-md hover:bg-maroon-dark hover:shadow-lg transition-all duration-200 border border-gold/40 flex items-center gap-2"
             >
-              <QrCode className="w-4 h-4 text-gold-light" />
-              <span>GET YOUR QR PASS</span>
+              <Ticket className="w-4 h-4 text-gold-light" />
+              <span>BOOK YOUR PASS</span>
             </Link>
           </div>
 
           {/* MOBILE HEADER CONTROLS */}
           <div className="lg:hidden flex items-center gap-1.5 sm:gap-2 shrink-0">
             <Link
-              href="/register"
-              aria-label="Get your QR pass"
+              href="/bookpass"
+              aria-label="Book your pass"
+              data-testid="book-pass-mobile-button"
               className="px-2.5 sm:px-3 py-2 rounded-lg text-xs font-bold bg-maroon text-white shadow-sm flex items-center gap-1 sm:gap-1.5"
             >
-              <QrCode className="w-4 h-4 text-gold-light" />
-              {/* Icon-only on the narrowest phones (<380px) so it never
-                  competes for space with the logo wordmark; full label
-                  returns as soon as there's room. */}
-              <span className="hidden min-[380px]:inline">QR Pass</span>
+              <Ticket className="w-4 h-4 text-gold-light" />
+              <span className="hidden min-[380px]:inline">BOOK PASS</span>
             </Link>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -150,12 +146,13 @@ export default function PublicHeader() {
           </nav>
           <div className="pt-3 border-t border-stone-200 flex flex-col gap-2.5">
             <Link
-              href="/register"
+              href="/bookpass"
+              aria-label="Book your pass"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-center py-3 rounded-xl text-sm font-bold bg-maroon text-white shadow-md flex items-center justify-center gap-2 border border-gold/40"
             >
-              <QrCode className="w-4 h-4 text-gold-light" />
-              <span>GET YOUR QR PASS</span>
+              <Ticket className="w-4 h-4 text-gold-light" />
+              <span>BOOK YOUR PASS</span>
             </Link>
             <Link
               href="/my-tickets"

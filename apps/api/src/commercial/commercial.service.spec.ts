@@ -563,6 +563,7 @@ describe('CommercialService', () => {
     const mockPaidOrder = {
       id: BigInt(5),
       orderNumber: 'ORD-COMM-20261011-LOOKUP1',
+      registrationType: RegistrationType.COMMERCIAL,
       orderStatus: OrderStatus.PAID,
       paymentStatus: PaymentStatus.CAPTURED,
       customerName: 'Suresh Trivedi',
@@ -618,6 +619,33 @@ describe('CommercialService', () => {
 
       await expect(service.getOrder('ORD-COMM-NONEXISTENT')).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it('throws NotFoundException when order is not of RegistrationType.COMMERCIAL', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce({
+        ...mockPaidOrder,
+        registrationType: RegistrationType.EMPLOYEE,
+      });
+
+      await expect(service.getOrder('ORD-COMM-20261011-LOOKUP1', '9876543210')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('enforces RegistrationType.COMMERCIAL filter on attendees relation to prevent retrieving employee attendees', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockPaidOrder);
+
+      await service.getOrder('ORD-COMM-20261011-LOOKUP1', '9876543210');
+
+      expect(prisma.commercialOrder.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            attendees: expect.objectContaining({
+              where: { registrationType: RegistrationType.COMMERCIAL },
+            }),
+          }),
+        }),
       );
     });
   });

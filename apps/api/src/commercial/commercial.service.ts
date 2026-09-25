@@ -441,10 +441,14 @@ export class CommercialService {
   async getOrder(orderNumber: string, mobileQuery?: string) {
     const order = await this.prisma.commercialOrder.findUnique({
       where: { orderNumber },
-      include: { attendees: true },
+      include: {
+        attendees: {
+          where: { registrationType: RegistrationType.COMMERCIAL },
+        },
+      },
     });
 
-    if (!order) {
+    if (!order || order.registrationType !== RegistrationType.COMMERCIAL) {
       throw new NotFoundException(`Order ${orderNumber} not found.`);
     }
 

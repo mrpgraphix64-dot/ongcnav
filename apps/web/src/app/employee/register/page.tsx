@@ -650,10 +650,10 @@ export default function EmployeeRegisterPage() {
               </Link>
             ) : (
               <Link
-                href={`/my-tickets?cpf=${common.cpf.trim().toUpperCase()}`}
+                href="/employee/my-tickets"
                 className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gold text-maroon-deep font-bold text-sm hover:bg-gold-light transition-all shadow-md inline-flex items-center justify-center gap-2 border border-maroon/20"
               >
-                <span>View All Passes by CPF</span>
+                <span>View All Passes</span>
               </Link>
             )}
 

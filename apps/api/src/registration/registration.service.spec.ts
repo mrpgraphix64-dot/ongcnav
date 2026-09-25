@@ -256,43 +256,82 @@ describe('RegistrationService', () => {
   });
 
   describe('findByCpf', () => {
-    it('returns each pass with its own independent bookingDays', async () => {
-      prisma.employee.findUnique.mockResolvedValue({
-        id: BigInt(1),
-        cpf: 'CPF1',
-        name: 'Amit',
-        designation: 'ONGC Employee',
-        department: 'EWC',
-        employeeCategory: EmployeeCategory.REGULAR,
-        phone: '9876543210',
-        photoPath: null,
-        bookingDays: ['2026-09-23'],
-        familyMembers: [],
-        attendees: [
-          {
-            id: BigInt(10),
-            ticketNumber: 'TK-1',
-            qrCodeToken: 'tok-1',
-            status: AttendeeStatus.ACTIVE,
-            familyMemberId: null,
-            bookingDays: ['2026-10-11'],
-            familyMember: null,
-          },
-          {
-            id: BigInt(11),
-            ticketNumber: 'TK-2',
-            qrCodeToken: 'tok-2',
-            status: AttendeeStatus.ACTIVE,
-            familyMemberId: BigInt(5),
-            bookingDays: ['2026-10-14'],
-            familyMember: { name: 'Sunita', relation: 'Spouse', photoPath: null },
-          },
-        ],
-      });
+    const mockEmployee = {
+      id: BigInt(1),
+      cpf: 'CPF1',
+      name: 'Amit',
+      designation: 'ONGC Employee',
+      department: 'EWC',
+      employeeCategory: EmployeeCategory.REGULAR,
+      phone: '9876543210',
+      photoPath: null,
+      bookingDays: ['2026-09-23'],
+      familyMembers: [],
+      attendees: [
+        {
+          id: BigInt(10),
+          ticketNumber: 'TK-1',
+          qrCodeToken: 'tok-1',
+          status: AttendeeStatus.ACTIVE,
+          familyMemberId: null,
+          bookingDays: ['2026-10-11'],
+          familyMember: null,
+        },
+        {
+          id: BigInt(11),
+          ticketNumber: 'TK-2',
+          qrCodeToken: 'tok-2',
+          status: AttendeeStatus.ACTIVE,
+          familyMemberId: BigInt(5),
+          bookingDays: ['2026-10-14'],
+          familyMember: { name: 'Sunita', relation: 'Spouse', photoPath: null },
+        },
+      ],
+    };
 
-      const result = await service.findByCpf('CPF1');
+    it('rejects when CPF is empty or missing', async () => {
+      await expect(service.findByCpf('', '3210')).rejects.toThrow(BadRequestException);
+      await expect(service.findByCpf('   ', '3210')).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects when phone last 4 digits are missing or not provided', async () => {
+      await expect(service.findByCpf('CPF1', '')).rejects.toThrow(BadRequestException);
+      await expect(service.findByCpf('CPF1', '   ')).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects when phone last 4 digits are not exactly 4 digits', async () => {
+      await expect(service.findByCpf('CPF1', '12')).rejects.toThrow(BadRequestException);
+      await expect(service.findByCpf('CPF1', '12345')).rejects.toThrow(BadRequestException);
+      await expect(service.findByCpf('CPF1', 'abcd')).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects when phone last 4 digits do not match registered employee phone', async () => {
+      prisma.employee.findUnique.mockResolvedValue(mockEmployee);
+      await expect(service.findByCpf('CPF1', '9999')).rejects.toThrow(BadRequestException);
+    });
+
+    it('succeeds when both valid CPF and correct phone last 4 digits match', async () => {
+      prisma.employee.findUnique.mockResolvedValue(mockEmployee);
+      const result = await service.findByCpf('CPF1', '3210');
+      expect(result.employee.cpf).toBe('CPF1');
+      expect(result.employee.name).toBe('Amit');
+      expect(result.passes).toHaveLength(2);
       expect(result.passes[0].bookingDays).toEqual(['2026-10-11']);
       expect(result.passes[1].bookingDays).toEqual(['2026-10-14']);
+    });
+
+    it('enforces RegistrationType.EMPLOYEE on attendee query to prevent retrieving commercial attendees', async () => {
+      prisma.employee.findUnique.mockResolvedValue(mockEmployee);
+      await service.findByCpf('CPF1', '3210');
+      expect(prisma.employee.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            attendees: expect.objectContaining({
+              where: { registrationType: RegistrationType.EMPLOYEE },
+            }),
+          }),
+        }),
+      );
     });
   });
 });

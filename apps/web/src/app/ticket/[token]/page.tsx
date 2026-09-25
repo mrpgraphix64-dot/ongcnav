@@ -81,7 +81,14 @@ export default function TicketPassPage() {
 
   const attendeeName = ticket.attendeeName || ticket.name;
   const ticketId = ticket.ticketNumber || ticket.ticket_id || token;
-  const category = ticket.relation || ticket.category || 'ONGC Attendee';
+  const isCommercial =
+    ticket.registrationType === 'COMMERCIAL' ||
+    ticket.category === 'Commercial Pass' ||
+    ticket.relation === 'Commercial Pass' ||
+    !ticket.employee;
+  const category = isCommercial
+    ? 'Commercial Pass'
+    : (ticket.relation || ticket.category || 'ONGC Attendee');
   const waMessage = encodeURIComponent(
     `Hi ${attendeeName},\nHere is your official Entry Pass for ONGC Navratri 2026!\n\nTicket ID: ${ticketId}\nCategory: ${category}\nVenue: ONGC Ground, Chandkheda, Ahmedabad\nDate: 11-19 Oct 2026\n\nPlease show this QR ticket at the entry gate.`
   );
@@ -96,7 +103,7 @@ export default function TicketPassPage() {
         {/* Action Bar Top */}
         <div className="flex items-center justify-between print:hidden">
           <Link
-            href="/my-tickets"
+            href={isCommercial ? '/my-tickets' : '/employee/my-tickets'}
             className="text-xs text-maroon hover:underline flex items-center gap-1.5 font-bold"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to Pass Search

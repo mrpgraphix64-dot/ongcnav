@@ -1,7 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
 import {
-  QrCode,
   Calendar,
   Clock,
   MapPin,
@@ -35,11 +34,12 @@ export default function PublicFooter() {
             </p>
             <div className="pt-2">
               <Link
-                href="/register"
+                href="/bookpass"
+                aria-label="Book your pass"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-colors shadow-xs"
               >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>GET YOUR QR PASS</span>
+                <Ticket className="w-3.5 h-3.5" />
+                <span>BOOK YOUR PASS</span>
               </Link>
             </div>
           </div>

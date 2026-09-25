@@ -138,16 +138,16 @@ export default function InformationPage() {
             {/* ACTION BANNER */}
             <div className="spirit-festive-bg rounded-3xl p-8 sm:p-10 text-cream-light border-2 border-gold/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
               <div className="space-y-2">
-                <h3 className="font-cinzel font-bold text-xl sm:text-2xl text-gold-light">Have you registered for your pass yet?</h3>
+                <h3 className="font-cinzel font-bold text-xl sm:text-2xl text-gold-light">Have you checked your pass status?</h3>
                 <p className="text-xs sm:text-sm text-cream/80 max-w-lg">
-                  Takes less than a minute. Secure your family passes for all 9 nights instantly.
+                  Takes less than a minute. Verify your official entry pass status before arriving at the venue.
                 </p>
               </div>
               <Link
-                href="/register"
+                href="/my-tickets"
                 className="px-6 py-3 rounded-xl text-xs font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-all shadow-md shrink-0 flex items-center gap-2"
               >
-                <span>REGISTER NOW</span>
+                <span>CHECK TICKET STATUS</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>

@@ -69,7 +69,7 @@ export default function EmployeeLayout({
             {/* ACTION: PASS LOOKUP */}
             <div className="flex items-center gap-2 shrink-0">
               <Link
-                href="/my-tickets"
+                href="/employee/my-tickets"
                 className="px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-maroon border border-maroon/30 hover:bg-maroon-soft transition-colors flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Search className="w-3.5 h-3.5" />

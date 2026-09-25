@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
 import PageHero from '@/components/PageHero';
-import { Clock, Calendar, QrCode } from 'lucide-react';
+import { Clock, Calendar, Search } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Event Schedule & Timings | ONGC Navratri 2026',
@@ -153,20 +153,20 @@ export default function SchedulePage() {
               </div>
             </div>
 
-            {/* REGISTRATION CTA BOX */}
+            {/* TICKET LOOKUP CTA BOX */}
             <div className="spirit-festive-bg rounded-3xl p-8 sm:p-10 text-cream-light border-2 border-gold/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
               <div className="space-y-2">
                 <h3 className="font-cinzel font-bold text-xl sm:text-2xl text-gold-light">Plan your attendance with valid passes</h3>
                 <p className="text-xs sm:text-sm text-cream/80 max-w-lg">
-                  Remember to register your QR pass in advance to ensure rapid, hassle-free entry through the express gates.
+                  Check your digital ticket pass status in advance to ensure rapid, hassle-free entry through the express gates.
                 </p>
               </div>
               <Link
-                href="/register"
+                href="/my-tickets"
                 className="px-6 py-3 rounded-xl text-xs font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-all shadow-md shrink-0 flex items-center gap-2"
               >
-                <QrCode className="w-4 h-4" />
-                <span>GET YOUR QR PASS</span>
+                <Search className="w-4 h-4" />
+                <span>CHECK TICKET STATUS</span>
               </Link>
             </div>
 

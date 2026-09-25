@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import {
   Sparkles,
-  QrCode,
+  Ticket,
   ArrowRight,
   Crown,
   Radio,
@@ -162,18 +162,18 @@ export default function HomePage() {
             {/* HERO CTAS */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/register"
+                href="/bookpass"
+                aria-label="Book your pass"
                 className="w-full sm:w-auto px-8 py-4 rounded-2xl text-sm sm:text-base font-bold bg-gold text-maroon-deep shadow-xl hover:bg-gold-light hover:scale-105 transition-all duration-300 border border-white/40 flex items-center justify-center gap-2.5"
               >
-                <QrCode className="w-5 h-5" />
-                <span>GET YOUR QR PASS</span>
+                <Ticket className="w-5 h-5 text-maroon-deep" />
+                <span>BOOK YOUR PASS</span>
               </Link>
               <Link
-                href="/event"
+                href="/my-tickets"
                 className="w-full sm:w-auto px-8 py-4 rounded-2xl text-sm sm:text-base font-bold bg-white/10 text-white hover:bg-white/20 transition-all duration-300 border border-white/30 backdrop-blur-md flex items-center justify-center gap-2"
               >
-                <span>EXPLORE EVENT</span>
-                <ArrowRight className="w-4 h-4 text-gold-light" />
+                <span>CHECK TICKET STATUS</span>
               </Link>
             </div>
           </div>
@@ -800,25 +800,26 @@ export default function HomePage() {
 
           <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
             <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-gold/20 border border-gold/40 text-gold-light text-xs font-bold uppercase tracking-widest shadow-xs">
-              <QrCode className="w-3.5 h-3.5" />
-              <span>PASSES NOW OPEN</span>
+              <Ticket className="w-3.5 h-3.5" />
+              <span>COMMERCIAL PASSES OPEN</span>
             </div>
 
             <h2 className="font-cinzel font-extrabold text-3xl sm:text-5xl text-gold-light tracking-wide">
-              Get Your Digital QR Pass
+              Book Your Digital Entry Pass
             </h2>
 
             <p className="text-sm sm:text-base text-cream/80 max-w-2xl mx-auto leading-relaxed font-light">
-              Register as an ONGC employee or add your family members to generate authorized instant digital passes for hassle-free entry at the ONGC Ground.
+              Secure your Daily or Season pass for ONGC Navratri 2026. Instant digital delivery with fast-track entry at the venue.
             </p>
 
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/register"
+                href="/bookpass"
+                aria-label="Book your pass"
                 className="w-full sm:w-auto px-9 py-4 rounded-2xl text-sm font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-all duration-300 shadow-xl border border-white/40 flex items-center justify-center gap-2.5"
               >
-                <QrCode className="w-5 h-5" />
-                <span>REGISTER FOR PASSES</span>
+                <Ticket className="w-4 h-4 text-maroon-dark" />
+                <span>BOOK YOUR PASS</span>
               </Link>
               <Link
                 href="/my-tickets"

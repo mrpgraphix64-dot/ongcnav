@@ -56,7 +56,7 @@ interface GeneratedPass {
   bookingDays: string[];
 }
 
-export default function RegisterPage() {
+export default function BookPassPage() {
   // Form State
   const [ticketType, setTicketType] = useState<'COMMERCIAL_DAILY' | 'COMMERCIAL_SEASON'>('COMMERCIAL_DAILY');
   const [name, setName] = useState('');
@@ -308,7 +308,7 @@ export default function RegisterPage() {
         {/* PAGE HERO */}
         <PageHero
           badge="OFFICIAL TICKETS"
-          title="GET YOUR ENTRY PASS"
+          title="BOOK YOUR ENTRY PASS"
           subtitle="Official Commercial & Public Passes for ONGC Navratri 2026, Ahmedabad."
           breadcrumb="Commercial Passes"
         />
@@ -395,6 +395,12 @@ export default function RegisterPage() {
                     </div>
 
                     <div className="space-y-1.5 text-xs text-ink-soft border-t border-stone-100 pt-3">
+                      <div className="flex items-center justify-between">
+                        <span>Category:</span>
+                        <span className="font-bold text-ink text-[11px]">
+                          Commercial Pass
+                        </span>
+                      </div>
                       <div className="flex items-center justify-between">
                         <span>Event Dates:</span>
                         <span className="font-bold text-ink text-[11px]">
@@ -783,6 +789,8 @@ export default function RegisterPage() {
                   <button
                     type="submit"
                     disabled={submitting || verifying}
+                    aria-label="Book your pass"
+                    data-testid="book-pass-submit"
                     className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-105 text-[#7A1930] font-outfit font-black text-base sm:text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2.5 border border-[#7A1930]/20 disabled:opacity-50 cursor-pointer"
                   >
                     {submitting ? (
@@ -793,7 +801,7 @@ export default function RegisterPage() {
                     ) : (
                       <>
                         <Ticket className="w-5 h-5 text-[#7A1930]" />
-                        <span>Book Your Pass &bull; ₹{estimatedTotal.toLocaleString('en-IN')}</span>
+                        <span>BOOK YOUR PASS &bull; ₹{estimatedTotal.toLocaleString('en-IN')}</span>
                       </>
                     )}
                   </button>
