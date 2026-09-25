@@ -6,6 +6,9 @@ import {
   selectBestCamera,
   formatCameraError,
   ensureVideoStreaming,
+  validateCameraVideoFeed,
+  getScannerStatusInstruction,
+  safeStopScannerInstance,
 } from './scanner-utils';
 
 describe('Scanner Camera/API Duplicate Prevention (shouldProcessScan)', () => {
@@ -170,5 +173,127 @@ describe('Scanner Camera Error Formatting (formatCameraError)', () => {
 
     const defaultMsg = formatCameraError(null);
     expect(defaultMsg).toContain('Could not access the camera');
+  });
+});
+
+describe('Scanner Camera Feed Validation (validateCameraVideoFeed)', () => {
+  it('returns ok: false when video element is null or undefined', () => {
+    expect(validateCameraVideoFeed(null).ok).toBe(false);
+    expect(validateCameraVideoFeed(undefined).ok).toBe(false);
+  });
+
+  it('returns ok: false when video element has zero width or height (empty canvas/black screen)', () => {
+    const mockZeroDimensions = {
+      videoWidth: 0,
+      videoHeight: 0,
+    } as HTMLVideoElement;
+    const res = validateCameraVideoFeed(mockZeroDimensions);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toContain('zero dimensions');
+  });
+
+  it('returns ok: true when video has active non-zero dimensions', () => {
+    const mockActive = {
+      videoWidth: 1280,
+      videoHeight: 720,
+    } as HTMLVideoElement;
+    const res = validateCameraVideoFeed(mockActive);
+    expect(res.ok).toBe(true);
+  });
+});
+
+describe('Scanner Status Instruction Guarantees (getScannerStatusInstruction)', () => {
+  it('never shows "Ready for scan" when cameraError is true', () => {
+    const msg = getScannerStatusInstruction({
+      cameraReady: false,
+      cameraError: true,
+      scanState: 'scanning',
+    });
+    expect(msg).toBe('Camera unavailable. Use manual ticket entry below.');
+  });
+
+  it('shows "Starting camera…" when cameraReady is false and no error', () => {
+    const msg = getScannerStatusInstruction({
+      cameraReady: false,
+      cameraError: false,
+      scanState: 'idle',
+    });
+    expect(msg).toBe('Starting camera… Align QR code once preview appears.');
+  });
+
+  it('prevents "Ready for scan" when cameraReady is false even if scanState is scanning', () => {
+    const msg = getScannerStatusInstruction({
+      cameraReady: false,
+      cameraError: false,
+      scanState: 'scanning',
+    });
+    expect(msg).toBe('Starting camera… Align QR code once preview appears.');
+  });
+
+  it('shows "Ready for scan" only when cameraReady is true, no error, and scanState is scanning', () => {
+    const msg = getScannerStatusInstruction({
+      cameraReady: true,
+      cameraError: false,
+      scanState: 'scanning',
+    });
+    expect(msg).toBe('Ready for scan. Align QR code in camera view.');
+  });
+
+  it('shows default idle text when cameraReady is true but scanState is idle', () => {
+    const msg = getScannerStatusInstruction({
+      cameraReady: true,
+      cameraError: false,
+      scanState: 'idle',
+    });
+    expect(msg).toBe('Scan results will appear here instantly.');
+  });
+});
+
+describe('Safe Scanner Stopping and Cleanup (safeStopScannerInstance)', () => {
+  it('safely handles null or undefined instance without error', async () => {
+    await expect(safeStopScannerInstance(null)).resolves.not.toThrow();
+  });
+
+  it('does nothing if instance is currently in-flight starting', async () => {
+    const mockInstance = {
+      isScanning: true,
+      stop: jest.fn().mockResolvedValue(undefined),
+      clear: jest.fn(),
+    };
+    await safeStopScannerInstance(mockInstance, true);
+    expect(mockInstance.stop).not.toHaveBeenCalled();
+    expect(mockInstance.clear).not.toHaveBeenCalled();
+  });
+
+  it('stops and clears an active scanning instance', async () => {
+    const mockInstance = {
+      isScanning: true,
+      stop: jest.fn().mockResolvedValue(undefined),
+      clear: jest.fn(),
+    };
+    await safeStopScannerInstance(mockInstance, false);
+    expect(mockInstance.stop).toHaveBeenCalledTimes(1);
+    expect(mockInstance.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('only clears instance if not actively scanning', async () => {
+    const mockInstance = {
+      isScanning: false,
+      stop: jest.fn().mockResolvedValue(undefined),
+      clear: jest.fn(),
+    };
+    await safeStopScannerInstance(mockInstance, false);
+    expect(mockInstance.stop).not.toHaveBeenCalled();
+    expect(mockInstance.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('safely swallows rejection from stop() and attempts clear()', async () => {
+    const mockInstance = {
+      isScanning: true,
+      stop: jest.fn().mockRejectedValue(new Error('Html5Qrcode scanner is not running')),
+      clear: jest.fn(),
+    };
+    await expect(safeStopScannerInstance(mockInstance, false)).resolves.not.toThrow();
+    expect(mockInstance.clear).toHaveBeenCalledTimes(1);
   });
 });

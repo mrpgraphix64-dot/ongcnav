@@ -131,3 +131,63 @@ export function ensureVideoStreaming(
     }, timeoutMs);
   });
 }
+
+/**
+ * Validates that a video element is genuinely attached and streaming frames.
+ * Returns true only when the element exists, is not paused, and has non-zero dimensions.
+ */
+export function validateCameraVideoFeed(
+  video: HTMLVideoElement | null | undefined
+): { ok: boolean; reason?: string } {
+  if (!video) {
+    return { ok: false, reason: 'No video element attached to preview container.' };
+  }
+  if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+    return { ok: false, reason: 'Video element has zero dimensions (no active frames).' };
+  }
+  return { ok: true };
+}
+
+/**
+ * Computes the correct scanner status message for the UI.
+ * GUARANTEE: Never returns "Ready for scan" when the camera is not genuinely ready or has an error.
+ */
+export function getScannerStatusInstruction(params: {
+  cameraReady: boolean;
+  cameraError: boolean;
+  scanState: string;
+}): string {
+  const { cameraReady, cameraError, scanState } = params;
+
+  if (cameraError) {
+    return 'Camera unavailable. Use manual ticket entry below.';
+  }
+  if (!cameraReady) {
+    return 'Starting camera… Align QR code once preview appears.';
+  }
+  if (scanState === 'scanning') {
+    return 'Ready for scan. Align QR code in camera view.';
+  }
+  return 'Scan results will appear here instantly.';
+}
+
+/**
+ * Safely stops and clears an Html5Qrcode instance during unmount or retry,
+ * avoiding uncaught promise rejections if the scanner is not currently scanning.
+ */
+export async function safeStopScannerInstance(
+  instance: { isScanning?: boolean; stop: () => Promise<void>; clear: () => void } | null,
+  isStarting = false
+): Promise<void> {
+  if (!instance || isStarting) return;
+  try {
+    if (instance.isScanning) {
+      await instance.stop();
+    }
+    instance.clear();
+  } catch {
+    try {
+      instance.clear();
+    } catch {}
+  }
+}

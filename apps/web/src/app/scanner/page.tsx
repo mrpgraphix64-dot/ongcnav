@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { CheckinResult } from '@ongc/shared-types';
@@ -31,6 +32,9 @@ import {
   selectBestCamera,
   formatCameraError,
   ensureVideoStreaming,
+  validateCameraVideoFeed,
+  getScannerStatusInstruction,
+  safeStopScannerInstance,
 } from './scanner-utils';
 
 const SCANNER_ELEMENT_ID = 'qr-scanner-viewport';
@@ -110,6 +114,18 @@ export default function ScannerPage() {
       }
     };
   }, []);
+
+  // Close recent scans modal on Escape key press
+  useEffect(() => {
+    if (!showRecentModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowRecentModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showRecentModal]);
 
   // Audio synthesis feedback — always reads latest setting via ref to avoid stale closures
   const playFeedbackAudio = (type: 'success' | 'duplicate' | 'error') => {
@@ -385,9 +401,27 @@ export default function ScannerPage() {
         isStarting = true;
         setCameraReady(false);
         setCameraError(false);
+        setScanState('idle');
+
+        // Clean up any existing scanner instance before instantiating a new one
+        if (html5QrCodeRef.current) {
+          await safeStopScannerInstance(html5QrCodeRef.current, false);
+          html5QrCodeRef.current = null;
+        }
 
         const { Html5Qrcode } = await import('html5-qrcode');
         if (unmounted) return;
+
+        // Ensure scanner container element is in DOM
+        const scannerContainer = document.getElementById(SCANNER_ELEMENT_ID);
+        if (!scannerContainer) {
+          if (!unmounted) {
+            setCameraReady(false);
+            setCameraError(true);
+            setCameraErrorMessage('Scanner viewport container not found.');
+          }
+          return;
+        }
 
         // 2. Query available cameras to identify rear/back camera on Android devices
         let selectedCamera: any = { facingMode: 'environment' };
@@ -452,46 +486,60 @@ export default function ScannerPage() {
 
         // 4. If unmount occurred while instance.start() was resolving, safely stop and release
         if (unmounted) {
-          try {
-            if (instance.isScanning) {
-              await instance.stop();
-            }
-            instance.clear();
-          } catch {}
+          await safeStopScannerInstance(instance, false);
           return;
         }
 
         // 5. Hardened mobile video element check: enforce playsinline, autoplay, and active video streaming
         const container = document.getElementById(SCANNER_ELEMENT_ID);
         const videoEl = container?.querySelector('video') as HTMLVideoElement | null;
-        if (videoEl) {
-          videoEl.setAttribute('playsinline', 'true');
-          videoEl.setAttribute('webkit-playsinline', 'true');
-          videoEl.setAttribute('autoplay', 'true');
-          videoEl.setAttribute('muted', 'true');
-          videoEl.muted = true;
-          videoEl.playsInline = true;
+        if (!videoEl) {
+          setCameraReady(false);
+          setCameraError(true);
+          setCameraErrorMessage(
+            'Camera started but video preview element was not found. Please tap Retry Camera.'
+          );
+          return;
+        }
 
-          if (videoEl.paused) {
-            try {
-              await videoEl.play();
-            } catch (playErr) {
-              console.warn('Video element play() retry warning:', playErr);
-            }
-          }
+        videoEl.setAttribute('playsinline', 'true');
+        videoEl.setAttribute('webkit-playsinline', 'true');
+        videoEl.setAttribute('autoplay', 'true');
+        videoEl.setAttribute('muted', 'true');
+        videoEl.muted = true;
+        videoEl.playsInline = true;
 
-          const isStreaming = await ensureVideoStreaming(videoEl, 3500);
-          if (unmounted) return;
-
-          if (!isStreaming) {
-            setCameraReady(false);
-            setCameraError(true);
-            setCameraErrorMessage(
-              'Camera connected but failed to render video frames. Please tap Retry Camera or enter ticket manually below.'
-            );
-            return;
+        if (videoEl.paused) {
+          try {
+            await videoEl.play();
+          } catch (playErr) {
+            console.warn('Video element play() retry warning:', playErr);
           }
         }
+
+        const isStreaming = await ensureVideoStreaming(videoEl, 3500);
+        if (unmounted) return;
+
+        const feedValidation = validateCameraVideoFeed(videoEl);
+        if (!isStreaming || !feedValidation.ok) {
+          setCameraReady(false);
+          setCameraError(true);
+          setCameraErrorMessage(
+            'Camera connected but failed to render video frames. Please tap Retry Camera or enter ticket manually below.'
+          );
+          return;
+        }
+
+        // Listen for stream error or premature termination mid-session
+        const handleStreamDropout = () => {
+          if (!unmounted && isMountedRef.current) {
+            setCameraReady(false);
+            setCameraError(true);
+            setCameraErrorMessage('Camera feed interrupted. Please tap Retry Camera to resume.');
+          }
+        };
+        videoEl.addEventListener('error', handleStreamDropout, { once: true });
+        videoEl.addEventListener('ended', handleStreamDropout, { once: true });
 
         // 6. Camera is verified active with live frames
         setCameraReady(true);
@@ -516,19 +564,7 @@ export default function ScannerPage() {
         resetTimeoutRef.current = null;
       }
       const instance = createdInstance || html5QrCodeRef.current;
-      // If start() is not currently in flight and the instance is active, stop it safely.
-      if (instance && !isStarting) {
-        try {
-          if (instance.isScanning) {
-            instance
-              .stop()
-              .then(() => instance.clear())
-              .catch(() => {});
-          } else {
-            instance.clear();
-          }
-        } catch {}
-      }
+      safeStopScannerInstance(instance, isStarting);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraRetryTrigger]);
@@ -667,8 +703,17 @@ export default function ScannerPage() {
                     )}
                   </button>
                   <button
-                    onClick={() => setShowRecentModal(true)}
+                    onClick={() => {
+                      setShowRecentModal(true);
+                      const section = document.getElementById('recent-scans-section');
+                      if (section && window.innerWidth >= 1024) {
+                        section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      }
+                    }}
                     type="button"
+                    aria-label={`View scan history (${recentScans.length} scans)`}
+                    aria-expanded={showRecentModal}
+                    aria-controls="recent-scans-modal"
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cream-soft border border-stone-200 text-xs font-semibold text-ink hover:border-maroon/40 transition-colors"
                   >
                     <History className="w-3.5 h-3.5 text-maroon" />
@@ -769,12 +814,12 @@ export default function ScannerPage() {
               {(scanState === 'idle' || scanState === 'scanning') && (
                 <div className="text-center text-ink-soft space-y-3 py-10">
                   <div className="w-14 h-14 mx-auto rounded-2xl bg-cream-soft flex items-center justify-center text-stone-300">
-                    <ScanLine className={`w-7 h-7 ${scanState === 'scanning' ? 'text-maroon animate-pulse' : 'text-stone-300'}`} />
+                    <ScanLine
+                      className={`w-7 h-7 ${cameraReady && !cameraError && scanState === 'scanning' ? 'text-maroon animate-pulse' : 'text-stone-300'}`}
+                    />
                   </div>
                   <p className="text-xs font-semibold">
-                    {scanState === 'scanning'
-                      ? 'Ready for scan. Align QR code in camera view.'
-                      : 'Scan results will appear here instantly.'}
+                    {getScannerStatusInstruction({ cameraReady, cameraError, scanState })}
                   </p>
                 </div>
               )}
@@ -909,7 +954,7 @@ export default function ScannerPage() {
             </div>
 
             {/* Recent Scans Box */}
-            <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-5">
+            <div id="recent-scans-section" className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-5">
               <h3 className="font-outfit font-bold text-ink text-sm mb-3">Recent Session Scans</h3>
               <div className="space-y-2">
                 {recentScans.map((scan) => (
@@ -934,6 +979,79 @@ export default function ScannerPage() {
         </div>
 
       </div>
+
+      {/* Recent Scans Dialog Modal */}
+      {showRecentModal && (
+        <div
+          id="recent-scans-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="recent-scans-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRecentModal(false);
+            }
+          }}
+        >
+          <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-stone-200 space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-maroon" />
+                <h2 id="recent-scans-title" className="font-outfit font-bold text-lg text-ink">
+                  Recent Session Scans
+                </h2>
+                <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-maroon text-white text-xs font-bold inline-flex items-center justify-center">
+                  {recentScans.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecentModal(false)}
+                aria-label="Close scan history"
+                className="p-1.5 rounded-full text-stone-400 hover:text-ink hover:bg-stone-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-2.5 pr-1">
+              {recentScans.map((scan) => (
+                <div
+                  key={scan.key}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-cream-soft/60 border border-stone-100"
+                >
+                  {scan.ok ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-ink truncate">{scan.name}</div>
+                    <div className="text-[11px] text-ink-soft truncate">{scan.line2}</div>
+                  </div>
+                </div>
+              ))}
+              {recentScans.length === 0 && (
+                <div className="text-center py-10 space-y-2">
+                  <History className="w-8 h-8 text-stone-300 mx-auto" />
+                  <p className="text-xs text-ink-soft">No scans yet this session.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-stone-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowRecentModal(false)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink text-xs font-bold transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
