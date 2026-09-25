@@ -166,9 +166,9 @@ export default function OperationsDashboardPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 w-full max-w-[1920px] mx-auto">
       {/* 1. HERO SECTION */}
-      <div className="relative overflow-hidden rounded-2xl bg-white border border-stone-200/70 card-shadow p-6 sm:p-8">
+      <div className="relative overflow-hidden rounded-2xl bg-white border border-stone-200/70 card-shadow p-5 sm:p-6 lg:p-8">
         {/* Subtle dot texture, top-right corner only */}
         <div
           className="absolute top-0 right-0 w-48 h-48 dot-texture opacity-30 pointer-events-none"
@@ -179,7 +179,7 @@ export default function OperationsDashboardPage() {
         />
 
         <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-xl">
+          <div className="space-y-2 max-w-xl lg:max-w-2xl xl:max-w-3xl">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-maroon-50 text-maroon text-[11px] font-bold uppercase tracking-wider font-outfit">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Real-time Entry Operations</span>
@@ -193,7 +193,7 @@ export default function OperationsDashboardPage() {
           </div>
 
           {/* Action Buttons Hierarchy */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 w-full sm:w-auto justify-start sm:justify-end">
             {isSuperOrEventAdmin && (
               <Link
                 href="/admin/event-control"
@@ -239,7 +239,7 @@ export default function OperationsDashboardPage() {
       </div>
 
       {/* 2. 4 ACTION-ORIENTED KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-5">
         {/* Card 1: Total People */}
         <div className="bg-white rounded-2xl p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-maroon/30 transition-all">
           <div>
@@ -252,7 +252,7 @@ export default function OperationsDashboardPage() {
               </div>
             </div>
             <div className="mt-3">
-              <div className="text-3xl font-outfit font-black text-ink leading-none">
+              <div className="text-3xl xl:text-4xl font-outfit font-black text-ink leading-none">
                 {stats.totalAttendees.toLocaleString()}
               </div>
               <p className="text-xs text-ink-soft mt-1.5 font-medium">
@@ -283,7 +283,7 @@ export default function OperationsDashboardPage() {
               </div>
             </div>
             <div className="mt-3">
-              <div className="text-3xl font-outfit font-black text-emerald-700 leading-none">
+              <div className="text-3xl xl:text-4xl font-outfit font-black text-emerald-700 leading-none">
                 {stats.checkedInCount.toLocaleString()}
               </div>
               <p className="text-xs text-ink-soft mt-1.5 font-medium">
@@ -317,7 +317,7 @@ export default function OperationsDashboardPage() {
               </div>
             </div>
             <div className="mt-3">
-              <div className="text-3xl font-outfit font-black text-amber-700 leading-none">
+              <div className="text-3xl xl:text-4xl font-outfit font-black text-amber-700 leading-none">
                 {stats.pendingCount.toLocaleString()}
               </div>
               <p className="text-xs text-ink-soft mt-1.5 font-medium">
@@ -348,7 +348,7 @@ export default function OperationsDashboardPage() {
               </div>
             </div>
             <div className="mt-3">
-              <div className="text-3xl font-outfit font-black text-rose-700 leading-none">
+              <div className="text-3xl xl:text-4xl font-outfit font-black text-rose-700 leading-none">
                 {stats.duplicateAttemptsCount.toLocaleString()}
               </div>
               <p className="text-xs text-ink-soft mt-1.5 font-medium">
@@ -369,7 +369,7 @@ export default function OperationsDashboardPage() {
       </div>
 
       {/* 3. TODAY'S GATE ACTIVITY */}
-      <div className="bg-white rounded-2xl p-6 border border-stone-200/70 card-shadow space-y-4">
+      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200/70 card-shadow space-y-4">
         <div className="flex items-center justify-between border-b border-stone-100 pb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-maroon/10 text-maroon flex items-center justify-center shrink-0">
@@ -398,13 +398,13 @@ export default function OperationsDashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3 lg:gap-4">
           {stats.gatesActivity.length > 0 ? (
             stats.gatesActivity.map((ga) => (
               <Link
                 key={ga.id}
                 href="/admin/gates"
-                className="p-3.5 rounded-xl bg-cream-soft border border-stone-200/60 hover:border-gold hover:bg-white transition-all text-center group block shadow-2xs"
+                className="p-3 sm:p-3.5 lg:p-4 rounded-xl bg-cream-soft border border-stone-200/60 hover:border-gold hover:bg-white transition-all text-center group block shadow-2xs"
               >
                 <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-maroon text-gold-light font-outfit">
                   {ga.code || 'GATE'}
@@ -430,9 +430,9 @@ export default function OperationsDashboardPage() {
       </div>
 
       {/* 4. LIVE CAPACITY & RECENT CHECK-INS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Live Capacity & Check-in Meter (2/3 width) */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-stone-200/70 card-shadow space-y-6 flex flex-col justify-between">
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-12 gap-5 sm:gap-6">
+        {/* Live Capacity & Check-in Meter (2/3 width on desktop, 8/12 on xl) */}
+        <div className="lg:col-span-2 xl:col-span-8 bg-white rounded-2xl p-5 sm:p-6 lg:p-7 border border-stone-200/70 card-shadow space-y-6 flex flex-col justify-between">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 pb-4">
               <div>
@@ -464,7 +464,7 @@ export default function OperationsDashboardPage() {
             </div>
 
             {/* Metrics breakdown */}
-            <div className="mt-5 p-4 rounded-xl bg-cream-soft border border-stone-200/60 flex flex-wrap items-center justify-between gap-4">
+            <div className="mt-5 p-3.5 sm:p-4 rounded-xl bg-cream-soft border border-stone-200/60 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <span className="text-xs font-semibold text-ink-soft">Current Status:</span>
                 <div className="flex items-center gap-1.5 text-xs font-bold text-ink flex-wrap">
@@ -509,7 +509,7 @@ export default function OperationsDashboardPage() {
 
             {/* Workflow Steps */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-5">
-              <div className="p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
+              <div className="p-3.5 sm:p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-extrabold text-maroon font-mono">01</span>
                   <UploadCloud className="w-3.5 h-3.5 text-maroon" />
@@ -517,7 +517,7 @@ export default function OperationsDashboardPage() {
                 <div className="font-outfit font-semibold text-sm text-ink">Upload / Add</div>
                 <div className="text-xs text-ink-soft">Import attendees or add employee pass</div>
               </div>
-              <div className="p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
+              <div className="p-3.5 sm:p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-extrabold text-maroon font-mono">02</span>
                   <QrCode className="w-3.5 h-3.5 text-maroon" />
@@ -525,7 +525,7 @@ export default function OperationsDashboardPage() {
                 <div className="font-outfit font-semibold text-sm text-ink">Issue QR Pass</div>
                 <div className="text-xs text-ink-soft">Generate unique secure ticket pass</div>
               </div>
-              <div className="p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
+              <div className="p-3.5 sm:p-4 rounded-xl bg-cream-soft border border-stone-200/50 space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-extrabold text-maroon font-mono">03</span>
                   <ScanLine className="w-3.5 h-3.5 text-maroon" />
@@ -537,7 +537,7 @@ export default function OperationsDashboardPage() {
           </div>
 
           {/* Quick Action Links inside Live Capacity Card */}
-          <div className="pt-4 border-t border-stone-100 flex items-center justify-between flex-wrap gap-2">
+          <div className="pt-4 border-t border-stone-100 flex items-center justify-between flex-wrap gap-2.5">
             <Link
               href="/admin/attendees"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cream-soft hover:bg-stone-200/60 text-ink text-xs font-bold transition-colors font-outfit"
@@ -555,8 +555,8 @@ export default function OperationsDashboardPage() {
           </div>
         </div>
 
-        {/* Recent Check-ins Card (1/3 width) */}
-        <div className="bg-white rounded-2xl p-6 border border-stone-200/70 card-shadow space-y-4 flex flex-col justify-between">
+        {/* Recent Check-ins Card (1/3 width on desktop, 4/12 on xl) */}
+        <div className="lg:col-span-1 xl:col-span-4 bg-white rounded-2xl p-5 sm:p-6 lg:p-7 border border-stone-200/70 card-shadow space-y-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-stone-100 pb-4">
               <div>
@@ -584,7 +584,7 @@ export default function OperationsDashboardPage() {
                         <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> CHECKED IN
                         </span>
-                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-white text-stone-700 border border-stone-200 shrink-0 truncate max-w-[120px]">
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-white text-stone-700 border border-stone-200 shrink-0 truncate max-w-[100px] sm:max-w-[130px] xl:max-w-[180px]">
                           {item.category}
                         </span>
                       </div>
@@ -640,7 +640,7 @@ export default function OperationsDashboardPage() {
       {addModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-xs">
           <div
-            className="bg-white border border-stone-200 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 relative"
+            className="bg-white border border-stone-200 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-5 relative"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-100 pb-4">
