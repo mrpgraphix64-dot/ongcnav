@@ -35,11 +35,11 @@ export default function PublicFooter() {
             <div className="pt-2">
               <Link
                 href="/bookpass"
-                aria-label="Book your pass"
+                aria-label="Buy your pass"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-colors shadow-xs"
               >
                 <Ticket className="w-3.5 h-3.5" />
-                <span>BOOK YOUR PASS</span>
+                <span>BUY YOUR PASS</span>
               </Link>
             </div>
           </div>

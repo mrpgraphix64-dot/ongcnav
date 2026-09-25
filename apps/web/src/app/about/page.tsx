@@ -52,11 +52,11 @@ export default function AboutPage() {
                 <div className="pt-2 flex flex-wrap gap-4">
                   <Link
                     href="/bookpass"
-                    aria-label="Book your pass"
+                    aria-label="Buy your pass"
                     className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-gold text-maroon-dark shadow-md hover:bg-gold-light transition-all border border-gold/40"
                   >
                     <Ticket className="w-4 h-4 text-maroon-dark" />
-                    <span>BOOK YOUR PASS</span>
+                    <span>BUY YOUR PASS</span>
                   </Link>
                   <Link
                     href="/event"
@@ -180,11 +180,11 @@ export default function AboutPage() {
                   <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
                     <Link
                       href="/bookpass"
-                      aria-label="Book your pass"
+                      aria-label="Buy your pass"
                       className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-colors shadow-md border border-gold/40"
                     >
                       <Ticket className="w-4 h-4 text-maroon-dark" />
-                      <span>BOOK YOUR PASS</span>
+                      <span>BUY YOUR PASS</span>
                     </Link>
                     <Link
                       href="/my-tickets"

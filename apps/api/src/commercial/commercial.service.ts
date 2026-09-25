@@ -5,7 +5,9 @@ import {
   NotFoundException,
   HttpException,
   HttpStatus,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RazorpayService } from './razorpay.service';
@@ -17,6 +19,7 @@ import {
   calculateServerPricePaise,
   generateOrderNumber,
 } from './commercial.constants';
+import { isCommercialTestPaymentEnabled } from './commercial-test-payment.util';
 import {
   AttendeeStatus,
   OrderStatus,
@@ -25,16 +28,33 @@ import {
 } from '@ongc/shared-types';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class CommercialService {
   private readonly logger = new Logger(CommercialService.name);
+  private readonly recoveryEmailRateLimit = new Map<string, { count: number; expiresAt: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly razorpay: RazorpayService,
+    private readonly mailService: MailService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
+
+  /**
+   * Safe staging test payment mode determination.
+   * STRICT FAILSAFE: Automatically disabled if NODE_ENV=production.
+   */
+  isTestPaymentMode(): boolean {
+    const nodeEnv =
+      this.configService?.get<string>('NODE_ENV') || process.env.NODE_ENV;
+    const testPaymentEnv =
+      this.configService?.get<string>('COMMERCIAL_TEST_PAYMENT') ||
+      process.env.COMMERCIAL_TEST_PAYMENT;
+    return isCommercialTestPaymentEnabled(nodeEnv, testPaymentEnv);
+  }
 
   private generateSecureQrToken(): string {
     return crypto.randomBytes(32).toString('hex');
@@ -44,6 +64,51 @@ export class CommercialService {
     const cleanRef = orderNumber.replace(/[^A-Z0-9]/gi, '').slice(-6).toUpperCase();
     const rand = crypto.randomBytes(2).toString('hex').toUpperCase();
     return `TK-COMM-${cleanRef}-${index + 1}-${rand}`;
+  }
+
+  private maskCustomerEmail(email: string): string {
+    if (!email) return '***';
+    const parts = email.split('@');
+    if (parts.length !== 2) return '***@***';
+    const name = parts[0];
+    const domain = parts[1];
+    if (name.length <= 2) {
+      return `${name[0]}***@${domain}`;
+    }
+    return `${name[0]}***${name[name.length - 1]}@${domain}`;
+  }
+
+  /**
+   * Resilient asynchronous transactional email trigger.
+   * Runs in background so payment confirmation is never delayed or blocked by email dispatch.
+   * Logs safely without exposing secrets, QR tokens, or email bodies.
+   */
+  private sendTicketEmailSafe(order: any, passes: any[]): void {
+    if (!order?.customerEmail) return;
+
+    setImmediate(async () => {
+      try {
+        await this.mailService.sendCommercialTicketEmail({
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          ticketType: order.ticketType,
+          selectedDates: (order.selectedDates as string[]) || [],
+          quantity: order.quantity || passes.length,
+          amountInr: order.amountPaise ? order.amountPaise / 100 : 0,
+          passes: passes.map((p) => ({
+            ticketNumber: p.ticketNumber,
+            token: p.qrCodeToken,
+            category: p.category,
+            attendeeName: p.name,
+          })),
+        });
+      } catch (err: any) {
+        this.logger.error(
+          `Safe email error: Failed to dispatch ticket email for order ${order.orderNumber}: ${err?.message || 'Unknown error'}`,
+        );
+      }
+    });
   }
 
   async getConfig() {
@@ -130,7 +195,108 @@ export class CommercialService {
       // 4. Generate internal order reference
       const orderNumber = generateOrderNumber();
 
-      // 5. Create Razorpay order
+      // 5. If staging test payment mode is active, directly create confirmed test order without calling Razorpay
+      if (this.isTestPaymentMode()) {
+        this.logger.warn(
+          `[STAGING TEST PAYMENT] Creating test-paid commercial order for ${orderNumber} without Razorpay`,
+        );
+
+        const testPaymentId = `TEST_PAY_${orderNumber}`;
+        const testOrderId = `TEST_ORD_${orderNumber}`;
+
+        const { order, createdPasses } = await this.prisma.$transaction(async (tx: any) => {
+          const newOrder = await tx.commercialOrder.create({
+            data: {
+              orderNumber,
+              registrationType: RegistrationType.COMMERCIAL,
+              customerName: dto.customerName.trim(),
+              customerMobile: cleanMobile,
+              customerEmail: dto.customerEmail.trim().toLowerCase(),
+              ticketType: ticketTypeCode,
+              selectedDates: pricing.validDates,
+              quantity: dto.quantity,
+              unitPricePaise: pricing.unitPricePaise,
+              amountPaise: pricing.totalAmountPaise,
+              currency: 'INR',
+              orderStatus: OrderStatus.PAID,
+              paymentStatus: PaymentStatus.AUTHORIZED,
+              razorpayOrderId: testOrderId,
+              razorpayPaymentId: testPaymentId,
+              razorpaySignature: `TEST_SIG_${orderNumber}`,
+              paidAt: new Date(),
+              metadata: {
+                originalUnitPricePaise: pricing.originalPricePaise,
+                totalOriginalAmountPaise: pricing.totalOriginalAmountPaise,
+                discountPercent: 50,
+                offer: 'EARLY_BIRD',
+                isTestPayment: true,
+                testMode: 'STAGING_TEST_PAYMENT',
+                testPaymentReference: testPaymentId,
+                gateway: 'STAGING_TEST_MODE',
+              },
+            },
+          });
+
+          const passes: any[] = [];
+          const validDates = pricing.validDates;
+
+          for (let i = 0; i < dto.quantity; i++) {
+            const qrToken = this.generateSecureQrToken();
+            const ticketNumber = this.generateTicketNumber(orderNumber, i);
+
+            const attendee = await tx.attendee.create({
+              data: {
+                registrationType: RegistrationType.COMMERCIAL,
+                orderId: newOrder.id,
+                name: newOrder.customerName,
+                mobile: newOrder.customerMobile,
+                email: newOrder.customerEmail,
+                category: 'Commercial Pass',
+                ticketNumber,
+                qrCodeToken: qrToken,
+                status: AttendeeStatus.ACTIVE,
+                bookingDays: validDates,
+              },
+            });
+
+            passes.push(attendee);
+          }
+
+          return { order: newOrder, createdPasses: passes };
+        });
+
+        const formattedPasses = await this.formatPasses(createdPasses);
+
+        // Send transactional ticket email asynchronously (non-blocking)
+        this.sendTicketEmailSafe(order, createdPasses);
+
+        return {
+          success: true,
+          isTestPayment: true,
+          message: 'Staging test order created and verified successfully.',
+          order: {
+            orderNumber: order.orderNumber,
+            amountInr: order.amountPaise / 100,
+            amountPaise: order.amountPaise,
+            currency: order.currency,
+            quantity: order.quantity,
+            ticketType: order.ticketType,
+            selectedDates: order.selectedDates,
+            orderStatus: order.orderStatus,
+            paymentStatus: order.paymentStatus,
+            isTestPayment: true,
+            testPaymentReference: testPaymentId,
+            customer: {
+              name: order.customerName,
+              email: order.customerEmail,
+              mobile: order.customerMobile,
+            },
+          },
+          passes: formattedPasses,
+        };
+      }
+
+      // 5. Create Razorpay order (live / mock gateway flow)
       const rzpOrder = await this.razorpay.createRazorpayOrder(
         pricing.totalAmountPaise,
         orderNumber,
@@ -288,6 +454,9 @@ export class CommercialService {
 
       const formattedPasses = await this.formatPasses(createdPasses);
 
+      // Send transactional ticket email asynchronously (non-blocking)
+      this.sendTicketEmailSafe(order, createdPasses);
+
       return {
         success: true,
         message: 'Payment confirmed successfully. Your digital entry pass is ready.',
@@ -416,6 +585,12 @@ export class CommercialService {
         });
 
         this.logger.log(`Order [${targetOrder.orderNumber}] confirmed via Razorpay webhook [${eventId}].`);
+
+        // Dispatch transactional ticket email asynchronously
+        const webhookPasses = await this.prisma.attendee.findMany({
+          where: { orderId: targetOrder.id },
+        });
+        this.sendTicketEmailSafe(targetOrder, webhookPasses);
       } finally {
         if (lockToken) {
           await this.redis.releaseLock(lockKey, lockToken);
@@ -463,10 +638,15 @@ export class CommercialService {
         ? await this.formatPasses(order.attendees)
         : [];
 
+    const isTestPayment = (order.metadata as any)?.isTestPayment === true;
+    const testPaymentReference = (order.metadata as any)?.testPaymentReference || null;
+
     return {
       orderNumber: order.orderNumber,
       orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus,
+      paymentStatus: isTestPayment ? 'TEST_PAID' : order.paymentStatus,
+      isTestPayment,
+      testPaymentReference,
       customerName: isVerified ? order.customerName : `${order.customerName.slice(0, 2)}***`,
       customerMobile: isVerified ? order.customerMobile : `******${order.customerMobile.slice(-4)}`,
       customerEmail: isVerified ? order.customerEmail : '***@***',
@@ -502,25 +682,149 @@ export class CommercialService {
       total,
       page,
       limit,
-      orders: orders.map((o) => ({
-        id: o.id.toString(),
-        orderNumber: o.orderNumber,
-        registrationType: o.registrationType,
-        customerName: o.customerName,
-        customerMobile: o.customerMobile,
-        customerEmail: o.customerEmail,
-        ticketType: o.ticketType,
-        quantity: o.quantity,
-        amountInr: o.amountPaise / 100,
-        currency: o.currency,
-        orderStatus: o.orderStatus,
-        paymentStatus: o.paymentStatus,
-        razorpayOrderId: o.razorpayOrderId,
-        razorpayPaymentId: o.razorpayPaymentId,
-        passesCount: o._count.attendees,
-        createdAt: o.createdAt,
-        paidAt: o.paidAt,
+      orders: orders.map((o: any) => {
+        const isTestPayment = (o.metadata as any)?.isTestPayment === true;
+        return {
+          id: o.id.toString(),
+          orderNumber: o.orderNumber,
+          registrationType: o.registrationType,
+          customerName: o.customerName,
+          customerMobile: o.customerMobile,
+          customerEmail: o.customerEmail,
+          ticketType: o.ticketType,
+          quantity: o.quantity,
+          amountInr: o.amountPaise / 100,
+          currency: o.currency,
+          orderStatus: o.orderStatus,
+          paymentStatus: isTestPayment ? 'TEST_PAID' : o.paymentStatus,
+          isTestPayment,
+          razorpayOrderId: o.razorpayOrderId,
+          razorpayPaymentId: o.razorpayPaymentId,
+          passesCount: o._count.attendees,
+          createdAt: o.createdAt,
+          paidAt: o.paidAt,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Secure commercial ticket recovery email dispatch.
+   * Enforces:
+   * 1. Commercial-only isolation (rejects non-commercial / employee orders).
+   * 2. Strict mobile matching against registered customer mobile.
+   * 3. Sends strictly to the registered customerEmail, never to an arbitrary user email.
+   * 4. Multi-level rate limiting (Redis or in-memory fallback).
+   */
+  async resendTicketEmail(orderNumber: string, mobile: string, clientIp?: string) {
+    const cleanOrderNumber = (orderNumber || '').trim().toUpperCase();
+    const cleanMobile = (mobile || '').trim();
+
+    if (!cleanOrderNumber) {
+      throw new BadRequestException('Order reference number is required.');
+    }
+    if (!cleanMobile) {
+      throw new BadRequestException('Customer mobile number is required.');
+    }
+
+    // 1. Rate limiting check (max 3 requests per 10 minutes per order)
+    const rateKey = `ratelimit:email-recovery:${cleanOrderNumber}`;
+    let isRateLimited = false;
+
+    const redisCount = await this.redis.incrementCounter(rateKey, 600);
+    if (redisCount !== null) {
+      if (redisCount > 3) isRateLimited = true;
+    } else {
+      const now = Date.now();
+      const existing = this.recoveryEmailRateLimit.get(rateKey);
+      if (existing && existing.expiresAt > now) {
+        existing.count++;
+        if (existing.count > 3) isRateLimited = true;
+      } else {
+        this.recoveryEmailRateLimit.set(rateKey, { count: 1, expiresAt: now + 600000 });
+      }
+    }
+
+    if (isRateLimited) {
+      throw new HttpException(
+        'Too many email requests for this order. Please try again after 10 minutes.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // 2. Fetch order with commercial attendee passes
+    const order = await this.prisma.commercialOrder.findUnique({
+      where: { orderNumber: cleanOrderNumber },
+      include: {
+        attendees: {
+          where: { registrationType: RegistrationType.COMMERCIAL },
+        },
+      },
+    });
+
+    if (!order || order.registrationType !== RegistrationType.COMMERCIAL) {
+      throw new NotFoundException(`Order ${cleanOrderNumber} not found.`);
+    }
+
+    // Ensure employee passes cannot be resolved through commercial recovery
+    if (order.attendees.some((a: any) => a.registrationType !== RegistrationType.COMMERCIAL)) {
+      throw new NotFoundException(`Order ${cleanOrderNumber} not found.`);
+    }
+
+    if (order.orderStatus !== OrderStatus.PAID) {
+      throw new BadRequestException('Tickets can only be emailed for confirmed, paid orders.');
+    }
+
+    // 3. Verify mobile matches registered purchaser mobile
+    const isVerified =
+      cleanMobile === order.customerMobile ||
+      order.customerMobile.endsWith(cleanMobile);
+
+    if (!isVerified) {
+      throw new BadRequestException('Verification failed: Mobile number does not match this order.');
+    }
+
+    if (!order.customerEmail) {
+      throw new BadRequestException('No email address registered for this order.');
+    }
+
+    if (!order.attendees || order.attendees.length === 0) {
+      throw new BadRequestException('No passes found for this order.');
+    }
+
+    // 4. Send email strictly to the verified order's customerEmail
+    const mailResult = await this.mailService.sendCommercialTicketEmail({
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      ticketType: order.ticketType,
+      selectedDates: (order.selectedDates as string[]) || [],
+      quantity: order.quantity,
+      amountInr: order.amountPaise ? order.amountPaise / 100 : 0,
+      passes: order.attendees.map((p: any) => ({
+        ticketNumber: p.ticketNumber,
+        token: p.qrCodeToken,
+        category: p.category,
+        attendeeName: p.name,
       })),
+    });
+
+    const maskedEmail = this.maskCustomerEmail(order.customerEmail);
+
+    if (!mailResult.success) {
+      this.logger.error(
+        `Recovery email delivery failed for order ${order.orderNumber}: ${mailResult.error || 'Unknown error'}`,
+      );
+      return {
+        success: false,
+        message:
+          'Email service could not deliver your ticket at this moment. You can view or download your QR passes directly on this screen.',
+      };
+    }
+
+    return {
+      success: true,
+      message: `Ticket pass details sent to ${maskedEmail}. Please check your inbox and spam folder.`,
     };
   }
 

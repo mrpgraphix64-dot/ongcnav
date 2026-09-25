@@ -6,6 +6,7 @@ import {
   buildCommercialOrderUrl,
   formatPassDates,
   getOrderStatusBadge,
+  validateEmailRecoveryRequest,
 } from './my-tickets-utils';
 
 describe('My-Tickets: CPF Lookup Validation (validateCpfLookup)', () => {
@@ -142,6 +143,19 @@ describe('My-Tickets: Order Status Badge Classifier (getOrderStatusBadge)', () =
     expect(badge.badgeClass).toContain('amber');
   });
 
+  it('classifies staging test payment orders with STAGING TEST PAYMENT label and badge', () => {
+    const testBadge = getOrderStatusBadge('PAID', 'AUTHORIZED', true);
+    expect(testBadge.isPaid).toBe(true);
+    expect(testBadge.isTest).toBe(true);
+    expect(testBadge.label).toBe('STAGING TEST PAYMENT');
+    expect(testBadge.badgeClass).toContain('amber');
+
+    const testBadgeViaStatus = getOrderStatusBadge('PAID', 'TEST_PAID');
+    expect(testBadgeViaStatus.isPaid).toBe(true);
+    expect(testBadgeViaStatus.isTest).toBe(true);
+    expect(testBadgeViaStatus.label).toBe('STAGING TEST PAYMENT');
+  });
+
   it('classifies FAILED or CANCELLED orders as failed', () => {
     const failedBadge = getOrderStatusBadge('FAILED', 'FAILED');
     expect(failedBadge.isFailed).toBe(true);
@@ -151,5 +165,20 @@ describe('My-Tickets: Order Status Badge Classifier (getOrderStatusBadge)', () =
     const cancelledBadge = getOrderStatusBadge('CANCELLED');
     expect(cancelledBadge.isFailed).toBe(true);
     expect(cancelledBadge.label).toBe('CANCELLED');
+  });
+});
+
+describe('My-Tickets: Email Ticket Recovery Validation (validateEmailRecoveryRequest)', () => {
+  it('validates and normalizes valid order number and 10-digit mobile', () => {
+    const res = validateEmailRecoveryRequest('ord-comm-20261011-xyz', '+91 98765 43210');
+    expect(res.isValid).toBe(true);
+    expect(res.cleanOrderNumber).toBe('ORD-COMM-20261011-XYZ');
+    expect(res.cleanMobile).toBe('9876543210');
+  });
+
+  it('rejects recovery when mobile number is missing or invalid', () => {
+    const res = validateEmailRecoveryRequest('ORD-COMM-1', '12345');
+    expect(res.isValid).toBe(false);
+    expect(res.error).toBeDefined();
   });
 });

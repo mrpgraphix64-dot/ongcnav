@@ -16,6 +16,7 @@ import { TrafficTestModule } from './traffic-test/traffic-test.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SettingsModule } from './settings/settings.module';
 import { CommercialModule } from './commercial/commercial.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CommercialModule } from './commercial/commercial.module';
       isGlobal: true,
       envFilePath: ['.env'],
     }),
+    MailModule,
     PrismaModule,
     RedisModule,
     HealthModule,

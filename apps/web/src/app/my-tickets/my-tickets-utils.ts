@@ -111,11 +111,27 @@ export interface OrderStatusBadge {
   isPaid: boolean;
   isPending: boolean;
   isFailed: boolean;
+  isTest?: boolean;
 }
 
-export function getOrderStatusBadge(orderStatus?: string, paymentStatus?: string): OrderStatusBadge {
+export function getOrderStatusBadge(
+  orderStatus?: string,
+  paymentStatus?: string,
+  isTestPayment?: boolean,
+): OrderStatusBadge {
   const status = (orderStatus || '').toUpperCase();
   const payStatus = (paymentStatus || '').toUpperCase();
+
+  if (isTestPayment || payStatus === 'TEST_PAID') {
+    return {
+      label: 'STAGING TEST PAYMENT',
+      badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
+      isPaid: true,
+      isPending: false,
+      isFailed: false,
+      isTest: true,
+    };
+  }
 
   if (status === 'PAID' || payStatus === 'CAPTURED') {
     return {
@@ -164,4 +180,11 @@ export function getOrderStatusBadge(orderStatus?: string, paymentStatus?: string
     isPending: false,
     isFailed: false,
   };
+}
+
+export function validateEmailRecoveryRequest(
+  orderNumber: string,
+  mobile: string,
+): { isValid: boolean; cleanOrderNumber: string; cleanMobile: string; error?: string } {
+  return validateCommercialLookup(orderNumber, mobile);
 }

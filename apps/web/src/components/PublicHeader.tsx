@@ -83,12 +83,12 @@ export default function PublicHeader() {
             </Link>
             <Link
               href="/bookpass"
-              aria-label="Book your pass"
-              data-testid="book-pass-button"
+              aria-label="Buy your pass"
+              data-testid="buy-pass-button"
               className="px-4 xl:px-5 py-2.5 rounded-xl text-xs font-bold bg-maroon text-white shadow-md hover:bg-maroon-dark hover:shadow-lg transition-all duration-200 border border-gold/40 flex items-center gap-2"
             >
               <Ticket className="w-4 h-4 text-gold-light" />
-              <span>BOOK YOUR PASS</span>
+              <span>BUY YOUR PASS</span>
             </Link>
           </div>
 
@@ -96,12 +96,12 @@ export default function PublicHeader() {
           <div className="lg:hidden flex items-center gap-1.5 sm:gap-2 shrink-0">
             <Link
               href="/bookpass"
-              aria-label="Book your pass"
-              data-testid="book-pass-mobile-button"
+              aria-label="Buy your pass"
+              data-testid="buy-pass-mobile-button"
               className="px-2.5 sm:px-3 py-2 rounded-lg text-xs font-bold bg-maroon text-white shadow-sm flex items-center gap-1 sm:gap-1.5"
             >
               <Ticket className="w-4 h-4 text-gold-light" />
-              <span className="hidden min-[380px]:inline">BOOK PASS</span>
+              <span className="hidden min-[380px]:inline">BUY PASS</span>
             </Link>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -147,12 +147,12 @@ export default function PublicHeader() {
           <div className="pt-3 border-t border-stone-200 flex flex-col gap-2.5">
             <Link
               href="/bookpass"
-              aria-label="Book your pass"
+              aria-label="Buy your pass"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-center py-3 rounded-xl text-sm font-bold bg-maroon text-white shadow-md flex items-center justify-center gap-2 border border-gold/40"
             >
               <Ticket className="w-4 h-4 text-gold-light" />
-              <span>BOOK YOUR PASS</span>
+              <span>BUY YOUR PASS</span>
             </Link>
             <Link
               href="/my-tickets"

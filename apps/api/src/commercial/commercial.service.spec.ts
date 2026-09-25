@@ -10,7 +10,8 @@ import {
   PaymentStatus,
   RegistrationType,
 } from '@ongc/shared-types';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
+import { MailService } from '../mail/mail.service';
 
 describe('CommercialService', () => {
   let service: CommercialService;
@@ -31,6 +32,7 @@ describe('CommercialService', () => {
       attendee: {
         create: jest.fn(),
         count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       employee: {
         create: jest.fn(),
@@ -49,6 +51,14 @@ describe('CommercialService', () => {
       set: jest.fn().mockResolvedValue(true),
       acquireLock: jest.fn().mockResolvedValue('lock_token_123'),
       releaseLock: jest.fn().mockResolvedValue(true),
+      incrementCounter: jest.fn().mockResolvedValue(1),
+    };
+
+    const mailService = {
+      sendEmail: jest.fn().mockResolvedValue({ success: true }),
+      sendCommercialTicketEmail: jest.fn().mockResolvedValue({ success: true }),
+      isLiveMailConfigured: jest.fn().mockReturnValue(true),
+      getMailboxAddress: jest.fn().mockReturnValue('tickets@ongcnavratri.tech'),
     };
 
     razorpay = {
@@ -72,6 +82,7 @@ describe('CommercialService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
         { provide: RazorpayService, useValue: razorpay },
+        { provide: MailService, useValue: mailService },
       ],
     }).compile();
 
@@ -647,6 +658,119 @@ describe('CommercialService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('resendTicketEmail (Ticket Recovery & Isolation)', () => {
+    const mockCommercialPaidOrder = {
+      id: BigInt(10),
+      orderNumber: 'ORD-COMM-RECOVER-1',
+      registrationType: RegistrationType.COMMERCIAL,
+      customerName: 'Priya Sharma',
+      customerMobile: '9876543210',
+      customerEmail: 'priya@example.com',
+      ticketType: 'COMMERCIAL_DAILY',
+      selectedDates: ['2026-10-11'],
+      quantity: 1,
+      amountPaise: 50000,
+      orderStatus: OrderStatus.PAID,
+      paymentStatus: PaymentStatus.CAPTURED,
+      attendees: [
+        {
+          id: BigInt(101),
+          ticketNumber: 'TK-COMM-REC-1',
+          qrCodeToken: 'qr_token_recovery_abc123',
+          name: 'Priya Sharma',
+          mobile: '9876543210',
+          category: 'Commercial Pass',
+          status: AttendeeStatus.ACTIVE,
+          registrationType: RegistrationType.COMMERCIAL,
+          bookingDays: ['2026-10-11'],
+        },
+      ],
+    };
+
+    it('successfully sends ticket recovery email when order exists and mobile matches', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockCommercialPaidOrder);
+      const mailService = (service as any).mailService;
+
+      const res = await service.resendTicketEmail('ORD-COMM-RECOVER-1', '9876543210');
+
+      expect(res.success).toBe(true);
+      expect(res.message).toContain('sent to');
+      expect(res.message).toContain('p***a@example.com');
+      expect(mailService.sendCommercialTicketEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderNumber: 'ORD-COMM-RECOVER-1',
+          customerEmail: 'priya@example.com',
+          passes: expect.arrayContaining([
+            expect.objectContaining({ ticketNumber: 'TK-COMM-REC-1' }),
+          ]),
+        }),
+      );
+    });
+
+    it('rejects recovery when mobile number does not match registered order customer', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockCommercialPaidOrder);
+
+      await expect(
+        service.resendTicketEmail('ORD-COMM-RECOVER-1', '9999999999'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects recovery when order does not exist', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.resendTicketEmail('ORD-COMM-NONEXISTENT', '9876543210'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejects recovery when order is unpaid or pending', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce({
+        ...mockCommercialPaidOrder,
+        orderStatus: OrderStatus.PENDING,
+      });
+
+      await expect(
+        service.resendTicketEmail('ORD-COMM-RECOVER-1', '9876543210'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('strictly isolates and rejects employee registrations from commercial ticket recovery', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce({
+        ...mockCommercialPaidOrder,
+        registrationType: RegistrationType.EMPLOYEE,
+      });
+
+      await expect(
+        service.resendTicketEmail('ORD-COMM-RECOVER-1', '9876543210'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('enforces rate limiting after 3 rapid recovery requests', async () => {
+      redis.incrementCounter.mockResolvedValueOnce(1);
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockCommercialPaidOrder);
+      await service.resendTicketEmail('ORD-COMM-RECOVER-1', '9876543210');
+
+      redis.incrementCounter.mockResolvedValueOnce(4); // Exceeds limit of 3
+      await expect(
+        service.resendTicketEmail('ORD-COMM-RECOVER-1', '9876543210'),
+      ).rejects.toThrow(HttpException);
+    });
+
+    it('handles email provider failure gracefully without unhandled exception', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockCommercialPaidOrder);
+      const mailService = (service as any).mailService;
+      mailService.sendCommercialTicketEmail.mockResolvedValueOnce({
+        success: false,
+        error: 'Hostinger API rate limited',
+      });
+
+      const res = await service.resendTicketEmail('ORD-COMM-RECOVER-1', '9876543210');
+
+      expect(res.success).toBe(false);
+      expect(res.message).toContain('Email service could not deliver your ticket at this moment');
     });
   });
 });

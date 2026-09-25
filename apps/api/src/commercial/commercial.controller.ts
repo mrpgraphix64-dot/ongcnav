@@ -13,6 +13,7 @@ import { Request } from 'express';
 import { CommercialService } from './commercial.service';
 import { CreateCommercialOrderDto } from './dto/create-commercial-order.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
+import { ResendTicketEmailDto } from './dto/resend-ticket-email.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -52,6 +53,17 @@ export class CommercialController {
     @Query('mobile') mobile?: string,
   ) {
     return this.commercialService.getOrder(orderNumber, mobile);
+  }
+
+  @Post('orders/:orderNumber/email')
+  @ApiOperation({ summary: 'Email commercial entry passes to registered customer email' })
+  async resendTicketEmail(
+    @Param('orderNumber') orderNumber: string,
+    @Body() body: ResendTicketEmailDto,
+    @Req() req: Request,
+  ) {
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.ip;
+    return this.commercialService.resendTicketEmail(orderNumber, body.mobile, clientIp);
   }
 }
 

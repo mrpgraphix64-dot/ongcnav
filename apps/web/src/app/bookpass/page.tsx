@@ -10,6 +10,7 @@ import {
   Ticket,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   CalendarCheck,
   CreditCard,
   QrCode,
@@ -78,6 +79,7 @@ export default function BookPassPage() {
   // Success State
   const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
   const [confirmedPasses, setConfirmedPasses] = useState<GeneratedPass[]>([]);
+  const [isTestOrder, setIsTestOrder] = useState(false);
 
   // Server-synced pricing config
   const [serverPricing, setServerPricing] = useState<Record<string, any> | null>(null);
@@ -178,6 +180,15 @@ export default function BookPassPage() {
       const orderData = res.order;
       if (!orderData || !orderData.orderNumber) {
         throw new Error('Could not initiate order. Please try again.');
+      }
+
+      // If backend created this as a safe staging test payment order, passes are returned directly
+      if (res?.isTestPayment && res?.passes && res?.passes.length > 0) {
+        setIsTestOrder(true);
+        setConfirmedOrderNumber(orderData.orderNumber);
+        setConfirmedPasses(res.passes);
+        setSubmitting(false);
+        return;
       }
 
       setPendingOrder(orderData);
@@ -296,6 +307,7 @@ export default function BookPassPage() {
     setPendingOrder(null);
     setConfirmedOrderNumber(null);
     setConfirmedPasses([]);
+    setIsTestOrder(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -308,7 +320,7 @@ export default function BookPassPage() {
         {/* PAGE HERO */}
         <PageHero
           badge="OFFICIAL TICKETS"
-          title="BOOK YOUR ENTRY PASS"
+          title="BUY YOUR ENTRY PASS"
           subtitle="Official Commercial & Public Passes for ONGC Navratri 2026, Ahmedabad."
           breadcrumb="Commercial Passes"
         />
@@ -335,17 +347,30 @@ export default function BookPassPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-200">
-                    Payment Verified &bull; Confirmed
-                  </span>
+                  {isTestOrder ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full uppercase tracking-wider border border-amber-300">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      <span>STAGING TEST PAYMENT &bull; NOT A REAL PURCHASE</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-200">
+                      Payment Verified &bull; Confirmed
+                    </span>
+                  )}
                   <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink pt-1">
-                    Your Passes are Ready!
+                    {isTestOrder ? 'Pass Confirmed (Staging Test Mode)' : 'Your Passes are Ready!'}
                   </h2>
                   <p className="text-xs sm:text-sm text-ink-soft">
                     Order Reference:{' '}
                     <span className="font-mono font-bold text-maroon">{confirmedOrderNumber}</span>
                   </p>
                 </div>
+
+                {isTestOrder && (
+                  <p className="text-xs sm:text-sm text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200 max-w-lg mx-auto font-medium">
+                    This commercial pass was generated using safe staging test mode without live Razorpay payment. Official QR codes and emails have been generated for testing.
+                  </p>
+                )}
 
                 <p className="text-xs sm:text-sm text-ink-soft max-w-lg mx-auto">
                   Show your digital QR code at any entry gate for scanning. You can download or print your pass below.
@@ -364,6 +389,11 @@ export default function BookPassPage() {
                         <span className="text-[10px] font-bold text-maroon-dark bg-maroon-soft px-2.5 py-0.5 rounded-full uppercase">
                           Pass #{index + 1}
                         </span>
+                        {isTestOrder && (
+                          <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full uppercase ml-2">
+                            STAGING TEST PASS
+                          </span>
+                        )}
                         <h3 className="font-outfit font-extrabold text-lg text-ink mt-1">
                           {pass.name}
                         </h3>
@@ -432,7 +462,7 @@ export default function BookPassPage() {
                   className="px-6 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition-all inline-flex items-center gap-2 shadow-md"
                 >
                   <Ticket className="w-4 h-4 text-gold-light" />
-                  <span>Book Additional Passes</span>
+                  <span>Buy Additional Passes</span>
                 </button>
               </div>
             </div>
@@ -789,8 +819,8 @@ export default function BookPassPage() {
                   <button
                     type="submit"
                     disabled={submitting || verifying}
-                    aria-label="Book your pass"
-                    data-testid="book-pass-submit"
+                    aria-label="Buy your pass"
+                    data-testid="buy-pass-submit"
                     className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-105 text-[#7A1930] font-outfit font-black text-base sm:text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2.5 border border-[#7A1930]/20 disabled:opacity-50 cursor-pointer"
                   >
                     {submitting ? (
@@ -801,7 +831,7 @@ export default function BookPassPage() {
                     ) : (
                       <>
                         <Ticket className="w-5 h-5 text-[#7A1930]" />
-                        <span>BOOK YOUR PASS &bull; ₹{estimatedTotal.toLocaleString('en-IN')}</span>
+                        <span>BUY YOUR PASS &bull; ₹{estimatedTotal.toLocaleString('en-IN')}</span>
                       </>
                     )}
                   </button>

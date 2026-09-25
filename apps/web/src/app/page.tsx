@@ -163,11 +163,11 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/bookpass"
-                aria-label="Book your pass"
+                aria-label="Buy your pass"
                 className="w-full sm:w-auto px-8 py-4 rounded-2xl text-sm sm:text-base font-bold bg-gold text-maroon-deep shadow-xl hover:bg-gold-light hover:scale-105 transition-all duration-300 border border-white/40 flex items-center justify-center gap-2.5"
               >
                 <Ticket className="w-5 h-5 text-maroon-deep" />
-                <span>BOOK YOUR PASS</span>
+                <span>BUY YOUR PASS</span>
               </Link>
               <Link
                 href="/my-tickets"
@@ -805,7 +805,7 @@ export default function HomePage() {
             </div>
 
             <h2 className="font-cinzel font-extrabold text-3xl sm:text-5xl text-gold-light tracking-wide">
-              Book Your Digital Entry Pass
+              Buy Your Digital Entry Pass
             </h2>
 
             <p className="text-sm sm:text-base text-cream/80 max-w-2xl mx-auto leading-relaxed font-light">
@@ -815,11 +815,11 @@ export default function HomePage() {
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/bookpass"
-                aria-label="Book your pass"
+                aria-label="Buy your pass"
                 className="w-full sm:w-auto px-9 py-4 rounded-2xl text-sm font-bold bg-gold text-maroon-dark hover:bg-gold-light transition-all duration-300 shadow-xl border border-white/40 flex items-center justify-center gap-2.5"
               >
                 <Ticket className="w-4 h-4 text-maroon-dark" />
-                <span>BOOK YOUR PASS</span>
+                <span>BUY YOUR PASS</span>
               </Link>
               <Link
                 href="/my-tickets"

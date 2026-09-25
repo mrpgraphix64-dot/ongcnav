@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Phone,
   Hash,
+  Mail,
 } from 'lucide-react';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
@@ -39,11 +40,48 @@ function CommercialTicketsContent() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Email recovery for verified commercial order
+  const handleEmailTicket = async () => {
+    if (!result || !result.orderNumber) return;
+    setEmailSending(true);
+    setEmailMessage(null);
+
+    try {
+      const res = await fetchApi(`/commercial/orders/${encodeURIComponent(result.orderNumber)}/email`, {
+        method: 'POST',
+        body: JSON.stringify({ mobile: orderMobile.trim() }),
+      });
+
+      if (res?.success) {
+        setEmailMessage({
+          type: 'success',
+          text: res.message || 'Pass details emailed to your registered address.',
+        });
+      } else {
+        setEmailMessage({
+          type: 'error',
+          text: res?.message || 'Could not send email at this time.',
+        });
+      }
+    } catch (err: any) {
+      setEmailMessage({
+        type: 'error',
+        text: err?.message || 'Failed to dispatch ticket email. Please try again later.',
+      });
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   // Commercial Order search
   const handleCommercialSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
     setResult(null);
+    setEmailMessage(null);
 
     const validation = validateCommercialLookup(orderNumber, orderMobile);
     if (!validation.isValid) {
@@ -169,11 +207,11 @@ function CommercialTicketsContent() {
             <p className="text-xs text-ink/70">Looking to purchase passes?</p>
             <Link
               href="/bookpass"
-              aria-label="Book your pass"
-              data-testid="book-pass-link"
+              aria-label="Buy your pass"
+              data-testid="buy-pass-link"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-maroon hover:text-gold-dark transition-colors"
             >
-              <span>BOOK YOUR PASS</span>
+              <span>BUY YOUR PASS</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -183,7 +221,7 @@ function CommercialTicketsContent() {
         {result && (
           <div className="space-y-8 animate-fadeIn">
             {(() => {
-              const statusInfo = getOrderStatusBadge(result.orderStatus, result.paymentStatus);
+              const statusInfo = getOrderStatusBadge(result.orderStatus, result.paymentStatus, result.isTestPayment);
               const passes = result.passes || [];
               const hasPasses = passes.length > 0;
               const formattedDates = formatPassDates(result.selectedDates, result.ticketType);
@@ -257,6 +295,17 @@ function CommercialTicketsContent() {
 
                   {/* ORDER SUMMARY CARD */}
                   <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-md space-y-6">
+                    {result.isTestPayment && (
+                      <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-start gap-3 shadow-xs">
+                        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold uppercase tracking-wider">STAGING TEST PAYMENT &bull; SIMULATED TRANSACTION</span>
+                          <p className="text-amber-800 text-xs mt-0.5">
+                            This commercial pass was generated using safe staging test mode without live Razorpay payment.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-stone-100">
                       <div>
                         <div className="text-xs font-bold text-ink-soft uppercase tracking-wider">
@@ -360,15 +409,46 @@ function CommercialTicketsContent() {
                   {/* COMMERCIAL PASS CARDS */}
                   {hasPasses && (
                     <div className="space-y-6">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-cinzel font-bold text-xl text-maroon flex items-center gap-2">
-                          <Ticket className="w-5 h-5 text-gold" />
-                          <span>Commercial Passes ({passes.length})</span>
-                        </h3>
-                        <span className="text-xs text-stone-500">
-                          Present individual QR codes at the entry gate
-                        </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <h3 className="font-cinzel font-bold text-xl text-maroon flex items-center gap-2">
+                            <Ticket className="w-5 h-5 text-gold" />
+                            <span>Commercial Passes ({passes.length})</span>
+                          </h3>
+                          <span className="text-xs text-stone-500">
+                            Present individual QR codes at the entry gate
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleEmailTicket}
+                          disabled={emailSending}
+                          aria-label="Email my ticket"
+                          data-testid="email-my-ticket-btn"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gold/15 hover:bg-gold/25 border border-gold/40 text-maroon font-bold text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          <Mail className="w-4 h-4 text-maroon" />
+                          <span>{emailSending ? 'SENDING EMAIL...' : 'EMAIL MY TICKET'}</span>
+                        </button>
                       </div>
+
+                      {emailMessage && (
+                        <div
+                          className={`p-4 rounded-2xl text-xs sm:text-sm flex items-start gap-3 border shadow-xs ${
+                            emailMessage.type === 'success'
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                              : 'bg-rose-50 border-rose-200 text-rose-900'
+                          }`}
+                        >
+                          {emailMessage.type === 'success' ? (
+                            <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+                          ) : (
+                            <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
+                          )}
+                          <div className="leading-relaxed font-medium">{emailMessage.text}</div>
+                        </div>
+                      )}
 
                       {passes.map((pass: any, index: number) => {
                         const passDates = formatPassDates(pass.bookingDays || result.selectedDates, result.ticketType);

@@ -171,6 +171,11 @@ export class RegistrationService {
       include: {
         employee: true,
         familyMember: true,
+        order: {
+          select: {
+            metadata: true,
+          },
+        },
         dailyCheckins: {
           where: { isLoadTest: false },
           orderBy: { checkinTime: 'desc' },
@@ -215,6 +220,7 @@ export class RegistrationService {
       qrSvg,
       status: attendee.status,
       registrationType: attendee.registrationType,
+      isTestPayment: (attendee.order?.metadata as any)?.isTestPayment === true,
       isFamily,
       relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Commercial Pass'),
       attendeeName,

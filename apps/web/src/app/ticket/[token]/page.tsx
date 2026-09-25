@@ -117,6 +117,13 @@ export default function TicketPassPage() {
           </button>
         </div>
 
+        {ticket.isTestPayment && (
+          <div className="p-3 bg-amber-100 border border-amber-300 rounded-2xl text-amber-900 text-xs font-bold text-center uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+            <span>STAGING TEST PASS &bull; NOT A REAL PURCHASE</span>
+          </div>
+        )}
+
         {/* Printable Ticket Card */}
         <div
           id="printableTicket"
