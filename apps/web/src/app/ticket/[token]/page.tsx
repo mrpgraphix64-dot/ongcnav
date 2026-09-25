@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
+import TicketGuidelines from '@/components/TicketGuidelines';
 import { fetchApi } from '@/lib/api';
 
 export default function TicketPassPage() {
@@ -247,6 +248,9 @@ export default function TicketPassPage() {
             <Share2 className="w-4 h-4" /> Share Pass
           </a>
         </div>
+
+        {/* Ticket Guidelines */}
+        <TicketGuidelines className="mt-2" />
       </main>
 
       <div className="print:hidden">

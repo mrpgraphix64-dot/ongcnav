@@ -22,21 +22,43 @@ describe('Commercial Constants & Server-Authoritative Price Calculation', () => 
       expect(res.validDates).toEqual(['2026-10-11']);
     });
 
-    it('correctly multiplies price for multiple selected nights and quantity', () => {
-      // 2 nights * ₹249 = ₹498 (49,800 paise) unit price * 3 passes = ₹1,494 (149,400 paise) total
-      const res = calculateServerPricePaise(
-        'COMMERCIAL_DAILY',
-        ['2026-10-11', '2026-10-12'],
-        3,
-      );
-      expect(res.unitPricePaise).toBe(49800); // ₹498.00
-      expect(res.originalPricePaise).toBe(99800); // ₹998.00 (499 * 2)
-      expect(res.totalAmountPaise).toBe(149400); // ₹1,494.00
-      expect(res.totalOriginalAmountPaise).toBe(299400);
-      expect(res.validDates).toHaveLength(2);
+    it('rejects multiple different booking dates for Daily Pass', () => {
+      expect(() => {
+        calculateServerPricePaise(
+          'COMMERCIAL_DAILY',
+          ['2026-10-11', '2026-10-12'],
+          3,
+        );
+      }).toThrow('A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.');
     });
 
-    it('correctly calculates price for Mandli Pass (₹149 / 14,900 paise, original ₹299)', () => {
+    it('rejects multiple different booking dates for Mandli Pass', () => {
+      expect(() => {
+        calculateServerPricePaise(
+          'COMMERCIAL_MANDLI',
+          ['2026-10-11', '2026-10-12'],
+          1,
+        );
+      }).toThrow('A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.');
+    });
+
+    it('rejects multiple different booking dates for Any Day Pass', () => {
+      expect(() => {
+        calculateServerPricePaise(
+          'COMMERCIAL_ANY_DAY',
+          ['2026-10-13', '2026-10-14'],
+          2,
+        );
+      }).toThrow('A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.');
+    });
+
+    it('accepts duplicate submissions of the same date by deduplicating to exactly one booking date', () => {
+      const res = calculateServerPricePaise('COMMERCIAL_DAILY', ['2026-10-11', '2026-10-11'], 2);
+      expect(res.validDates).toEqual(['2026-10-11']);
+      expect(res.totalAmountPaise).toBe(49800);
+    });
+
+    it('correctly calculates price for Mandli Pass (₹149 / 14,900 paise, original ₹299) for exactly one booking date', () => {
       const res = calculateServerPricePaise('COMMERCIAL_MANDLI', ['2026-10-11'], 1);
       expect(res.unitPricePaise).toBe(14900); // ₹149.00
       expect(res.originalPricePaise).toBe(29900); // ₹299.00
@@ -45,7 +67,7 @@ describe('Commercial Constants & Server-Authoritative Price Calculation', () => 
       expect(res.validDates).toEqual(['2026-10-11']);
     });
 
-    it('correctly calculates price for Any Day Pass (₹279 / 27,900 paise, original ₹499)', () => {
+    it('correctly calculates price for Any Day Pass (₹279 / 27,900 paise, original ₹499) for exactly one booking date', () => {
       const res = calculateServerPricePaise('COMMERCIAL_ANY_DAY', ['2026-10-14'], 2);
       expect(res.unitPricePaise).toBe(27900); // ₹279.00
       expect(res.originalPricePaise).toBe(49900); // ₹499.00
@@ -54,13 +76,18 @@ describe('Commercial Constants & Server-Authoritative Price Calculation', () => 
       expect(res.validDates).toEqual(['2026-10-14']);
     });
 
-    it('calculates fixed Early Bird price for season pass (₹1,750 / 175,000 paise, original ₹3,500) covering all 9 nights', () => {
-      const res = calculateServerPricePaise('COMMERCIAL_SEASON', ['2026-10-11'], 2);
-      expect(res.unitPricePaise).toBe(175000); // ₹1,750.00
-      expect(res.originalPricePaise).toBe(350000); // ₹3,500.00
-      expect(res.totalAmountPaise).toBe(350000); // ₹3,500.00 for 2 passes
-      expect(res.totalOriginalAmountPaise).toBe(700000); // ₹7,000.00 original
-      expect(res.validDates).toEqual(COMMERCIAL_EVENT_DATES);
+    it('Season Pass automatically and authoritatively covers all 9 event dates even if frontend sends an arbitrary or single date', () => {
+      // Frontend sends arbitrary single date: backend must override with all 9 dates
+      const res1 = calculateServerPricePaise('COMMERCIAL_SEASON', ['2026-10-15'], 2);
+      expect(res1.unitPricePaise).toBe(175000); // ₹1,750.00
+      expect(res1.originalPricePaise).toBe(350000); // ₹3,500.00
+      expect(res1.totalAmountPaise).toBe(350000); // ₹3,500.00 for 2 passes
+      expect(res1.validDates).toEqual(COMMERCIAL_EVENT_DATES);
+      expect(res1.validDates).toHaveLength(9);
+
+      // Frontend sends invalid dates: backend still authoritatively covers all 9 dates
+      const res2 = calculateServerPricePaise('COMMERCIAL_SEASON', ['invalid-date', '2026-12-31'], 1);
+      expect(res2.validDates).toEqual(COMMERCIAL_EVENT_DATES);
     });
 
     it('filters out invalid dates and rejects when no valid event dates remain', () => {

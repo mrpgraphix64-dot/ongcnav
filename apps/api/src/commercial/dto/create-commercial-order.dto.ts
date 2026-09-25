@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsInt,
   IsNotEmpty,
@@ -11,6 +12,7 @@ import {
   Min,
   MinLength,
   ArrayMinSize,
+  Equals,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -62,4 +64,14 @@ export class CreateCommercialOrderDto {
   @Max(10, { message: 'Maximum 10 tickets can be purchased per order.' })
   @Type(() => Number)
   quantity: number;
+
+  @ApiProperty({
+    example: true,
+    description: 'Agreement to ticket terms and conditions',
+  })
+  @IsNotEmpty({ message: 'Please accept the ticket terms & conditions to continue.' })
+  @IsBoolean({ message: 'Terms acceptance must be a boolean value.' })
+  @Equals(true, { message: 'Please accept the ticket terms & conditions to continue.' })
+  @Type(() => Boolean)
+  termsAccepted: boolean;
 }

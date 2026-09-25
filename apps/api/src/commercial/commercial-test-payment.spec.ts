@@ -47,8 +47,9 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
       customerMobile: '9876543210',
       customerEmail: 'tester@example.com',
       ticketType: 'COMMERCIAL_DAILY',
-      selectedDates: ['2026-10-11', '2026-10-12'],
+      selectedDates: ['2026-10-11'],
       quantity: 2,
+      termsAccepted: true,
     };
 
     beforeEach(async () => {
@@ -202,7 +203,7 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
         currency: 'INR',
         quantity: 2,
         ticketType: 'COMMERCIAL_DAILY',
-        selectedDates: ['2026-10-11', '2026-10-12'],
+        selectedDates: ['2026-10-11'],
         razorpayOrderId: 'order_rzp_prod',
         customerName: 'Customer',
         customerEmail: 'c@example.com',
@@ -231,7 +232,7 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
         currency: 'INR',
         quantity: 2,
         ticketType: 'COMMERCIAL_DAILY',
-        selectedDates: ['2026-10-11', '2026-10-12'],
+        selectedDates: ['2026-10-11'],
         razorpayOrderId: 'order_rzp_normal',
         customerName: 'Customer',
         customerEmail: 'c@example.com',
@@ -259,7 +260,7 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
         currency: 'INR',
         quantity: 2,
         ticketType: 'COMMERCIAL_DAILY',
-        selectedDates: ['2026-10-11', '2026-10-12'],
+        selectedDates: ['2026-10-11'],
         razorpayOrderId: 'order_rzp_attempt',
         customerName: 'Attacker',
         customerEmail: 'attacker@example.com',

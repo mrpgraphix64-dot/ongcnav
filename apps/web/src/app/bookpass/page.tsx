@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Script from 'next/script';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
+import TicketGuidelines from '@/components/TicketGuidelines';
 import {
   Ticket,
   CheckCircle2,
@@ -40,16 +41,18 @@ function formatDateChip(iso: string) {
     weekday: d.toLocaleDateString('en-IN', { weekday: 'short' }),
     day: d.toLocaleDateString('en-IN', { day: '2-digit' }),
     month: d.toLocaleDateString('en-IN', { month: 'short' }),
+    fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+    chipLabel: `${d.toLocaleDateString('en-IN', { month: 'short' })} ${d.getDate()}`,
   };
 }
 
 const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
 
 export type TicketTypeCode =
-  | 'COMMERCIAL_MANDLI'
   | 'COMMERCIAL_DAILY'
-  | 'COMMERCIAL_ANY_DAY'
-  | 'COMMERCIAL_SEASON';
+  | 'COMMERCIAL_SEASON'
+  | 'COMMERCIAL_MANDLI'
+  | 'COMMERCIAL_ANY_DAY';
 
 interface PassOption {
   code: TicketTypeCode;
@@ -66,39 +69,15 @@ interface PassOption {
 
 const PASS_OPTIONS: PassOption[] = [
   {
-    code: 'COMMERCIAL_MANDLI',
-    name: 'Mandli Pass',
-    timing: '12:00 AM – 4:00 AM',
-    timingCategory: 'Mandli',
-    price: 149,
-    originalPrice: 299,
-    discountLabel: '50% OFF',
-    offerLabel: 'MIDNIGHT SPECIAL',
-    description: 'Post-midnight entry for late-night Mandli Garba',
-    isSeason: false,
-  },
-  {
     code: 'COMMERCIAL_DAILY',
-    name: 'Daily Entry Pass',
+    name: 'Daily Pass',
     timing: '8:00 PM – 4:00 AM',
     timingCategory: 'Garba',
     price: 249,
     originalPrice: 499,
     discountLabel: '50% OFF',
     offerLabel: 'EARLY BIRD OFFER',
-    description: 'Full evening Garba entry for selected night(s)',
-    isSeason: false,
-  },
-  {
-    code: 'COMMERCIAL_ANY_DAY',
-    name: 'Any Day Pass',
-    timing: '8:00 PM – 4:00 AM',
-    timingCategory: 'Garba',
-    price: 279,
-    originalPrice: 499,
-    discountLabel: '44% OFF',
-    offerLabel: 'FLEXIBLE ENTRY',
-    description: 'Flexible single-night entry pass for any chosen event night',
+    description: 'Full evening Garba entry for selected night',
     isSeason: false,
   },
   {
@@ -112,6 +91,30 @@ const PASS_OPTIONS: PassOption[] = [
     offerLabel: 'ALL 9 NIGHTS',
     description: 'Full festival pass covering all 9 nights of Garba',
     isSeason: true,
+  },
+  {
+    code: 'COMMERCIAL_MANDLI',
+    name: 'Mandli Pass',
+    timing: '12:00 AM – 4:00 AM',
+    timingCategory: 'Mandli',
+    price: 149,
+    originalPrice: 299,
+    discountLabel: '50% OFF',
+    offerLabel: 'MIDNIGHT SPECIAL',
+    description: 'Post-midnight entry for late-night Mandli Garba',
+    isSeason: false,
+  },
+  {
+    code: 'COMMERCIAL_ANY_DAY',
+    name: 'Any Day Pass',
+    timing: '8:00 PM – 4:00 AM',
+    timingCategory: 'Garba',
+    price: 279,
+    originalPrice: 499,
+    discountLabel: '44% OFF',
+    offerLabel: 'FLEXIBLE ENTRY',
+    description: 'Flexible single-night entry pass for any chosen event night',
+    isSeason: false,
   },
 ];
 
@@ -245,12 +248,13 @@ function CustomQuantityDropdown({ value, onChange, disabled }: CustomQuantityDro
 
 export default function BookPassPage() {
   // Form State
-  const [ticketType, setTicketType] = useState<TicketTypeCode>('COMMERCIAL_MANDLI');
+  const [ticketType, setTicketType] = useState<TicketTypeCode>('COMMERCIAL_DAILY');
+  const [selectedDate, setSelectedDate] = useState<string>('2026-10-11');
+  const [quantity, setQuantity] = useState<number>(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [quantity, setQuantity] = useState<number>(1);
-  const [selectedDates, setSelectedDates] = useState<string[]>(['2026-10-11']);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Flow & Payment State
   const [loadingConfig, setLoadingConfig] = useState(false);
@@ -292,18 +296,9 @@ export default function BookPassPage() {
     loadConfig();
   }, []);
 
-  const toggleDate = (date: string) => {
-    setSelectedDates((prev) => {
-      if (prev.includes(date)) {
-        if (prev.length === 1) return prev; // Keep at least one
-        return prev.filter((d) => d !== date);
-      }
-      return [...prev, date].sort();
-    });
-  };
-
-  const selectAllDates = () => {
-    setSelectedDates([...EVENT_DATES]);
+  // Single date selection: tapping another date REPLACES the previous date
+  const handleSelectDate = (date: string) => {
+    setSelectedDate(date);
   };
 
   // Resolve active option config
@@ -315,13 +310,12 @@ export default function BookPassPage() {
 
   // Live estimated pricing (strictly computed and validated server-side on creation)
   const isSeason = ticketType === 'COMMERCIAL_SEASON';
-  const effectiveNightsCount = isSeason ? EVENT_DATES.length : selectedDates.length;
 
-  const estimatedUnitPricePerPass = isSeason ? unitPrice : unitPrice * selectedDates.length;
-  const estimatedOriginalUnitPricePerPass = isSeason ? originalUnitPrice : originalUnitPrice * selectedDates.length;
+  const unitPricePerPass = unitPrice;
+  const originalUnitPricePerPass = originalUnitPrice;
 
-  const estimatedTotal = estimatedUnitPricePerPass * quantity;
-  const estimatedOriginalTotal = estimatedOriginalUnitPricePerPass * quantity;
+  const estimatedTotal = unitPricePerPass * quantity;
+  const estimatedOriginalTotal = originalUnitPricePerPass * quantity;
   const estimatedSavings = Math.max(0, estimatedOriginalTotal - estimatedTotal);
 
   // Step 1: Initiate order & launch Razorpay Checkout
@@ -337,12 +331,21 @@ export default function BookPassPage() {
       setErrorMessage('Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9).');
       return;
     }
-    if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('Please enter a valid email address for digital pass delivery.');
+    if (!email.trim()) {
+      setErrorMessage('Email address is required because your digital QR pass will be sent here.');
       return;
     }
-    if (!isSeason && selectedDates.length === 0) {
-      setErrorMessage('Please select at least one attendance date.');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+    if (!isSeason && !selectedDate) {
+      setErrorMessage('Please select a booking date.');
+      return;
+    }
+    if (!termsAccepted) {
+      setErrorMessage('Please accept the ticket terms & conditions to continue.');
       return;
     }
 
@@ -352,6 +355,8 @@ export default function BookPassPage() {
 
     try {
       // 1. Create order on backend
+      const effectiveDates = isSeason ? EVENT_DATES : [selectedDate];
+
       const res = await fetchApi('/commercial/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -360,8 +365,9 @@ export default function BookPassPage() {
           customerMobile: cleanPhone,
           customerEmail: email.trim().toLowerCase(),
           ticketType,
-          selectedDates: isSeason ? EVENT_DATES : selectedDates,
+          selectedDates: effectiveDates,
           quantity,
+          termsAccepted: true,
         }),
       });
 
@@ -496,13 +502,15 @@ export default function BookPassPage() {
     setEmail('');
     setPhone('');
     setQuantity(1);
-    setSelectedDates(['2026-10-11']);
+    setSelectedDate('2026-10-11');
+    setTicketType('COMMERCIAL_DAILY');
     setErrorMessage('');
     setPaymentFailed(false);
     setPendingOrder(null);
     setConfirmedOrderNumber(null);
     setConfirmedPasses([]);
     setIsTestOrder(false);
+    setTermsAccepted(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -658,6 +666,9 @@ export default function BookPassPage() {
                 ))}
               </div>
 
+              {/* TICKET GUIDELINES */}
+              <TicketGuidelines className="mt-6" />
+
               <div className="text-center pt-4">
                 <button
                   onClick={resetForm}
@@ -680,12 +691,12 @@ export default function BookPassPage() {
               )}
 
               <form onSubmit={handleInitiatePayment} className="space-y-6">
-                {/* SECTION A: CHOOSE YOUR PASS */}
+                {/* STEP 1 — CATEGORY */}
                 <div className="space-y-3">
                   <div>
                     <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
                       <Ticket className="w-5 h-5 text-maroon" />
-                      <span>1. Choose Your Pass <span className="text-rose-600">*</span></span>
+                      <span>1. Choose Category <span className="text-rose-600">*</span></span>
                     </h2>
                     <p className="text-xs text-ink-soft">
                       Select your preferred commercial pass category
@@ -747,7 +758,7 @@ export default function BookPassPage() {
                                 ₹{sPrice.toLocaleString('en-IN')}
                               </span>
                               <span className="text-[11px] font-semibold text-ink-soft">
-                                {opt.isSeason ? '/ 9 nights' : '/ night'}
+                                {opt.isSeason ? '/ 9 nights' : '/ pass'}
                               </span>
                             </div>
 
@@ -766,7 +777,7 @@ export default function BookPassPage() {
                     })}
                   </div>
 
-                  {/* PROMINENT TIMING CALLOUT (Requirement 2) */}
+                  {/* PROMINENT TIMING CALLOUT */}
                   <div
                     className={`p-4 rounded-2xl border flex items-start gap-3 transition-all ${
                       activeOption.timingCategory === 'Mandli'
@@ -807,16 +818,105 @@ export default function BookPassPage() {
                   </div>
                 </div>
 
-                {/* SECTION B: PASS QUANTITY (Custom Dropdown) */}
-                <div className="space-y-2 pt-4 border-t border-stone-100">
+                {/* STEP 2 — DATE */}
+                <div className="space-y-3 pt-6 border-t border-stone-100">
+                  <div>
+                    <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
+                      <CalendarCheck className="w-5 h-5 text-maroon" />
+                      <span>2. Select Date <span className="text-rose-600">*</span></span>
+                    </h2>
+                    <p className="text-xs text-ink-soft">
+                      {isSeason
+                        ? 'Season Pass automatically covers all 9 event dates.'
+                        : 'Select one booking date for this order.'}
+                    </p>
+                  </div>
+
+                  {isSeason ? (
+                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-outfit font-extrabold text-base text-emerald-950">
+                            All Event Dates
+                          </h3>
+                          <p className="text-xs text-emerald-800">
+                            Covers all 9 festival nights (11 Oct – 19 Oct 2026)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-white text-emerald-800 border border-emerald-300 shadow-xs">
+                        All 9 Nights Included
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
+                        {EVENT_DATES.map((iso, idx) => {
+                          const isSelected = selectedDate === iso;
+                          const { weekday, chipLabel } = formatDateChip(iso);
+                          return (
+                            <button
+                              key={iso}
+                              type="button"
+                              onClick={() => handleSelectDate(iso)}
+                              className={`p-2 sm:p-2.5 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center cursor-pointer ${
+                                isSelected
+                                  ? 'bg-maroon text-white border-maroon shadow-md scale-[1.03] ring-2 ring-gold/40'
+                                  : 'bg-cream-light text-ink border-stone-200 hover:border-maroon/50 hover:bg-stone-50'
+                              }`}
+                            >
+                              <span
+                                className={`text-[9px] uppercase tracking-wider font-bold ${
+                                  isSelected ? 'text-gold-light' : 'text-ink-soft'
+                                }`}
+                              >
+                                Day {idx + 1}
+                              </span>
+                              <span className="font-outfit font-black text-sm sm:text-base leading-tight mt-0.5">
+                                {chipLabel}
+                              </span>
+                              <span
+                                className={`text-[9px] font-medium mt-0.5 ${
+                                  isSelected ? 'text-gold-light/90' : 'text-stone-400'
+                                }`}
+                              >
+                                {weekday}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-amber-50/70 border border-[#D4AF37]/40 flex items-center justify-between text-xs text-ink flex-wrap gap-2">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <CalendarCheck className="w-4 h-4 text-maroon" />
+                          <span>Booking Date: <strong className="text-maroon font-bold">{formatDateChip(selectedDate).fullDate} ({formatDateChip(selectedDate).weekday})</strong></span>
+                        </span>
+                        <span className="text-[11px] text-ink-soft">
+                          Tapping another date replaces your selection
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* STEP 3 — QUANTITY */}
+                <div className="space-y-2 pt-6 border-t border-stone-100">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                    <label className="block text-xs font-bold text-ink uppercase tracking-wider">
-                      2. Pass Quantity <span className="text-rose-600">*</span>
-                    </label>
+                    <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
+                      <Ticket className="w-5 h-5 text-maroon" />
+                      <span>3. Quantity <span className="text-rose-600">*</span></span>
+                    </h2>
                     <span className="text-[11px] text-ink-soft">
-                      (Maximum 10 passes per single transaction)
+                      (1 to 10 passes per booking)
                     </span>
                   </div>
+                  <p className="text-xs text-ink-soft">
+                    All passes will share the selected category ({activeOption.name}) and date ({isSeason ? 'All Event Dates' : formatDateChip(selectedDate).fullDate}).
+                  </p>
                   <CustomQuantityDropdown
                     value={quantity}
                     onChange={setQuantity}
@@ -824,14 +924,14 @@ export default function BookPassPage() {
                   />
                 </div>
 
-                {/* SECTION C: CUSTOMER DETAILS */}
-                <div className="space-y-4 pt-4 border-t border-stone-100">
+                {/* STEP 4 — CUSTOMER DETAILS */}
+                <div className="space-y-4 pt-6 border-t border-stone-100">
                   <div>
-                    <h3 className="font-outfit font-extrabold text-sm text-ink uppercase tracking-wider">
-                      3. Customer Details
-                    </h3>
+                    <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider">
+                      4. Customer Details
+                    </h2>
                     <p className="text-xs text-ink-soft">
-                      Required for digital QR pass issuance and receipt confirmation
+                      Primary contact details for this booking
                     </p>
                   </div>
 
@@ -889,195 +989,146 @@ export default function BookPassPage() {
                         placeholder="e.g. priyesh@example.com"
                         className="w-full px-4 py-3 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
                       />
+                      <p className="text-[11px] text-stone-500 mt-1">
+                        Your QR pass will be sent to this email.
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                {/* SECTION D: DATE SELECTION */}
-                <div className="space-y-3 pt-4 border-t border-stone-100">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <h3 className="font-outfit font-extrabold text-sm text-ink uppercase tracking-wider flex items-center gap-2">
-                        <CalendarCheck className="w-4 h-4 text-maroon" />
-                        <span>4. Select Event Date(s) <span className="text-rose-600">*</span></span>
-                      </h3>
-                      <p className="text-xs text-ink-soft">
-                        {isSeason
-                          ? 'Season Pass includes all 9 festival nights automatically.'
-                          : ticketType === 'COMMERCIAL_MANDLI'
-                          ? 'Select the night(s) for your 12:00 AM – 4:00 AM post-midnight entry.'
-                          : ticketType === 'COMMERCIAL_ANY_DAY'
-                          ? 'Select your preferred night for flexible single-night entry.'
-                          : 'Select the night(s) you wish to attend.'}
+                {/* STEP 5 — REVIEW */}
+                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#FAF7F2] to-amber-50/40 border border-[#D4AF37]/40 space-y-3.5 text-xs shadow-sm">
+                  <div className="flex items-center justify-between pb-2 border-b border-stone-200/80">
+                    <h2 className="font-outfit font-black text-sm sm:text-base text-ink uppercase tracking-wider">
+                      5. Review Booking
+                    </h2>
+                    <span className="text-[11px] font-semibold text-maroon bg-maroon/10 px-2.5 py-0.5 rounded-full">
+                      {quantity} {quantity === 1 ? 'Pass' : 'Passes'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Pass Category</span>
+                      <p className="font-outfit font-extrabold text-sm text-ink">{activeOption.name}</p>
+                      <p className="text-[11px] text-maroon font-bold">{activeTiming}</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Booking Date</span>
+                      <p className="font-outfit font-extrabold text-sm text-ink">
+                        {isSeason ? 'All Event Dates' : formatDateChip(selectedDate).fullDate}
+                      </p>
+                      <p className="text-[11px] text-ink-soft">
+                        {isSeason ? 'Covers all 9 nights (Oct 11 – 19)' : `${formatDateChip(selectedDate).weekday} night entry`}
                       </p>
                     </div>
 
-                    {!isSeason && (
-                      <button
-                        type="button"
-                        onClick={selectAllDates}
-                        className="text-xs font-bold text-maroon hover:underline cursor-pointer"
-                      >
-                        Select All 9 Nights
-                      </button>
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Quantity</span>
+                      <p className="font-outfit font-bold text-sm text-ink">
+                        {quantity} {quantity === 1 ? 'Pass' : 'Passes'}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Customer Details</span>
+                      <p className="font-bold text-sm text-ink truncate">
+                        {name.trim() || '—'}
+                      </p>
+                      <p className="text-[11px] text-ink-soft truncate">
+                        {phone || '—'} &bull; {email.trim() || '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-stone-200/80 pt-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-ink-soft">
+                      <span>Price per Pass:</span>
+                      <span className="font-bold text-ink">₹{unitPricePerPass.toLocaleString('en-IN')}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-ink-soft">
+                      <span>Original Price:</span>
+                      <span className="font-semibold text-stone-400 line-through decoration-rose-600">
+                        ₹{estimatedOriginalTotal.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    {estimatedSavings > 0 && (
+                      <div className="flex items-center justify-between text-[#E65100] font-bold">
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+                          Savings ({activeOption.discountLabel}):
+                        </span>
+                        <span>-₹{estimatedSavings.toLocaleString('en-IN')}</span>
+                      </div>
                     )}
-                  </div>
 
-                  {isSeason ? (
-                    <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2 font-bold">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>All 9 Festival Nights Included (11–19 October 2026)</span>
-                      </div>
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-white px-2.5 py-0.5 rounded-full border border-emerald-200">
-                        Full Festival Access
+                    <div className="flex items-center justify-between pt-2 border-t border-stone-200/80 text-sm">
+                      <span className="font-outfit font-extrabold text-ink text-base">Total Amount:</span>
+                      <span className="font-outfit font-black text-2xl sm:text-3xl text-[#7A1930] tracking-tight">
+                        ₹{estimatedTotal.toLocaleString('en-IN')}
                       </span>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
-                        {EVENT_DATES.map((iso, idx) => {
-                          const selected = selectedDates.includes(iso);
-                          const { weekday, day, month } = formatDateChip(iso);
-                          return (
-                            <button
-                              key={iso}
-                              type="button"
-                              onClick={() => toggleDate(iso)}
-                              className={`p-2 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center cursor-pointer ${
-                                selected
-                                  ? 'bg-maroon text-white border-maroon shadow-md scale-[1.02]'
-                                  : 'bg-cream-light text-ink border-stone-200 hover:border-maroon/40'
-                              }`}
-                            >
-                              <span
-                                className={`text-[9px] uppercase tracking-wider font-bold ${
-                                  selected ? 'text-gold-light' : 'text-ink-soft'
-                                }`}
-                              >
-                                Day {idx + 1}
-                              </span>
-                              <span className="font-outfit font-extrabold text-base leading-tight mt-0.5">
-                                {day}
-                              </span>
-                              <span
-                                className={`text-[10px] font-semibold ${
-                                  selected ? 'text-white/90' : 'text-ink-soft'
-                                }`}
-                              >
-                                {month}
-                              </span>
-                              <span
-                                className={`text-[9px] font-medium mt-0.5 ${
-                                  selected ? 'text-gold-light/90' : 'text-stone-400'
-                                }`}
-                              >
-                                {weekday}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                  </div>
 
-                      <div className="p-2.5 rounded-xl bg-amber-50/60 border border-[#D4AF37]/30 flex items-center justify-between text-[11px] text-ink-soft flex-wrap gap-2">
-                        <span>
-                          Selected: <strong className="text-ink">{selectedDates.length}</strong> of {EVENT_DATES.length} nights
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-stone-400 line-through">
-                            ₹{(originalUnitPrice * selectedDates.length).toLocaleString('en-IN')}
-                          </span>
-                          <strong className="text-[#7A1930] font-black text-xs">
-                            ₹{(unitPrice * selectedDates.length).toLocaleString('en-IN')}
-                          </strong>
-                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/80 px-1.5 py-0.2 rounded">
-                            {activeOption.discountLabel}
-                          </span>
-                          <span>per pass</span>
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  <div className="p-2.5 rounded-xl bg-stone-100 border border-stone-200 text-[11px] text-ink-soft">
+                    <strong>Order Rule:</strong> 1 Order = 1 Category + 1 Booking Date + Quantity. If tickets for another date are needed, please place another order after completing this booking. {isSeason && '(Season Pass covers all dates in 1 order).'}
+                  </div>
                 </div>
 
-                {/* SECTION E: ORDER SUMMARY */}
-                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#FAF7F2] to-amber-50/40 border border-[#D4AF37]/40 space-y-3 text-xs shadow-sm">
-                  <h3 className="font-outfit font-black text-sm text-ink uppercase tracking-wider pb-2 border-b border-stone-200/80">
-                    5. Order Summary
-                  </h3>
-
-                  <div className="flex items-center justify-between text-ink-soft">
-                    <span>Pass Type:</span>
-                    <span className="font-bold text-ink">{activeOption.name}</span>
+                {/* IMPORTANT INFORMATION & TERMS */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-gold/40 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-maroon shrink-0" />
+                    <h3 className="font-outfit font-black text-xs sm:text-sm text-ink uppercase tracking-wider">
+                      Important Information
+                    </h3>
                   </div>
 
-                  <div className="flex items-center justify-between text-ink-soft">
-                    <span>Timing:</span>
-                    <span className="font-bold text-maroon">{activeTiming}</span>
-                  </div>
+                  <ul className="space-y-1.5 list-disc list-inside text-xs text-stone-700 leading-relaxed font-medium">
+                    <li>Your digital QR pass will be sent to your registered email address.</li>
+                    <li>Please enter an active email address that you can access (email is mandatory).</li>
+                    <li>Please keep your QR pass ready on your phone at the entry gate.</li>
+                    <li>Tickets are non-refundable and non-transferable.</li>
+                    <li>Daily / Season / Any Day passes are valid from 8:00 PM to 4:00 AM.</li>
+                    <li>Mandli passes are valid only from 12:00 AM to 4:00 AM.</li>
+                    <li>Each QR pass is unique to your booking. Do not share your QR pass with unauthorized persons.</li>
+                  </ul>
 
-                  <div className="flex items-center justify-between text-ink-soft">
-                    <span>Quantity:</span>
-                    <span className="font-bold text-ink">{quantity} {quantity === 1 ? 'Pass' : 'Passes'}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-ink-soft">
-                    <span>Nights / Dates:</span>
-                    <span className="font-bold text-ink">
-                      {isSeason ? 'All 9 Nights' : `${selectedDates.length} ${selectedDates.length === 1 ? 'Night' : 'Nights'}`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-ink-soft">
-                    <span>Price per Pass:</span>
-                    <span className="font-bold text-ink">
-                      ₹{estimatedUnitPricePerPass.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-ink-soft">
-                    <span>Original Price:</span>
-                    <span className="font-semibold text-stone-400 line-through decoration-rose-600 decoration-1.5">
-                      ₹{estimatedOriginalTotal.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-
-                  {estimatedSavings > 0 && (
-                    <div className="flex items-center justify-between text-[#E65100] font-bold">
-                      <span className="flex items-center gap-1">
-                        <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-                        Special Savings ({activeOption.discountLabel}):
+                  <div className="pt-2.5 border-t border-gold/30">
+                    <label
+                      htmlFor="terms-checkbox"
+                      className="flex items-start gap-2.5 cursor-pointer select-none text-ink font-semibold text-xs sm:text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        id="terms-checkbox"
+                        data-testid="terms-checkbox"
+                        checked={termsAccepted}
+                        onChange={(e) => setTermsAccepted(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer accent-[#7A1930]"
+                      />
+                      <span>
+                        I have read and agree to the ticket terms & conditions. <span className="text-rose-600">*</span>
                       </span>
-                      <span>-₹{estimatedSavings.toLocaleString('en-IN')}</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-3 border-t border-stone-200/80 text-sm">
-                    <div>
-                      <span className="font-outfit font-extrabold text-ink text-base">Payable Total:</span>
-                      {estimatedSavings > 0 && (
-                        <p className="text-[10px] font-bold text-emerald-700">
-                          You save ₹{estimatedSavings.toLocaleString('en-IN')}
-                        </p>
-                      )}
-                    </div>
-                    <span className="font-outfit font-black text-2xl sm:text-3xl text-[#7A1930] tracking-tight">
-                      ₹{estimatedTotal.toLocaleString('en-IN')}
-                    </span>
+                    </label>
                   </div>
-                  <p className="text-[10px] text-ink-soft italic pt-1">
-                    *Final amount is strictly computed and verified on the server.
-                  </p>
                 </div>
 
-                {/* SECTION F: PAYMENT CTA & SECURITY COPY (Requirement 6) */}
-                <div className="pt-2">
+                {/* STEP 6 — PAYMENT */}
+                <div className="space-y-3 pt-2">
                   <button
                     type="submit"
-                    disabled={submitting || verifying}
+                    disabled={!termsAccepted || submitting || verifying}
                     aria-label="Buy your pass"
                     data-testid="buy-pass-submit"
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-105 text-[#7A1930] font-outfit font-black text-base sm:text-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2.5 border border-[#7A1930]/20 disabled:opacity-50 cursor-pointer"
+                    className={`w-full py-4 rounded-2xl font-outfit font-black text-base sm:text-lg transition-all shadow-lg flex items-center justify-center gap-2.5 border ${
+                      !termsAccepted || submitting || verifying
+                        ? 'bg-stone-200 text-stone-400 border-stone-300 cursor-not-allowed shadow-none'
+                        : 'bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-105 text-[#7A1930] border-[#7A1930]/20 hover:shadow-xl cursor-pointer'
+                    }`}
                   >
                     {submitting ? (
                       <>
@@ -1091,7 +1142,7 @@ export default function BookPassPage() {
                       </>
                     )}
                   </button>
-                  <div className="flex items-center justify-center gap-2 text-[11px] text-ink-soft mt-3 text-center">
+                  <div className="flex items-center justify-center gap-2 text-[11px] text-ink-soft text-center">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Secure Payment via Razorpay &bull; Instant Digital QR Delivery</span>
                   </div>

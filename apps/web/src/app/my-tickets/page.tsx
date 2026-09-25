@@ -20,6 +20,7 @@ import {
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
 import PageHero from '@/components/PageHero';
+import TicketGuidelines from '@/components/TicketGuidelines';
 import { fetchApi } from '@/lib/api';
 import {
   validateCommercialLookup,
@@ -589,6 +590,9 @@ function CommercialTicketsContent() {
                       })}
                     </div>
                   )}
+
+                  {/* TICKET GUIDELINES */}
+                  {passes.length > 0 && <TicketGuidelines className="mt-8" />}
                 </>
               );
             })()}

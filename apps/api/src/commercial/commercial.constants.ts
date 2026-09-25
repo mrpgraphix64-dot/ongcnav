@@ -108,14 +108,21 @@ export function calculateServerPricePaise(
     unitPricePaise = config.unitPricePaise;
     originalPricePaise = config.originalPricePaise;
   } else {
-    // Filter to only officially allowed ONGC Navratri event dates
-    validDates = selectedDates.filter((d) => COMMERCIAL_EVENT_DATES.includes(d));
-    if (validDates.length === 0) {
+    // Filter to only officially allowed ONGC Navratri event dates and deduplicate
+    const uniqueValidDates = Array.from(
+      new Set((selectedDates || []).filter((d) => COMMERCIAL_EVENT_DATES.includes(d))),
+    );
+    if (uniqueValidDates.length === 0) {
       throw new Error('At least one valid event date must be selected.');
     }
-    // Price per pass = base price * number of selected nights
-    unitPricePaise = config.unitPricePaise * validDates.length;
-    originalPricePaise = config.originalPricePaise * validDates.length;
+    if (uniqueValidDates.length > 1) {
+      throw new Error(
+        'A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.',
+      );
+    }
+    validDates = uniqueValidDates;
+    unitPricePaise = config.unitPricePaise;
+    originalPricePaise = config.originalPricePaise;
   }
 
   const totalAmountPaise = unitPricePaise * qty;

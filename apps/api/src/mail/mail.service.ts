@@ -256,7 +256,16 @@ export class MailService {
     const passTypeLabel =
       data.ticketType === 'COMMERCIAL_SEASON'
         ? 'Season Pass (All 9 Nights)'
+        : data.ticketType === 'COMMERCIAL_MANDLI'
+        ? 'Mandli Pass'
+        : data.ticketType === 'COMMERCIAL_ANY_DAY'
+        ? 'Any Day Pass'
         : 'Daily Entry Pass';
+
+    const passTiming =
+      data.ticketType === 'COMMERCIAL_MANDLI'
+        ? '12:00 AM – 4:00 AM'
+        : '8:00 PM – 4:00 AM';
 
     const portalUrl = `${this.webUrl}/my-tickets?orderNumber=${encodeURIComponent(data.orderNumber)}`;
     const attachments: EmailAttachment[] = [];
@@ -363,12 +372,20 @@ export class MailService {
           <!-- BODY -->
           <tr>
             <td style="padding: 28px 24px;">
-              <p style="font-size: 16px; margin: 0 0 16px 0;">
+              <h2 style="font-size: 20px; font-weight: 800; color: #7A1930; margin: 0 0 12px 0;">
+                Your ONGC Navratri 2026 QR Pass is Ready 🎉
+              </h2>
+              <p style="font-size: 15px; margin: 0 0 12px 0; color: #2A1810;">
                 Dear <strong>${this.escapeHtml(data.customerName)}</strong>,
               </p>
-              <p style="font-size: 14px; line-height: 1.6; color: #4A3B32; margin: 0 0 20px 0;">
-                Thank you for booking your passes for the <strong>ONGC Navratri Festival 2026</strong>. Your payment has been confirmed and your digital passes are ready.
+              <p style="font-size: 14px; line-height: 1.6; color: #4A3B32; margin: 0 0 16px 0;">
+                Your digital QR pass is attached to this email and is also available through your secure ticket link.
               </p>
+
+              <!-- IMPORTANT NOTICE -->
+              <div style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 10px; padding: 12px 16px; margin: 0 0 20px 0; font-size: 13px; color: #92400E; font-weight: 600; line-height: 1.5;">
+                ⚠️ <strong>Important Notice:</strong> Please do not share your QR code. It is unique to your booking and will be validated at the entry gate.
+              </div>
 
               <!-- ORDER SUMMARY CARD -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FDF9F3; border: 1px solid #E5D5BA; border-radius: 12px; margin-bottom: 24px;">
@@ -376,7 +393,11 @@ export class MailService {
                   <td style="padding: 16px;">
                     <table width="100%" cellpadding="4" cellspacing="0" border="0" style="font-size: 13px;">
                       <tr>
-                        <td style="color: #7A6557; width: 40%;">Order Reference:</td>
+                        <td style="color: #7A6557; width: 40%;">Customer Name:</td>
+                        <td style="font-weight: bold; color: #2A1810;">${this.escapeHtml(data.customerName)}</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #7A6557;">Order Reference:</td>
                         <td style="font-weight: bold; font-family: monospace; color: #7A1930;">${data.orderNumber}</td>
                       </tr>
                       <tr>
@@ -384,8 +405,12 @@ export class MailService {
                         <td style="font-weight: bold; color: #2A1810;">${passTypeLabel}</td>
                       </tr>
                       <tr>
-                        <td style="color: #7A6557;">Event Dates:</td>
+                        <td style="color: #7A6557;">Booking Date:</td>
                         <td style="font-weight: bold; color: #2A1810;">${formattedDates}</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #7A6557;">Pass Timing:</td>
+                        <td style="font-weight: bold; color: #7A1930;">${passTiming}</td>
                       </tr>
                       <tr>
                         <td style="color: #7A6557;">Passes Count:</td>
@@ -416,6 +441,21 @@ export class MailService {
                 </a>
               </div>
 
+              <!-- TICKET GUIDELINES -->
+              <div style="background-color: #FAF5F0; border: 1px solid #D4AF37; border-radius: 12px; padding: 18px 20px; margin: 24px 0;">
+                <h4 style="font-size: 14px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0;">
+                  Ticket Guidelines
+                </h4>
+                <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #4A3B32; line-height: 1.7;">
+                  <li>Tickets are non-refundable and non-transferable.</li>
+                  <li>This QR pass is valid only for the selected date and applicable pass timing.</li>
+                  <li>Please keep the QR pass available on your phone at the entry gate.</li>
+                  <li>Do not share or forward your QR code with unauthorized persons.</li>
+                  <li>Entry is subject to event security and venue rules.</li>
+                  <li>Please retain your booking confirmation until the end of your visit.</li>
+                </ul>
+              </div>
+
               <!-- VENUE GUIDELINES -->
               <div style="border-top: 1px solid #E5D5BA; padding-top: 20px; font-size: 12px; color: #6E5C50; line-height: 1.6;">
                 <strong style="color: #7A1930; font-size: 13px;">Important Entry Guidelines:</strong>
@@ -423,7 +463,7 @@ export class MailService {
                   <li>Entry gates open daily at <strong>7:00 PM</strong> at <strong>ONGC Ground, Chandkheda, Ahmedabad</strong>.</li>
                   <li>Present your unique digital QR pass at the express turnstiles for fast entry.</li>
                   <li>Each QR pass is valid for one person per night.</li>
-                  <li>Please carry a valid government-issued photo ID for security verification.</li>
+                  <li>Please keep your digital QR pass ready on your phone at the entry gate.</li>
                 </ul>
               </div>
             </td>
@@ -476,7 +516,7 @@ ENTRY GUIDELINES:
 - Venue: ONGC Ground, Chandkheda, Ahmedabad
 - Gates open daily at 7:00 PM
 - Present individual digital QR passes at the gate
-- Please carry a valid photo ID
+- Please keep your QR pass ready on your phone at the entry gate
 
 Need assistance? Contact us at: ${this.mailbox}
     `.trim();
