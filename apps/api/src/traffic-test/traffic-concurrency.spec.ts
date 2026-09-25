@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { CheckinService } from '../checkin/checkin.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -124,6 +125,7 @@ describe('Traffic Test Lab & Scanner Concurrency Benchmark (10, 50, 100 Scans)',
       }),
       set: jest.fn().mockResolvedValue('OK'),
       get: jest.fn().mockResolvedValue(null),
+      incrementCounter: jest.fn().mockResolvedValue(1),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -131,6 +133,7 @@ describe('Traffic Test Lab & Scanner Concurrency Benchmark (10, 50, 100 Scans)',
         CheckinService,
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(undefined) } },
       ],
     }).compile();
 

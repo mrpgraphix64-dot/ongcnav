@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
@@ -16,11 +17,14 @@ import {
   UserRole,
 } from '@ongc/shared-types';
 
+const DEFAULT_SCANNER_RATE_LIMIT_PER_MINUTE = 120; // 2/sec sustained, well above the 1/sec/gate baseline, with burst headroom
+
 @Injectable()
 export class CheckinService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly configService: ConfigService,
   ) {}
 
   private getTodayIst(): string {
@@ -29,6 +33,12 @@ export class CheckinService {
       timeZone: 'Asia/Kolkata',
     }); // returns YYYY-MM-DD
     return istString;
+  }
+
+  private getScannerRateLimitPerMinute(): number {
+    const raw = this.configService.get<string>('SCANNER_RATE_LIMIT_PER_MINUTE');
+    const parsed = raw ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SCANNER_RATE_LIMIT_PER_MINUTE;
   }
 
   private async getSetting(key: string, altKey?: string): Promise<string | null> {
@@ -51,6 +61,38 @@ export class CheckinService {
     const gateId = BigInt(dto.gateId);
     const isLoadTest = !!dto.isLoadTest;
     const loadTestRunId = dto.loadTestRunId ? BigInt(dto.loadTestRunId) : null;
+
+    // 0. Rate limiting — checked FIRST, before any database work, so a
+    // request flood from a single scanner never costs more than one Redis
+    // round-trip. Skipped for load-test traffic (that has its own,
+    // deliberately much higher, controlled request rate) and fails OPEN if
+    // Redis is unavailable (rate limiting is a protection, not a
+    // correctness guarantee — Postgres's unique constraint remains the
+    // actual source of truth for check-in safety regardless).
+    if (scannedByUser && !isLoadTest) {
+      const rateLimitPerMinute = this.getScannerRateLimitPerMinute();
+      const rateLimitKey = `rl:scanner:${scannedByUser.id}`;
+      const requestCount = await this.redis.incrementCounter(rateLimitKey, 60);
+      if (requestCount !== null && requestCount > rateLimitPerMinute) {
+        await this.recordScanLog({
+          gateId,
+          scannedById: BigInt(scannedByUser.id),
+          result: CheckinResult.RATE_LIMITED,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: reqMeta?.ip,
+          userAgent: reqMeta?.userAgent,
+        });
+
+        return {
+          success: false,
+          result: CheckinResult.RATE_LIMITED,
+          message: 'Too many scan requests. Please slow down.',
+          statusCode: 429,
+        };
+      }
+    }
 
     // 1. Master Event Status Check (Laravel parity)
     const eventStatus = await this.getSetting('event_control.event_status', 'event_status');
@@ -113,6 +155,17 @@ export class CheckinService {
     // 4. Gate Verification & Operational Status
     const gate = await this.prisma.gate.findUnique({ where: { id: gateId } });
     if (!gate) {
+      await this.recordScanLog({
+        gateId,
+        scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+        result: CheckinResult.GATE_CLOSED,
+        responseTimeMs: Date.now() - startTime,
+        isLoadTest,
+        loadTestRunId,
+        ipAddress: reqMeta?.ip,
+        userAgent: reqMeta?.userAgent,
+      });
+
       return {
         success: false,
         result: CheckinResult.GATE_CLOSED,
@@ -122,6 +175,17 @@ export class CheckinService {
     }
 
     if (!gate.isOpen) {
+      await this.recordScanLog({
+        gateId,
+        scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+        result: CheckinResult.GATE_CLOSED,
+        responseTimeMs: Date.now() - startTime,
+        isLoadTest,
+        loadTestRunId,
+        ipAddress: reqMeta?.ip,
+        userAgent: reqMeta?.userAgent,
+      });
+
       return {
         success: false,
         result: CheckinResult.GATE_CLOSED,
@@ -131,6 +195,17 @@ export class CheckinService {
     }
 
     if (gate.isScanningPaused) {
+      await this.recordScanLog({
+        gateId,
+        scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+        result: CheckinResult.SCANNING_PAUSED,
+        responseTimeMs: Date.now() - startTime,
+        isLoadTest,
+        loadTestRunId,
+        ipAddress: reqMeta?.ip,
+        userAgent: reqMeta?.userAgent,
+      });
+
       return {
         success: false,
         result: CheckinResult.SCANNING_PAUSED,
@@ -139,7 +214,10 @@ export class CheckinService {
       };
     }
 
-    // 5. Operator Gate Authorization Check
+    // 5. Operator Gate Authorization Check — the gate the request claims to
+    // scan at is never trusted on its own: for anyone other than a
+    // SUPER_ADMIN/ADMIN, it must match a real GateUser assignment row for
+    // this authenticated staff member, looked up server-side.
     if (
       scannedByUser &&
       scannedByUser.role !== UserRole.SUPER_ADMIN &&
@@ -153,6 +231,17 @@ export class CheckinService {
       });
 
       if (!isAssigned) {
+        await this.recordScanLog({
+          gateId,
+          scannedById: BigInt(scannedByUser.id),
+          result: CheckinResult.UNAUTHORIZED_GATE,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: reqMeta?.ip,
+          userAgent: reqMeta?.userAgent,
+        });
+
         return {
           success: false,
           result: CheckinResult.UNAUTHORIZED_GATE,
@@ -181,6 +270,17 @@ export class CheckinService {
       });
 
       if (todayTotal >= gate.totalCapacity!) {
+        await this.recordScanLog({
+          gateId,
+          scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+          result: CheckinResult.GATE_FULL,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: reqMeta?.ip,
+          userAgent: reqMeta?.userAgent,
+        });
+
         return {
           success: false,
           result: CheckinResult.GATE_FULL,
@@ -223,9 +323,21 @@ export class CheckinService {
 
     // 7. Attendee Status Check
     if (String(attendee.status).toUpperCase() !== 'ACTIVE') {
+      await this.recordScanLog({
+        attendeeId: attendee.id,
+        gateId,
+        scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+        result: CheckinResult.ATTENDEE_INACTIVE,
+        responseTimeMs: Date.now() - startTime,
+        isLoadTest,
+        loadTestRunId,
+        ipAddress: reqMeta?.ip,
+        userAgent: reqMeta?.userAgent,
+      });
+
       return {
         success: false,
-        result: CheckinResult.INVALID_QR,
+        result: CheckinResult.ATTENDEE_INACTIVE,
         message: `This pass is currently ${attendee.status}`,
         statusCode: 403,
       };

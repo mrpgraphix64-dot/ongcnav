@@ -49,7 +49,17 @@ export class ScannerController {
       userAgent: req.headers['user-agent'],
     };
 
-    return this.checkinService.processCheckin(dto, user, reqMeta);
+    // Public scanner requests must never set isLoadTest or loadTestRunId:
+    // real HTTP load testing is restricted to /admin/traffic-test/execute-checkin
+    return this.checkinService.processCheckin(
+      {
+        ...dto,
+        isLoadTest: false,
+        loadTestRunId: undefined,
+      },
+      user,
+      reqMeta,
+    );
   }
 
   @Post('heartbeat')

@@ -91,6 +91,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Atomically increments a counter and sets its TTL on first increment —
+   * used for lightweight rate limiting (e.g. scanner requests per minute).
+   * Fails OPEN (returns null) when Redis is unavailable: rate limiting is a
+   * best-effort protection, not a correctness guarantee, so an outage must
+   * never block legitimate check-ins.
+   */
+  async incrementCounter(key: string, ttlSeconds: number): Promise<number | null> {
+    if (!this.client) return null;
+    try {
+      const count = await this.client.incr(key);
+      if (count === 1) {
+        await this.client.expire(key, ttlSeconds);
+      }
+      return count;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Release distributed lock safely
    */
   async releaseLock(lockKey: string, token?: string): Promise<boolean> {

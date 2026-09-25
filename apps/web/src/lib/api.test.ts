@@ -57,4 +57,37 @@ describe('fetchApi response envelope handling', () => {
       'Request failed with status 500',
     );
   });
+
+  it('F: unwraps { success, message, data } (e.g. employee registration) to the payload — an incidental `message` does not block unwrapping', async () => {
+    mockFetchOnce(200, {
+      success: true,
+      message: 'Registration successful',
+      data: { employee: { id: '1' }, attendee: { qrCodeToken: 'tok-1' }, familyMembers: [] },
+    });
+
+    const result = await fetchApi('/public/employee/register', { method: 'POST' });
+
+    expect(result).toEqual({
+      employee: { id: '1' },
+      attendee: { qrCodeToken: 'tok-1' },
+      familyMembers: [],
+    });
+  });
+
+  it('E: does NOT unwrap a response that has a `data` field alongside its own sibling fields (e.g. POST /scanner/checkin), preserving result/message/statusCode', async () => {
+    const scannerResponse = {
+      success: true,
+      result: 'SUCCESS',
+      message: 'Check-in successful',
+      statusCode: 200,
+      data: { ticketNumber: 'TK-1', attendeeName: 'Ramesh Sharma' },
+    };
+    mockFetchOnce(200, scannerResponse);
+
+    const result = await fetchApi('/scanner/checkin', { method: 'POST' });
+
+    expect(result).toEqual(scannerResponse);
+    expect(result.result).toBe('SUCCESS');
+    expect(result.data.ticketNumber).toBe('TK-1');
+  });
 });

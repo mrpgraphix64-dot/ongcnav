@@ -36,14 +36,28 @@ export async function fetchApi<T = any>(
   // The NestJS backend's global TransformInterceptor wraps most responses as
   // { success: true, data: <payload> }. Every caller here expects the
   // payload itself, so unwrap it once, in this one place, rather than
-  // requiring every caller to know about and reach into `.data`. Responses
-  // that already carry their own shape without a nested `data` key (e.g.
-  // { success: true, message: '...' }) are passed through unchanged.
+  // requiring every caller to know about and reach into `.data`. Some
+  // service methods author that same { success, data } shape by hand with
+  // an incidental `message` alongside it (e.g. registration.service.ts's
+  // `{ success, message, data: result }`) — still safe to unwrap, since
+  // `message` there is just a human-readable string, not a field callers
+  // need from the top level.
+  //
+  // Responses that already carry their OWN richer shape — where `data` is
+  // one domain field among other meaningful sibling fields the caller
+  // reads directly (e.g. POST /scanner/checkin's
+  // { success, result, message, statusCode, data }) — must be returned
+  // completely unchanged. Unwrapping those would silently discard
+  // `result`/`statusCode`/etc., which is exactly what happened here before
+  // this fix. The rule: only unwrap when every key besides `success` and
+  // `data` is (at most) `message`.
   if (
     data &&
     typeof data === 'object' &&
+    !Array.isArray(data) &&
     'success' in data &&
-    'data' in data
+    'data' in data &&
+    Object.keys(data).every((key) => key === 'success' || key === 'data' || key === 'message')
   ) {
     return data.data;
   }

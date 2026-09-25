@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { CheckinService } from './checkin.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -6,6 +7,7 @@ import {
   CheckinResult,
   CheckinStatus,
   AttendeeStatus,
+  RegistrationType,
   UserRole,
 } from '@ongc/shared-types';
 
@@ -86,6 +88,11 @@ describe('CheckinService Concurrency & Security Tests', () => {
       releaseLock: jest.fn().mockResolvedValue(true),
       set: jest.fn().mockResolvedValue('OK'),
       get: jest.fn().mockResolvedValue(null),
+      incrementCounter: jest.fn().mockResolvedValue(1),
+    };
+
+    const configService = {
+      get: jest.fn().mockReturnValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -93,6 +100,7 @@ describe('CheckinService Concurrency & Security Tests', () => {
         CheckinService,
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
+        { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
@@ -491,6 +499,178 @@ describe('CheckinService Concurrency & Security Tests', () => {
 
       expect(res.success).toBe(true);
       expect(res.result).toBe(CheckinResult.SUCCESS);
+    });
+  });
+
+  describe('Gate assignment enforcement', () => {
+    it('15. rejects a scanner operator who is not assigned to the requested gate', async () => {
+      prisma.gateUser.findFirst.mockResolvedValueOnce(null);
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.UNAUTHORIZED_GATE);
+      expect(res.statusCode).toBe(403);
+      expect(prisma.scanLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ result: CheckinResult.UNAUTHORIZED_GATE }) }),
+      );
+    });
+
+    it('allows SUPER_ADMIN to scan at any gate without a GateUser assignment', async () => {
+      prisma.gateUser.findFirst.mockResolvedValueOnce(null);
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.SUPER_ADMIN },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+      expect(prisma.gateUser.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Inactive attendee', () => {
+    it('16. rejects a REVOKED attendee with ATTENDEE_INACTIVE and logs the attempt', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        ...mockAttendee,
+        status: 'REVOKED',
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.ATTENDEE_INACTIVE);
+      expect(res.statusCode).toBe(403);
+      expect(prisma.scanLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ result: CheckinResult.ATTENDEE_INACTIVE, attendeeId: mockAttendee.id }),
+        }),
+      );
+    });
+  });
+
+  describe('Rate limiting', () => {
+    it('17. rejects a scan once the per-minute scanner rate limit is exceeded', async () => {
+      redis.incrementCounter.mockResolvedValueOnce(999); // far above the default limit
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.RATE_LIMITED);
+      expect(res.statusCode).toBe(429);
+      // Rejected before any gate/attendee database work was ever attempted.
+      expect(prisma.gate.findUnique).not.toHaveBeenCalled();
+      expect(prisma.attendee.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('allows the scan through when Redis is unavailable (fails open, not closed)', async () => {
+      redis.incrementCounter.mockResolvedValueOnce(null);
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+    });
+
+    it('does not rate-limit load-test traffic', async () => {
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1', isLoadTest: true },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(redis.incrementCounter).not.toHaveBeenCalled();
+      expect(res.success).toBe(true);
+    });
+  });
+
+  describe('Idempotent retry', () => {
+    it('18. a retried request for an attendee already checked in returns ALREADY_CHECKED_IN, never a second SUCCESS', async () => {
+      const firstRes = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+      expect(firstRes.success).toBe(true);
+      expect(firstRes.result).toBe(CheckinResult.SUCCESS);
+
+      // Simulate the retry observing the row the first request just created.
+      prisma.dailyCheckin.findFirst.mockResolvedValueOnce({
+        id: BigInt(999),
+        attendeeId: mockAttendee.id,
+        gateId: BigInt(1),
+        eventDate: '2026-09-23',
+        checkinTime: new Date(),
+        status: CheckinStatus.SUCCESS as any,
+        gate: mockGate,
+      });
+
+      const retryRes = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(retryRes.success).toBe(false);
+      expect(retryRes.result).toBe(CheckinResult.ALREADY_CHECKED_IN);
+    });
+  });
+
+  describe('Scanner heartbeat', () => {
+    it('19. returns gate/event status and caches last-seen in Redis when deviceId is provided', async () => {
+      const res = await service.heartbeat({ gateId: '1', deviceId: 'scanner-01' });
+
+      expect(res.status).toBe('OK');
+      expect(res.gate?.id).toBe('1');
+      expect(redis.set).toHaveBeenCalledWith(
+        'scanner:heartbeat:scanner-01',
+        expect.any(String),
+        15,
+      );
+    });
+
+    it('does not touch Redis when no deviceId is provided', async () => {
+      redis.set.mockClear();
+      await service.heartbeat({ gateId: '1' });
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Commercial and family attendee check-in', () => {
+    it('20. checks in a COMMERCIAL attendee (no linked employee) with their own bookingDays', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(500),
+        ticketNumber: 'TK-COMM-000123',
+        qrCodeToken: 'test-token-valid-123',
+        status: AttendeeStatus.ACTIVE,
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Priya Shah',
+        mobile: '9876543210',
+        category: 'Commercial Pass',
+        bookingDays: ['2026-09-23'],
+        employee: null,
+        familyMember: null,
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+      expect(res.data?.attendeeName).toBe('Priya Shah');
+      expect(res.data?.employee).toBeNull();
     });
   });
 });

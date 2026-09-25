@@ -24,12 +24,45 @@ import {
 import { fetchApi } from '@/lib/api';
 import { CheckinResult } from '@ongc/shared-types';
 
+const SCANNER_ELEMENT_ID = 'qr-scanner-viewport';
+export const DUPLICATE_DECODE_SUPPRESS_MS = 3000;
+
+export function shouldProcessScan(
+  lastDecode: { text: string; at: number } | null,
+  newText: string,
+  now: number = Date.now(),
+  suppressMs: number = DUPLICATE_DECODE_SUPPRESS_MS,
+): boolean {
+  if (!newText || !newText.trim()) return false;
+  if (!lastDecode) return true;
+  if (lastDecode.text === newText.trim() && now - lastDecode.at < suppressMs) {
+    return false;
+  }
+  return true;
+}
+
+interface StaffIdentity {
+  id: string;
+  staffId: string;
+  name: string;
+  role: string;
+  assignedGates: { id: string; name: string; gateNumber?: string }[];
+}
+
+const ADMIN_TIER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'EVENT_ADMIN'];
+
 export default function ScannerPage() {
-  const [gateId, setGateId] = useState('1');
+  const [gateId, setGateId] = useState('');
   const [gates, setGates] = useState<any[]>([]);
+  const [gatesLoading, setGatesLoading] = useState(true);
   const [manualInput, setManualInput] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [vibrationEnabled, setVibrationEnabled] = useState(true);
+
+  // Authenticated scanner staff identity — never assumed, always fetched
+  // from the server (/auth/me), which derives it from the session cookie.
+  const [staff, setStaff] = useState<StaffIdentity | null>(null);
+  const [staffLoadFailed, setStaffLoadFailed] = useState(false);
 
   // Status & states
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'unstable' | 'offline'>('online');
@@ -42,6 +75,27 @@ export default function ScannerPage() {
   const [cameraErrorMessage, setCameraErrorMessage] = useState('');
   const [showRecentModal, setShowRecentModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  const html5QrCodeRef = useRef<any>(null);
+  const processingRef = useRef(false);
+  const lastDecodeRef = useRef<{ text: string; at: number } | null>(null);
+  const resetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
+  const gateIdRef = useRef(gateId);
+  useEffect(() => {
+    gateIdRef.current = gateId;
+  }, [gateId]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+        resetTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Audio synthesis feedback
   const playFeedbackAudio = (type: 'success' | 'duplicate' | 'error') => {
@@ -114,31 +168,69 @@ export default function ScannerPage() {
     return () => clearInterval(interval);
   }, [gateId]);
 
-  // Load available gates
+  // Fetch the authenticated scanner's real identity from the server — never
+  // assumed or hardcoded. Gate access is then scoped from THIS response
+  // (assignedGates), not from a client-editable value: a non-admin scanner
+  // only ever sees the gate(s) they are actually assigned to. Admin-tier
+  // roles (who aren't restricted to specific gate assignments) fall back to
+  // the full gate list.
   useEffect(() => {
-    async function loadGates() {
+    async function loadStaffAndGates() {
       try {
-        const data = await fetchApi('/admin/gates');
-        setGates(data || []);
-        if (data && data.length > 0) {
-          setGateId(data[0].id);
+        const me = await fetchApi('/auth/me');
+        if (!me?.user) throw new Error('Not authenticated');
+
+        const identity: StaffIdentity = {
+          id: me.user.id,
+          staffId: me.user.staffId,
+          name: me.user.name,
+          role: me.user.role,
+          assignedGates: me.user.assignedGates || [],
+        };
+        setStaff(identity);
+
+        if (identity.assignedGates.length > 0) {
+          setGates(identity.assignedGates);
+          setGateId(identity.assignedGates[0].id);
+        } else if (ADMIN_TIER_ROLES.includes(identity.role)) {
+          try {
+            const allGates = await fetchApi('/admin/gates');
+            setGates(allGates || []);
+            if (allGates && allGates.length > 0) setGateId(allGates[0].id);
+          } catch {
+            setGates([]);
+          }
+        } else {
+          setGates([]);
         }
       } catch {
-        setGates([
-          { id: '1', name: 'Main Gate', code: 'MAIN' },
-          { id: '2', name: 'Gate 2 (Officers Entry)', code: 'GATE-2' },
-          { id: '3', name: 'Gate 3 (Family Turnstile)', code: 'GATE-3' },
-        ]);
+        setStaffLoadFailed(true);
+        setGates([]);
+      } finally {
+        setGatesLoading(false);
       }
     }
-    loadGates();
+    loadStaffAndGates();
   }, []);
 
-  // Process a scanned or manual token
+  // Process a scanned or manual token. Guarded by processingRef so a
+  // second scan/submit can never overlap an in-flight one (double-tap,
+  // camera re-decoding the same frame, etc.).
   const processToken = async (rawToken: string) => {
     const token = rawToken.trim();
-    if (!token) return;
+    if (!token || processingRef.current) return;
+    if (!gateIdRef.current) {
+      setScanState('error');
+      setLastResult({ result: CheckinResult.INVALID_QR, message: 'No gate selected. Cannot process scan.' });
+      return;
+    }
 
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = null;
+    }
+
+    processingRef.current = true;
     const start = Date.now();
 
     try {
@@ -146,47 +238,84 @@ export default function ScannerPage() {
         method: 'POST',
         body: JSON.stringify({
           token,
-          gateId,
+          gateId: gateIdRef.current,
         }),
       });
 
+      if (!isMountedRef.current) return;
+
       const latency = Date.now() - start;
       setPingLatency(latency);
+
+      // checkin.service.ts nests attendee/ticket/gate details under `.data`
+      // for a SUCCESS result but returns them flat for other results (e.g.
+      // ALREADY_CHECKED_IN, NOT_BOOKED_TODAY) — normalize both shapes here
+      // so the UI below only ever needs one consistent set of fields.
+      const normalized = {
+        ...res,
+        attendeeName: res.attendeeName || res.data?.attendeeName,
+        ticketNumber: res.ticketNumber || res.data?.ticketNumber,
+        relation: res.relation || res.data?.relation,
+        gateName: res.gateName || res.data?.gate?.name,
+      };
 
       if (res.result === CheckinResult.SUCCESS) {
         setScanState('success');
         playFeedbackAudio('success');
         triggerVibration('success');
+        resetTimeoutRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setScanState('scanning');
+          }
+        }, 3500);
       } else if (res.result === CheckinResult.ALREADY_CHECKED_IN) {
         setScanState('duplicate');
         playFeedbackAudio('duplicate');
         triggerVibration('duplicate');
+        resetTimeoutRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setScanState('scanning');
+          }
+        }, 4000);
       } else {
         setScanState('error');
         playFeedbackAudio('error');
         triggerVibration('error');
+        resetTimeoutRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setScanState('scanning');
+          }
+        }, 4000);
       }
 
-      setLastResult(res);
+      setLastResult(normalized);
 
       // Add to recent scans
       setRecentScans((prev) => [
         {
           key: Date.now() + Math.random(),
           ok: res.result === CheckinResult.SUCCESS,
-          name: res.attendeeName || 'Unknown Attendee',
-          line2: `${res.result} • ${res.ticketNumber || token.slice(0, 10)}`,
+          name: normalized.attendeeName || 'Unknown Attendee',
+          line2: `${res.result} • ${normalized.ticketNumber || token.slice(0, 10)}`,
         },
         ...prev.slice(0, 19),
       ]);
     } catch (err: any) {
+      if (!isMountedRef.current) return;
       setScanState('error');
       playFeedbackAudio('error');
       triggerVibration('error');
+      resetTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setScanState('scanning');
+        }
+      }, 4000);
       setLastResult({
         result: CheckinResult.INVALID_QR,
         message: err.message || 'Verification rejected',
       });
+    } finally {
+      processingRef.current = false;
     }
   };
 
@@ -197,9 +326,71 @@ export default function ScannerPage() {
     setManualInput('');
   };
 
-  // Mock Camera activation for Browser
+  // Real camera QR scanning via the existing html5-qrcode dependency
+  // (already installed — no new QR library introduced). Decodes
+  // continuously from the rear/environment camera; each decoded value is
+  // debounced against DUPLICATE_DECODE_SUPPRESS_MS so holding the same
+  // physical QR code in frame doesn't fire a request per video frame.
   useEffect(() => {
-    setCameraReady(true);
+    let cancelled = false;
+
+    async function startCamera() {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) return;
+
+        const instance = new Html5Qrcode(SCANNER_ELEMENT_ID);
+        html5QrCodeRef.current = instance;
+
+        await instance.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText: string) => {
+            const now = Date.now();
+            if (!shouldProcessScan(lastDecodeRef.current, decodedText, now)) {
+              return;
+            }
+            lastDecodeRef.current = { text: decodedText.trim(), at: now };
+            processToken(decodedText);
+          },
+          () => {
+            // Per-frame "no QR found" callback — expected continuously
+            // while nothing is in frame, intentionally ignored.
+          },
+        );
+
+        if (!cancelled) {
+          setCameraReady(true);
+          setCameraError(false);
+          setScanState('scanning');
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setCameraError(true);
+          setCameraErrorMessage(
+            err?.message || 'Could not access the camera. Check permissions or use manual entry below.',
+          );
+        }
+      }
+    }
+
+    startCamera();
+
+    return () => {
+      cancelled = true;
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+        resetTimeoutRef.current = null;
+      }
+      const instance = html5QrCodeRef.current;
+      if (instance) {
+        instance
+          .stop()
+          .then(() => instance.clear())
+          .catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeGateObj = gates.find((g) => g.id === gateId) || { name: 'Main Gate', code: 'MAIN' };
@@ -232,24 +423,34 @@ export default function ScannerPage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-ink-soft">Operator:</span>
-                <span className="text-xs font-bold text-ink">Turnstile Staff</span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cream-soft border border-stone-200 text-ink-soft">
-                  GATE OPERATOR
+                <span className="text-xs font-bold text-ink">
+                  {staffLoadFailed ? 'Not signed in' : staff?.name || 'Loading…'}
                 </span>
+                {staff && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cream-soft border border-stone-200 text-ink-soft">
+                    {staff.role.replace(/_/g, ' ')}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-ink-soft">Assigned Gate:</span>
-                <select
-                  value={gateId}
-                  onChange={(e) => setGateId(e.target.value)}
-                  className="text-xs font-bold text-maroon bg-cream-soft border border-stone-200 rounded-lg px-2.5 py-1 focus:outline-none focus:border-maroon"
-                >
-                  {gates.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name} ({g.code || g.id})
-                    </option>
-                  ))}
-                </select>
+                {gatesLoading ? (
+                  <span className="text-xs text-ink-soft">Loading gates…</span>
+                ) : gates.length === 0 ? (
+                  <span className="text-xs font-bold text-rose-700">No gate assigned — contact admin</span>
+                ) : (
+                  <select
+                    value={gateId}
+                    onChange={(e) => setGateId(e.target.value)}
+                    className="text-xs font-bold text-maroon bg-cream-soft border border-stone-200 rounded-lg px-2.5 py-1 focus:outline-none focus:border-maroon"
+                  >
+                    {gates.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.gateNumber || g.code || g.id})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
           </div>
@@ -295,10 +496,22 @@ export default function ScannerPage() {
                   <span className="font-outfit font-bold text-ink text-sm">
                     {activeGateObj.name}
                   </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Camera Active</span>
-                  </span>
+                  {cameraReady && !cameraError ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Camera Active</span>
+                    </span>
+                  ) : cameraError ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                      <span>Camera Unavailable</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      <span>Starting Camera…</span>
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -327,28 +540,43 @@ export default function ScannerPage() {
                 </div>
               </div>
 
-              {/* Viewport Box with Gold Corner Brackets */}
+              {/* Viewport Box — html5-qrcode renders the live camera feed
+                  directly into #qr-scanner-viewport; the gold corner
+                  brackets are a purely decorative overlay on top of it. */}
               <div className="relative w-full aspect-square max-h-[min(46vh,400px)] bg-black rounded-2xl overflow-hidden flex items-center justify-center">
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="relative w-[70%] aspect-square">
-                    <span className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-gold rounded-tl-xl" />
-                    <span className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-gold rounded-tr-xl" />
-                    <span className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-gold rounded-bl-xl" />
-                    <span className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-gold rounded-br-xl" />
-                    <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-white/70 text-xs font-bold uppercase tracking-[0.2em]">
-                      Scan QR
-                    </span>
-                  </div>
-                </div>
+                <div id={SCANNER_ELEMENT_ID} className="absolute inset-0 w-full h-full [&_video]:object-cover [&_video]:w-full [&_video]:h-full" />
 
-                <div className="text-center space-y-2 p-6 z-10">
-                  <ScanLine className="w-12 h-12 text-gold animate-bounce mx-auto opacity-70" />
-                  <p className="text-xs text-white/60">Position QR code within frame</p>
-                </div>
+                {!cameraError && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="relative w-[70%] aspect-square">
+                      <span className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-gold rounded-tl-xl" />
+                      <span className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-gold rounded-tr-xl" />
+                      <span className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-gold rounded-bl-xl" />
+                      <span className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-gold rounded-br-xl" />
+                    </div>
+                  </div>
+                )}
+
+                {!cameraReady && !cameraError && (
+                  <div className="text-center space-y-2 p-6 z-10 pointer-events-none">
+                    <ScanLine className="w-12 h-12 text-gold animate-bounce mx-auto opacity-70" />
+                    <p className="text-xs text-white/60">Starting camera…</p>
+                  </div>
+                )}
+
+                {cameraError && (
+                  <div className="text-center space-y-2 p-6 z-10 max-w-xs">
+                    <AlertTriangle className="w-10 h-10 text-rose-400 mx-auto" />
+                    <p className="text-xs text-white/80">{cameraErrorMessage}</p>
+                    <p className="text-[11px] text-white/50">Use the manual entry field below instead.</p>
+                  </div>
+                )}
               </div>
 
               <p className="text-center text-xs text-ink-soft mt-3">
-                Point the attendee's QR code inside the frame.
+                {cameraReady && !cameraError
+                  ? "Point the attendee's QR code inside the frame."
+                  : 'Camera unavailable — use manual ticket entry below.'}
               </p>
             </div>
 
@@ -379,12 +607,16 @@ export default function ScannerPage() {
           {/* RIGHT: Scan Result & Recent Scans */}
           <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-6">
             <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-6 min-h-[300px] flex flex-col justify-center">
-              {scanState === 'idle' && (
+              {(scanState === 'idle' || scanState === 'scanning') && (
                 <div className="text-center text-ink-soft space-y-3 py-10">
                   <div className="w-14 h-14 mx-auto rounded-2xl bg-cream-soft flex items-center justify-center text-stone-300">
-                    <ScanLine className="w-7 h-7" />
+                    <ScanLine className={`w-7 h-7 ${scanState === 'scanning' ? 'text-maroon animate-pulse' : 'text-stone-300'}`} />
                   </div>
-                  <p className="text-xs font-semibold">Scan results will appear here instantly.</p>
+                  <p className="text-xs font-semibold">
+                    {scanState === 'scanning'
+                      ? 'Ready for scan. Align QR code in camera view.'
+                      : 'Scan results will appear here instantly.'}
+                  </p>
                 </div>
               )}
 
@@ -440,23 +672,80 @@ export default function ScannerPage() {
               )}
 
               {scanState === 'error' && lastResult && (
-                <div className="p-5 rounded-2xl bg-rose-50 border-2 border-rose-500 space-y-4 animate-in fade-in">
-                  <div className="flex items-center gap-3">
-                    <XCircle className="w-8 h-8 text-rose-600 shrink-0" />
-                    <div>
-                      <span className="font-cinzel font-bold text-xs uppercase tracking-wider text-rose-800 block">
-                        ENTRY REJECTED
-                      </span>
-                      <h3 className="font-outfit font-extrabold text-lg text-rose-950">
-                        Invalid Pass
-                      </h3>
+                lastResult.result === CheckinResult.NOT_BOOKED_TODAY ? (
+                  <div className="p-5 rounded-2xl bg-amber-50 border-2 border-amber-500 space-y-4 animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="w-8 h-8 text-amber-600 shrink-0" />
+                      <div>
+                        <span className="font-cinzel font-bold text-xs uppercase tracking-wider text-amber-800 block">
+                          WRONG DATE
+                        </span>
+                        <h3 className="font-outfit font-extrabold text-lg text-amber-950">
+                          Not Booked For Today
+                        </h3>
+                      </div>
                     </div>
+                    {lastResult.attendeeName && (
+                      <p className="text-xs font-bold text-amber-950">
+                        Attendee: {lastResult.attendeeName}
+                      </p>
+                    )}
+                    <p className="text-xs text-amber-900 bg-white/80 p-3 rounded-xl border border-amber-200">
+                      {lastResult.message || 'Pass is not registered for today.'}
+                    </p>
                   </div>
-
-                  <p className="text-xs text-rose-900 bg-white/80 p-3 rounded-xl border border-rose-200">
-                    {lastResult.message || 'Pass token is invalid or inactive.'}
-                  </p>
-                </div>
+                ) : lastResult.result === CheckinResult.ATTENDEE_INACTIVE ? (
+                  <div className="p-5 rounded-2xl bg-purple-50 border-2 border-purple-500 space-y-4 animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                      <XCircle className="w-8 h-8 text-purple-600 shrink-0" />
+                      <div>
+                        <span className="font-cinzel font-bold text-xs uppercase tracking-wider text-purple-800 block">
+                          PASS INACTIVE
+                        </span>
+                        <h3 className="font-outfit font-extrabold text-lg text-purple-950">
+                          Pass Revoked / Suspended
+                        </h3>
+                      </div>
+                    </div>
+                    <p className="text-xs text-purple-900 bg-white/80 p-3 rounded-xl border border-purple-200">
+                      {lastResult.message || 'This pass is inactive or cancelled.'}
+                    </p>
+                  </div>
+                ) : lastResult.result === CheckinResult.RATE_LIMITED ? (
+                  <div className="p-5 rounded-2xl bg-yellow-50 border-2 border-yellow-500 space-y-4 animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="w-8 h-8 text-yellow-600 shrink-0" />
+                      <div>
+                        <span className="font-cinzel font-bold text-xs uppercase tracking-wider text-yellow-800 block">
+                          RATE LIMITED
+                        </span>
+                        <h3 className="font-outfit font-extrabold text-lg text-yellow-950">
+                          Slow Down Scanning
+                        </h3>
+                      </div>
+                    </div>
+                    <p className="text-xs text-yellow-900 bg-white/80 p-3 rounded-xl border border-yellow-200">
+                      {lastResult.message || 'Too many scans in a short period. Please wait a moment.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-5 rounded-2xl bg-rose-50 border-2 border-rose-500 space-y-4 animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                      <XCircle className="w-8 h-8 text-rose-600 shrink-0" />
+                      <div>
+                        <span className="font-cinzel font-bold text-xs uppercase tracking-wider text-rose-800 block">
+                          ENTRY REJECTED
+                        </span>
+                        <h3 className="font-outfit font-extrabold text-lg text-rose-950">
+                          {lastResult.result === CheckinResult.UNAUTHORIZED_GATE ? 'Unauthorized Gate' : 'Invalid Pass'}
+                        </h3>
+                      </div>
+                    </div>
+                    <p className="text-xs text-rose-900 bg-white/80 p-3 rounded-xl border border-rose-200">
+                      {lastResult.message || 'Pass token is invalid or unrecognized.'}
+                    </p>
+                  </div>
+                )
               )}
             </div>
 
