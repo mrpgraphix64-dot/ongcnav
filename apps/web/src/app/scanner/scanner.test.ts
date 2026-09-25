@@ -3,7 +3,7 @@ import {
   shouldProcessScan,
   DUPLICATE_DECODE_SUPPRESS_MS,
   SUCCESS_BANNER_DURATION_MS,
-} from './page';
+} from './scanner-utils';
 
 describe('Scanner Camera/API Duplicate Prevention (shouldProcessScan)', () => {
   it('ensures duplicate decode suppression window exceeds the success banner duration to avoid boundary races', () => {

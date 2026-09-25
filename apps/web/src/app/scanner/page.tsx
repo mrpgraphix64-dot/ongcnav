@@ -24,24 +24,13 @@ import {
 import { fetchApi } from '@/lib/api';
 import { CheckinResult } from '@ongc/shared-types';
 
-const SCANNER_ELEMENT_ID = 'qr-scanner-viewport';
-export const DUPLICATE_DECODE_SUPPRESS_MS = 4500;
-export const SUCCESS_BANNER_DURATION_MS = 3000;
-export const ERROR_BANNER_DURATION_MS = 4000;
+import {
+  SUCCESS_BANNER_DURATION_MS,
+  ERROR_BANNER_DURATION_MS,
+  shouldProcessScan,
+} from './scanner-utils';
 
-export function shouldProcessScan(
-  lastDecode: { text: string; at: number } | null,
-  newText: string,
-  now: number = Date.now(),
-  suppressMs: number = DUPLICATE_DECODE_SUPPRESS_MS,
-): boolean {
-  if (!newText || !newText.trim()) return false;
-  if (!lastDecode) return true;
-  if (lastDecode.text === newText.trim() && now - lastDecode.at < suppressMs) {
-    return false;
-  }
-  return true;
-}
+const SCANNER_ELEMENT_ID = 'qr-scanner-viewport';
 
 interface StaffIdentity {
   id: string;
