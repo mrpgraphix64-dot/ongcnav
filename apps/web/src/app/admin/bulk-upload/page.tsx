@@ -147,12 +147,18 @@ export default function BulkUploadPage() {
       alert('Please enter a valid Name and 10-digit Mobile Number.');
       return;
     }
+    const email = editForm.email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      alert('Email address is required because your digital QR pass will be sent here.');
+      return;
+    }
     setCorrectedRows((prev) => ({
       ...prev,
       [row]: {
         name: editForm.name.trim(),
         mobile: editForm.mobile.replace(/[^0-9]/g, ''),
-        email: editForm.email.trim() || undefined,
+        email: email,
         category: editForm.category,
       },
     }));

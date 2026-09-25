@@ -41,11 +41,28 @@ interface EmployeeData {
   photo_url?: string | null;
 }
 
+interface CommercialOrderData {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerMobile: string;
+  customerEmail: string;
+  ticketType: string;
+  quantity: number;
+  unitPricePaise: number;
+  amountPaise: number;
+  amountInr: number;
+  orderStatus: string;
+  paymentStatus: string;
+  selectedDates: string[];
+  paidAt?: string | null;
+}
+
 interface AttendeeItem {
   id: string;
   name: string;
   mobile: string;
-  email?: string;
+  email?: string | null;
   ticket_id: string;
   ticketNumber: string;
   secure_token: string;
@@ -61,6 +78,12 @@ interface AttendeeItem {
   employee?: EmployeeData | null;
   family_tickets?: AttendeeItem[];
   qr_svg?: string;
+  isCommercialOrder?: boolean;
+  order_id?: string | null;
+  order?: CommercialOrderData | null;
+  passes?: AttendeeItem[];
+  passesCount?: number;
+  bookingDays?: string[];
 }
 
 interface SummaryMetrics {
@@ -204,10 +227,13 @@ export default function AdminAttendeesPage() {
   const pageIds = useMemo(() => {
     const ids: string[] = [];
     for (const p of primaryAttendees) {
-      ids.push(p.id);
-      if (p.family_tickets) {
-        for (const f of p.family_tickets) {
-          ids.push(f.id);
+      if (!ids.includes(p.id)) ids.push(p.id);
+      const subList = p.passes || p.family_tickets;
+      if (subList) {
+        for (const f of subList) {
+          if (!ids.includes(f.id)) {
+            ids.push(f.id);
+          }
         }
       }
     }
@@ -245,11 +271,31 @@ export default function AdminAttendeesPage() {
   // Quick Add Attendee
   const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = addForm.email.trim();
+    if (!cleanEmail) {
+      setMsg({
+        text: 'Email address is required because your digital QR pass will be sent here.',
+        type: 'error',
+      });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setMsg({
+        text: 'Please enter a valid email address.',
+        type: 'error',
+      });
+      return;
+    }
+
     try {
       setAddSubmitting(true);
       const res = await fetchApi<any>('/admin/attendees', {
         method: 'POST',
-        body: JSON.stringify(addForm),
+        body: JSON.stringify({
+          ...addForm,
+          email: cleanEmail.toLowerCase(),
+        }),
       });
 
       setShowAddModal(false);
@@ -511,6 +557,11 @@ export default function AdminAttendeesPage() {
               <option value="VVIP">VVIP</option>
               <option value="ONGC STAFF">ONGC Staff</option>
               <option value="FAMILY MEMBER">Family Member</option>
+              <option value="Commercial Pass">All Commercial</option>
+              <option value="DAILY">Daily Pass</option>
+              <option value="SEASON">Season Pass</option>
+              <option value="MANDLI">Mandli Pass</option>
+              <option value="ANY_DAY">Any Day Pass</option>
             </select>
           </div>
 
@@ -609,7 +660,8 @@ export default function AdminAttendeesPage() {
                 </tr>
               ) : (
                 primaryAttendees.map((primary) => {
-                  const hasFamily = (primary.family_tickets || []).length > 0;
+                  const childPasses = primary.passes || primary.family_tickets || [];
+                  const hasChildren = childPasses.length > 0;
                   const isCollapsed = collapsedGroups[`group_${primary.id}`];
                   const primarySelected = selectedIds.includes(primary.id);
                   const pLive = liveStatuses[primary.id] || {
@@ -619,9 +671,14 @@ export default function AdminAttendeesPage() {
                   };
                   const isCheckedIn = pLive.status === 'checked_in';
 
+                  const commCheckedInCount = childPasses.filter(
+                    (p) => (liveStatuses[p.id]?.status || p.status) === 'checked_in'
+                  ).length;
+                  const commTotalCount = childPasses.length;
+
                   return (
                     <React.Fragment key={primary.id}>
-                      {/* Primary Attendee Row */}
+                      {/* Primary Attendee Row / Commercial Order Parent Row */}
                       <tr className="hover:bg-[#FAF7F2]/50 transition-colors bg-white font-medium">
                         <td className="px-4 py-3.5">
                           <input
@@ -635,10 +692,11 @@ export default function AdminAttendeesPage() {
                         {/* Name & Contact */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
-                            {groupByRegistration && hasFamily ? (
+                            {groupByRegistration && hasChildren ? (
                               <button
                                 onClick={() => toggleGroup(`group_${primary.id}`)}
                                 className="p-1 rounded hover:bg-stone-100 text-stone-500"
+                                title={isCollapsed ? 'Expand passes' : 'Collapse passes'}
                               >
                                 {isCollapsed ? (
                                   <ChevronRight className="w-4 h-4 text-[#7A1113]" />
@@ -651,15 +709,19 @@ export default function AdminAttendeesPage() {
                             )}
 
                             <div>
-                              <div className="font-bold text-stone-900 flex items-center gap-1.5">
+                              <div className="font-bold text-stone-900 flex items-center gap-1.5 flex-wrap">
                                 <span>{primary.name}</span>
-                                {hasFamily && (
+                                {primary.isCommercialOrder ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                                    {primary.order?.quantity || commTotalCount || 1} Passes
+                                  </span>
+                                ) : hasChildren && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#7A1113]/10 text-[#7A1113]">
                                     +{primary.family_tickets?.length} family
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[11px] text-stone-500 flex items-center gap-2">
+                              <div className="text-[11px] text-stone-500 flex items-center gap-2 flex-wrap">
                                 {primary.mobile && <span>{primary.mobile}</span>}
                                 {primary.email && (
                                   <>
@@ -672,14 +734,39 @@ export default function AdminAttendeesPage() {
                           </div>
                         </td>
 
-                        {/* Ticket ID */}
-                        <td className="px-4 py-3.5 font-mono font-bold text-[#7A1113] whitespace-nowrap">
-                          {primary.ticketNumber}
+                        {/* Ticket ID / Commercial Order Number */}
+                        <td className="px-4 py-3.5 font-mono font-bold whitespace-nowrap">
+                          {primary.isCommercialOrder ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[#7A1113]">
+                                {primary.order?.orderNumber || primary.ticketNumber}
+                              </span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">
+                                Order
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[#7A1113]">{primary.ticketNumber}</span>
+                          )}
                         </td>
 
-                        {/* Registration / Employee */}
+                        {/* Registration / Employee / Commercial Order info */}
                         <td className="px-4 py-3.5">
-                          {primary.employee ? (
+                          {primary.isCommercialOrder ? (
+                            <div>
+                              <div className="font-bold text-xs text-stone-800 flex items-center gap-1.5">
+                                <span>
+                                  ₹{(primary.order?.amountInr ?? (primary.order ? primary.order.amountPaise / 100 : 0)).toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                  {primary.order?.orderStatus || 'PAID'}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-stone-500">
+                                Commercial Checkout &bull; {primary.order?.quantity || commTotalCount} passes
+                              </div>
+                            </div>
+                          ) : primary.employee ? (
                             <button
                               onClick={() => setEmployeeModal(primary.employee!)}
                               className="text-left group"
@@ -704,7 +791,9 @@ export default function AdminAttendeesPage() {
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
-                              primary.category === 'VIP' || primary.category === 'VVIP'
+                              primary.isCommercialOrder
+                                ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                : primary.category === 'VIP' || primary.category === 'VVIP'
                                 ? 'bg-amber-100 text-amber-900 border-amber-200'
                                 : primary.category === 'ONGC STAFF'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -717,7 +806,25 @@ export default function AdminAttendeesPage() {
 
                         {/* Live Entry Status */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
-                          {isCheckedIn ? (
+                          {primary.isCommercialOrder ? (
+                            commCheckedInCount > 0 ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                  {commCheckedInCount}/{commTotalCount} Checked In
+                                </span>
+                                {pLive.gate && (
+                                  <div className="text-[10px] text-stone-400 mt-0.5">
+                                    {pLive.gate}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
+                                0/{commTotalCount} Checked In
+                              </span>
+                            )
+                          ) : isCheckedIn ? (
                             <div>
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -741,7 +848,7 @@ export default function AdminAttendeesPage() {
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-stone-200 text-stone-700 hover:bg-[#FAF7F2] font-semibold text-xs transition-colors"
                           >
                             <QrCode className="w-3.5 h-3.5 text-[#7A1113]" />
-                            <span>View Pass</span>
+                            <span>{primary.isCommercialOrder ? 'View Passes' : 'View Pass'}</span>
                           </button>
                         </td>
 
@@ -774,9 +881,124 @@ export default function AdminAttendeesPage() {
                         </td>
                       </tr>
 
-                      {/* Nested Family Tickets */}
+                      {/* Nested Individual Passes (Commercial Order Children) */}
                       {groupByRegistration &&
                         !isCollapsed &&
+                        primary.isCommercialOrder &&
+                        childPasses.map((pass, passIdx) => {
+                          const passSelected = selectedIds.includes(pass.id);
+                          const passLive = liveStatuses[pass.id] || {
+                            status: pass.status,
+                            gate: pass.gate,
+                            checked_in_at: pass.checked_in_at,
+                          };
+                          const passCheckedIn = passLive.status === 'checked_in';
+
+                          return (
+                            <tr
+                              key={pass.id}
+                              className="bg-[#FAF7F2]/60 hover:bg-[#FAF7F2] transition-colors text-xs border-stone-100"
+                            >
+                              <td className="px-4 py-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={passSelected}
+                                  onChange={() => toggleSelectId(pass.id)}
+                                  className="rounded text-[#7A1113] focus:ring-[#7A1113] border-stone-300"
+                                />
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2 pl-8">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+                                  <div>
+                                    <div className="font-semibold text-stone-800 flex items-center gap-2">
+                                      <span>{pass.name || `Pass Holder #${passIdx + 1}`}</span>
+                                      <span className="text-[10px] text-stone-500 font-medium">
+                                        (Pass {passIdx + 1} of {childPasses.length})
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-stone-400 flex items-center gap-1.5">
+                                      {pass.mobile && <span>{pass.mobile}</span>}
+                                      {pass.email && <span>&bull; {pass.email}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 font-mono font-bold text-[#7A1113]">
+                                {pass.ticketNumber}
+                              </td>
+                              <td className="px-4 py-2.5 text-stone-500 text-[11px]">
+                                {Array.isArray(pass.bookingDays) && pass.bookingDays.length > 0
+                                  ? pass.bookingDays.join(', ')
+                                  : primary.order?.ticketType || 'Commercial Pass'}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                  {pass.category || primary.category}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {passCheckedIn ? (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      Checked In
+                                    </span>
+                                    {passLive.gate && (
+                                      <div className="text-[10px] text-stone-400 mt-0.5">
+                                        {passLive.gate}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-500">
+                                    Pending Entry
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <button
+                                  onClick={() => setQrModalAttendee(pass)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-stone-200 text-stone-600 hover:bg-white text-[11px]"
+                                >
+                                  <QrCode className="w-3 h-3 text-[#7A1113]" />
+                                  <span>View Pass</span>
+                                </button>
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <a
+                                    href={`/api/attendees/${pass.id}/qr-download`}
+                                    download
+                                    title="Download QR"
+                                    className="p-1 rounded text-stone-400 hover:text-stone-800"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </a>
+                                  <button
+                                    onClick={() => handleRegenerateQr(pass.id, pass.ticketNumber)}
+                                    title="Regenerate QR"
+                                    className="p-1 rounded text-stone-400 hover:text-[#7A1113]"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAttendee(pass.id, pass.name || pass.ticketNumber)}
+                                    title="Delete Pass"
+                                    className="p-1 rounded text-stone-400 hover:text-rose-600"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                      {/* Nested Family Tickets (Employee Children) */}
+                      {groupByRegistration &&
+                        !isCollapsed &&
+                        !primary.isCommercialOrder &&
                         primary.family_tickets &&
                         primary.family_tickets.map((fam) => {
                           const famSelected = selectedIds.includes(fam.id);
@@ -1105,15 +1327,19 @@ export default function AdminAttendeesPage() {
 
               <div>
                 <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
-                  Email Address (Optional)
+                  Email Address *
                 </label>
                 <input
                   type="email"
+                  required
                   placeholder="ramesh@example.com"
                   value={addForm.email}
                   onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-xs focus:outline-none focus:border-[#7A1113]"
                 />
+                <p className="text-[11px] text-stone-500 mt-1">
+                  Your QR pass will be sent to this email.
+                </p>
               </div>
 
               <div>
