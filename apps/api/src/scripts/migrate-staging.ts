@@ -76,7 +76,6 @@ async function runMigration() {
           role,
           isActive: u.status === 'active',
           createdAt: new Date(u.created_at || Date.now()),
-          updatedAt: new Date(u.updated_at || Date.now()),
         },
         update: {
           name: u.name,
