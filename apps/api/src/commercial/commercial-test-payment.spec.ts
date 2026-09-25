@@ -174,6 +174,7 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
       expect(res.passes!).toHaveLength(2);
       expect(res.passes![0].qrCodeToken).toBeDefined();
       expect(res.passes![0].qrSvg).toContain('<svg');
+      expect(res.order.razorpayOrderId).toMatch(/^TEST_ORD_/);
 
       // 5. Ticket email was triggered
       // Wait briefly for setImmediate

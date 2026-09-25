@@ -123,6 +123,7 @@ export class CommercialService {
       ticketTypes: Object.values(COMMERCIAL_TICKET_TYPES).map((t) => ({
         code: t.code,
         name: t.name,
+        timing: t.timing,
         description: t.description,
         originalPriceInr: t.originalPricePaise / 100,
         originalPricePaise: t.originalPricePaise,
@@ -284,6 +285,7 @@ export class CommercialService {
             selectedDates: order.selectedDates,
             orderStatus: order.orderStatus,
             paymentStatus: order.paymentStatus,
+            razorpayOrderId: order.razorpayOrderId,
             isTestPayment: true,
             testPaymentReference: testPaymentId,
             customer: {

@@ -36,6 +36,24 @@ describe('Commercial Constants & Server-Authoritative Price Calculation', () => 
       expect(res.validDates).toHaveLength(2);
     });
 
+    it('correctly calculates price for Mandli Pass (₹149 / 14,900 paise, original ₹299)', () => {
+      const res = calculateServerPricePaise('COMMERCIAL_MANDLI', ['2026-10-11'], 1);
+      expect(res.unitPricePaise).toBe(14900); // ₹149.00
+      expect(res.originalPricePaise).toBe(29900); // ₹299.00
+      expect(res.totalAmountPaise).toBe(14900);
+      expect(res.totalOriginalAmountPaise).toBe(29900);
+      expect(res.validDates).toEqual(['2026-10-11']);
+    });
+
+    it('correctly calculates price for Any Day Pass (₹279 / 27,900 paise, original ₹499)', () => {
+      const res = calculateServerPricePaise('COMMERCIAL_ANY_DAY', ['2026-10-14'], 2);
+      expect(res.unitPricePaise).toBe(27900); // ₹279.00
+      expect(res.originalPricePaise).toBe(49900); // ₹499.00
+      expect(res.totalAmountPaise).toBe(55800); // ₹558.00 for 2 passes
+      expect(res.totalOriginalAmountPaise).toBe(99800);
+      expect(res.validDates).toEqual(['2026-10-14']);
+    });
+
     it('calculates fixed Early Bird price for season pass (₹1,750 / 175,000 paise, original ₹3,500) covering all 9 nights', () => {
       const res = calculateServerPricePaise('COMMERCIAL_SEASON', ['2026-10-11'], 2);
       expect(res.unitPricePaise).toBe(175000); // ₹1,750.00

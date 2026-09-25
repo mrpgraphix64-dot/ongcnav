@@ -15,6 +15,7 @@ export const COMMERCIAL_EVENT_DATES = [
 export interface CommercialTicketTypeConfig {
   code: string;
   name: string;
+  timing: string;
   description: string;
   originalPricePaise: number; // in paise (e.g. 49900 = ₹499.00)
   unitPricePaise: number; // in paise (e.g. 24900 = ₹249.00)
@@ -29,25 +30,53 @@ export const COMMERCIAL_TICKET_TYPES: Record<string, CommercialTicketTypeConfig>
   COMMERCIAL_DAILY: {
     code: 'COMMERCIAL_DAILY',
     name: 'Daily Entry Pass',
+    timing: '8:00 PM – 4:00 AM',
     description: 'Valid for selected night(s) at ONGC Navratri 2026',
     originalPricePaise: 49900, // ₹499 per night
     unitPricePaise: 24900, // ₹249 per night (Early Bird 50% OFF)
     discountPercent: 50,
     discountLabel: '50% OFF',
     offerLabel: 'EARLY BIRD OFFER',
-    subtitle: 'Early Bird Price • Limited Time',
+    subtitle: 'Regular Garba Entry • 8:00 PM – 4:00 AM',
+    isSeasonPass: false,
+  },
+  COMMERCIAL_ANY_DAY: {
+    code: 'COMMERCIAL_ANY_DAY',
+    name: 'Any Day Pass',
+    timing: '8:00 PM – 4:00 AM',
+    description: 'Flexible single-night entry pass valid for any chosen event night',
+    originalPricePaise: 49900, // ₹499 per night
+    unitPricePaise: 27900, // ₹279 per night
+    discountPercent: 44,
+    discountLabel: '44% OFF',
+    offerLabel: 'FLEXIBLE ENTRY',
+    subtitle: 'Flexible Single-Night Entry • 8:00 PM – 4:00 AM',
+    isSeasonPass: false,
+  },
+  COMMERCIAL_MANDLI: {
+    code: 'COMMERCIAL_MANDLI',
+    name: 'Mandli Pass',
+    timing: '12:00 AM – 4:00 AM',
+    description: 'Special post-midnight entry for late-night Mandli Garba',
+    originalPricePaise: 29900, // ₹299 per night
+    unitPricePaise: 14900, // ₹149 per night
+    discountPercent: 50,
+    discountLabel: '50% OFF',
+    offerLabel: 'MIDNIGHT SPECIAL',
+    subtitle: 'Post-Midnight Entry • 12:00 AM – 4:00 AM',
     isSeasonPass: false,
   },
   COMMERCIAL_SEASON: {
     code: 'COMMERCIAL_SEASON',
     name: 'Season Pass',
+    timing: '8:00 PM – 4:00 AM',
     description: 'Full festival pass covering all 9 nights of Garba',
     originalPricePaise: 350000, // ₹3,500 for all 9 nights
     unitPricePaise: 175000, // ₹1,750 for all 9 nights (Early Bird 50% OFF)
     discountPercent: 50,
     discountLabel: '50% OFF',
     offerLabel: 'EARLY BIRD OFFER',
-    subtitle: 'Early Bird Price • Limited Time',
+    subtitle: 'All 9 Nights Access • 8:00 PM – 4:00 AM',
     isSeasonPass: true,
   },
 };
