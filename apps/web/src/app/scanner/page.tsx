@@ -25,7 +25,9 @@ import { fetchApi } from '@/lib/api';
 import { CheckinResult } from '@ongc/shared-types';
 
 const SCANNER_ELEMENT_ID = 'qr-scanner-viewport';
-export const DUPLICATE_DECODE_SUPPRESS_MS = 3000;
+export const DUPLICATE_DECODE_SUPPRESS_MS = 4500;
+export const SUCCESS_BANNER_DURATION_MS = 3000;
+export const ERROR_BANNER_DURATION_MS = 4000;
 
 export function shouldProcessScan(
   lastDecode: { text: string; at: number } | null,
@@ -86,6 +88,25 @@ export default function ScannerPage() {
     gateIdRef.current = gateId;
   }, [gateId]);
 
+  // Keep refs synchronized with state to prevent stale closures in camera callbacks
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  const vibrationEnabledRef = useRef(vibrationEnabled);
+  useEffect(() => {
+    vibrationEnabledRef.current = vibrationEnabled;
+  }, [vibrationEnabled]);
+
+  const scanStateRef = useRef(scanState);
+  useEffect(() => {
+    scanStateRef.current = scanState;
+  }, [scanState]);
+
+  const lastSuccessTokenRef = useRef<string | null>(null);
+  const processTokenRef = useRef<(rawToken: string) => Promise<void>>(() => Promise.resolve());
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -97,9 +118,9 @@ export default function ScannerPage() {
     };
   }, []);
 
-  // Audio synthesis feedback
+  // Audio synthesis feedback — always reads latest setting via ref to avoid stale closures
   const playFeedbackAudio = (type: 'success' | 'duplicate' | 'error') => {
-    if (!soundEnabled || typeof window === 'undefined') return;
+    if (!soundEnabledRef.current || typeof window === 'undefined') return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
@@ -135,7 +156,7 @@ export default function ScannerPage() {
   };
 
   const triggerVibration = (type: 'success' | 'duplicate' | 'error') => {
-    if (!vibrationEnabled || typeof window === 'undefined' || !navigator.vibrate) return;
+    if (!vibrationEnabledRef.current || typeof window === 'undefined' || !navigator.vibrate) return;
     try {
       if (type === 'success') navigator.vibrate(80);
       else if (type === 'duplicate') navigator.vibrate([100, 50, 100]);
@@ -225,6 +246,12 @@ export default function ScannerPage() {
       return;
     }
 
+    // Redundant decode protection: while success banner is actively showing
+    // for this token, ignore redundant camera frames to prevent banner flip
+    if (scanStateRef.current === 'success' && lastSuccessTokenRef.current === token) {
+      return;
+    }
+
     if (resetTimeoutRef.current) {
       clearTimeout(resetTimeoutRef.current);
       resetTimeoutRef.current = null;
@@ -260,15 +287,18 @@ export default function ScannerPage() {
       };
 
       if (res.result === CheckinResult.SUCCESS) {
+        lastSuccessTokenRef.current = token;
         setScanState('success');
         playFeedbackAudio('success');
         triggerVibration('success');
         resetTimeoutRef.current = setTimeout(() => {
           if (isMountedRef.current) {
+            lastSuccessTokenRef.current = null;
             setScanState('scanning');
           }
-        }, 3500);
+        }, SUCCESS_BANNER_DURATION_MS);
       } else if (res.result === CheckinResult.ALREADY_CHECKED_IN) {
+        lastSuccessTokenRef.current = null;
         setScanState('duplicate');
         playFeedbackAudio('duplicate');
         triggerVibration('duplicate');
@@ -276,8 +306,9 @@ export default function ScannerPage() {
           if (isMountedRef.current) {
             setScanState('scanning');
           }
-        }, 4000);
+        }, ERROR_BANNER_DURATION_MS);
       } else {
+        lastSuccessTokenRef.current = null;
         setScanState('error');
         playFeedbackAudio('error');
         triggerVibration('error');
@@ -285,7 +316,7 @@ export default function ScannerPage() {
           if (isMountedRef.current) {
             setScanState('scanning');
           }
-        }, 4000);
+        }, ERROR_BANNER_DURATION_MS);
       }
 
       setLastResult(normalized);
@@ -302,6 +333,7 @@ export default function ScannerPage() {
       ]);
     } catch (err: any) {
       if (!isMountedRef.current) return;
+      lastSuccessTokenRef.current = null;
       setScanState('error');
       playFeedbackAudio('error');
       triggerVibration('error');
@@ -309,7 +341,7 @@ export default function ScannerPage() {
         if (isMountedRef.current) {
           setScanState('scanning');
         }
-      }, 4000);
+      }, ERROR_BANNER_DURATION_MS);
       setLastResult({
         result: CheckinResult.INVALID_QR,
         message: err.message || 'Verification rejected',
@@ -319,6 +351,11 @@ export default function ScannerPage() {
     }
   };
 
+  // Synchronize processTokenRef on every render so startCamera callbacks never run stale closures
+  useEffect(() => {
+    processTokenRef.current = processToken;
+  });
+
   const submitManual = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualInput.trim()) return;
@@ -326,20 +363,21 @@ export default function ScannerPage() {
     setManualInput('');
   };
 
-  // Real camera QR scanning via the existing html5-qrcode dependency
-  // (already installed — no new QR library introduced). Decodes
-  // continuously from the rear/environment camera; each decoded value is
-  // debounced against DUPLICATE_DECODE_SUPPRESS_MS so holding the same
-  // physical QR code in frame doesn't fire a request per video frame.
+  // Real camera QR scanning via html5-qrcode dependency with hardened
+  // async lifecycle management against unmount races.
   useEffect(() => {
-    let cancelled = false;
+    let unmounted = false;
+    let isStarting = false;
+    let createdInstance: any = null;
 
     async function startCamera() {
       try {
+        isStarting = true;
         const { Html5Qrcode } = await import('html5-qrcode');
-        if (cancelled) return;
+        if (unmounted) return;
 
         const instance = new Html5Qrcode(SCANNER_ELEMENT_ID);
+        createdInstance = instance;
         html5QrCodeRef.current = instance;
 
         await instance.start(
@@ -351,7 +389,7 @@ export default function ScannerPage() {
               return;
             }
             lastDecodeRef.current = { text: decodedText.trim(), at: now };
-            processToken(decodedText);
+            processTokenRef.current(decodedText);
           },
           () => {
             // Per-frame "no QR found" callback — expected continuously
@@ -359,13 +397,26 @@ export default function ScannerPage() {
           },
         );
 
-        if (!cancelled) {
-          setCameraReady(true);
-          setCameraError(false);
-          setScanState('scanning');
+        isStarting = false;
+
+        // If unmount occurred while instance.start() was resolving,
+        // safely stop and release the newly-running instance.
+        if (unmounted) {
+          try {
+            if (instance.isScanning) {
+              await instance.stop();
+            }
+            instance.clear();
+          } catch {}
+          return;
         }
+
+        setCameraReady(true);
+        setCameraError(false);
+        setScanState('scanning');
       } catch (err: any) {
-        if (!cancelled) {
+        isStarting = false;
+        if (!unmounted) {
           setCameraError(true);
           setCameraErrorMessage(
             err?.message || 'Could not access the camera. Check permissions or use manual entry below.',
@@ -377,17 +428,24 @@ export default function ScannerPage() {
     startCamera();
 
     return () => {
-      cancelled = true;
+      unmounted = true;
       if (resetTimeoutRef.current) {
         clearTimeout(resetTimeoutRef.current);
         resetTimeoutRef.current = null;
       }
-      const instance = html5QrCodeRef.current;
-      if (instance) {
-        instance
-          .stop()
-          .then(() => instance.clear())
-          .catch(() => {});
+      const instance = createdInstance || html5QrCodeRef.current;
+      // If start() is not currently in flight and the instance is active, stop it safely.
+      if (instance && !isStarting) {
+        try {
+          if (instance.isScanning) {
+            instance
+              .stop()
+              .then(() => instance.clear())
+              .catch(() => {});
+          } else {
+            instance.clear();
+          }
+        } catch {}
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
