@@ -28,6 +28,9 @@ import {
   SUCCESS_BANNER_DURATION_MS,
   ERROR_BANNER_DURATION_MS,
   shouldProcessScan,
+  selectBestCamera,
+  formatCameraError,
+  ensureVideoStreaming,
 } from './scanner-utils';
 
 const SCANNER_ELEMENT_ID = 'qr-scanner-viewport';
@@ -64,6 +67,7 @@ export default function ScannerPage() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState(false);
   const [cameraErrorMessage, setCameraErrorMessage] = useState('');
+  const [cameraRetryTrigger, setCameraRetryTrigger] = useState(0);
   const [showRecentModal, setShowRecentModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
@@ -353,43 +357,100 @@ export default function ScannerPage() {
   };
 
   // Real camera QR scanning via html5-qrcode dependency with hardened
-  // async lifecycle management against unmount races.
+  // async lifecycle management against unmount races, multi-camera selection
+  // on mobile, active frame verification, and clean error reporting.
   useEffect(() => {
     let unmounted = false;
     let isStarting = false;
     let createdInstance: any = null;
 
     async function startCamera() {
+      if (typeof window === 'undefined') return;
+
+      // 1. Insecure context or unsupported browser check
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        if (!unmounted) {
+          setCameraReady(false);
+          setCameraError(true);
+          setCameraErrorMessage(
+            window.isSecureContext === false
+              ? 'Camera requires HTTPS. Please connect via a secure HTTPS connection.'
+              : 'Camera is not supported on this browser. Please use manual entry below.'
+          );
+        }
+        return;
+      }
+
       try {
         isStarting = true;
+        setCameraReady(false);
+        setCameraError(false);
+
         const { Html5Qrcode } = await import('html5-qrcode');
+        if (unmounted) return;
+
+        // 2. Query available cameras to identify rear/back camera on Android devices
+        let selectedCamera: any = { facingMode: 'environment' };
+        try {
+          const devices = await Html5Qrcode.getCameras();
+          if (unmounted) return;
+          if (devices && devices.length > 0) {
+            selectedCamera = selectBestCamera(devices);
+          }
+        } catch (enumErr: any) {
+          if (
+            enumErr?.name === 'NotAllowedError' ||
+            enumErr?.name === 'PermissionDeniedError' ||
+            /denied|permission/i.test(enumErr?.message || '')
+          ) {
+            throw enumErr;
+          }
+          selectedCamera = { facingMode: 'environment' };
+        }
+
         if (unmounted) return;
 
         const instance = new Html5Qrcode(SCANNER_ELEMENT_ID);
         createdInstance = instance;
         html5QrCodeRef.current = instance;
 
-        await instance.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText: string) => {
-            const now = Date.now();
-            if (!shouldProcessScan(lastDecodeRef.current, decodedText, now)) {
-              return;
-            }
-            lastDecodeRef.current = { text: decodedText.trim(), at: now };
-            processTokenRef.current(decodedText);
+        const scanConfig = {
+          fps: 10,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const size = Math.max(Math.floor(minEdge * 0.7), 160);
+            return { width: size, height: size };
           },
-          () => {
-            // Per-frame "no QR found" callback — expected continuously
-            // while nothing is in frame, intentionally ignored.
-          },
-        );
+        };
+
+        const onScanSuccess = (decodedText: string) => {
+          const now = Date.now();
+          if (!shouldProcessScan(lastDecodeRef.current, decodedText, now)) {
+            return;
+          }
+          lastDecodeRef.current = { text: decodedText.trim(), at: now };
+          processTokenRef.current(decodedText);
+        };
+
+        const onScanFailure = () => {
+          // Per-frame "no QR found" callback — expected continuously while nothing is in frame
+        };
+
+        // 3. Start scanning with fallback if specific camera ID fails
+        try {
+          await instance.start(selectedCamera, scanConfig, onScanSuccess, onScanFailure);
+        } catch (startErr: any) {
+          if (typeof selectedCamera === 'string' && !unmounted) {
+            selectedCamera = { facingMode: 'environment' };
+            await instance.start(selectedCamera, scanConfig, onScanSuccess, onScanFailure);
+          } else {
+            throw startErr;
+          }
+        }
 
         isStarting = false;
 
-        // If unmount occurred while instance.start() was resolving,
-        // safely stop and release the newly-running instance.
+        // 4. If unmount occurred while instance.start() was resolving, safely stop and release
         if (unmounted) {
           try {
             if (instance.isScanning) {
@@ -400,16 +461,48 @@ export default function ScannerPage() {
           return;
         }
 
+        // 5. Hardened mobile video element check: enforce playsinline, autoplay, and active video streaming
+        const container = document.getElementById(SCANNER_ELEMENT_ID);
+        const videoEl = container?.querySelector('video') as HTMLVideoElement | null;
+        if (videoEl) {
+          videoEl.setAttribute('playsinline', 'true');
+          videoEl.setAttribute('webkit-playsinline', 'true');
+          videoEl.setAttribute('autoplay', 'true');
+          videoEl.setAttribute('muted', 'true');
+          videoEl.muted = true;
+          videoEl.playsInline = true;
+
+          if (videoEl.paused) {
+            try {
+              await videoEl.play();
+            } catch (playErr) {
+              console.warn('Video element play() retry warning:', playErr);
+            }
+          }
+
+          const isStreaming = await ensureVideoStreaming(videoEl, 3500);
+          if (unmounted) return;
+
+          if (!isStreaming) {
+            setCameraReady(false);
+            setCameraError(true);
+            setCameraErrorMessage(
+              'Camera connected but failed to render video frames. Please tap Retry Camera or enter ticket manually below.'
+            );
+            return;
+          }
+        }
+
+        // 6. Camera is verified active with live frames
         setCameraReady(true);
         setCameraError(false);
         setScanState('scanning');
       } catch (err: any) {
         isStarting = false;
         if (!unmounted) {
+          setCameraReady(false);
           setCameraError(true);
-          setCameraErrorMessage(
-            err?.message || 'Could not access the camera. Check permissions or use manual entry below.',
-          );
+          setCameraErrorMessage(formatCameraError(err));
         }
       }
     }
@@ -438,7 +531,7 @@ export default function ScannerPage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cameraRetryTrigger]);
 
   const activeGateObj = gates.find((g) => g.id === gateId) || { name: 'Main Gate', code: 'MAIN' };
 
@@ -588,13 +681,17 @@ export default function ScannerPage() {
               </div>
 
               {/* Viewport Box — html5-qrcode renders the live camera feed
-                  directly into #qr-scanner-viewport; the gold corner
-                  brackets are a purely decorative overlay on top of it. */}
-              <div className="relative w-full aspect-square max-h-[min(46vh,400px)] bg-black rounded-2xl overflow-hidden flex items-center justify-center">
-                <div id={SCANNER_ELEMENT_ID} className="absolute inset-0 w-full h-full [&_video]:object-cover [&_video]:w-full [&_video]:h-full" />
+                  directly into #qr-scanner-viewport. Using explicit non-flex
+                  block container with hardened video styling overrides to prevent
+                  black screen collapsing on mobile Chrome. */}
+              <div className="relative w-full aspect-square max-h-[min(46vh,400px)] min-h-[260px] bg-black rounded-2xl overflow-hidden">
+                <div
+                  id={SCANNER_ELEMENT_ID}
+                  className="w-full h-full min-h-[260px] [&_video]:!w-full [&_video]:!h-full [&_video]:!object-cover [&_video]:!block [&_video]:!m-0 [&_canvas]:!hidden [&_#qr-shaded-region]:!hidden"
+                />
 
-                {!cameraError && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                {!cameraError && cameraReady && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                     <div className="relative w-[70%] aspect-square">
                       <span className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-gold rounded-tl-xl" />
                       <span className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-gold rounded-tr-xl" />
@@ -605,17 +702,32 @@ export default function ScannerPage() {
                 )}
 
                 {!cameraReady && !cameraError && (
-                  <div className="text-center space-y-2 p-6 z-10 pointer-events-none">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-2 p-6 z-10 pointer-events-none">
                     <ScanLine className="w-12 h-12 text-gold animate-bounce mx-auto opacity-70" />
                     <p className="text-xs text-white/60">Starting camera…</p>
                   </div>
                 )}
 
                 {cameraError && (
-                  <div className="text-center space-y-2 p-6 z-10 max-w-xs">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-3 p-6 z-10 max-w-sm mx-auto">
                     <AlertTriangle className="w-10 h-10 text-rose-400 mx-auto" />
                     <p className="text-xs text-white/80">{cameraErrorMessage}</p>
-                    <p className="text-[11px] text-white/50">Use the manual entry field below instead.</p>
+                    <div className="flex items-center gap-2 justify-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraError(false);
+                          setCameraErrorMessage('');
+                          setCameraReady(false);
+                          setCameraRetryTrigger((c) => c + 1);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry Camera</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-white/50">Or use the manual ticket entry field below.</p>
                   </div>
                 )}
               </div>

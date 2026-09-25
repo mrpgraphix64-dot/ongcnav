@@ -3,6 +3,9 @@ import {
   shouldProcessScan,
   DUPLICATE_DECODE_SUPPRESS_MS,
   SUCCESS_BANNER_DURATION_MS,
+  selectBestCamera,
+  formatCameraError,
+  ensureVideoStreaming,
 } from './scanner-utils';
 
 describe('Scanner Camera/API Duplicate Prevention (shouldProcessScan)', () => {
@@ -41,5 +44,131 @@ describe('Scanner Camera/API Duplicate Prevention (shouldProcessScan)', () => {
   it('rejects empty or whitespace-only decoded tokens', () => {
     expect(shouldProcessScan(null, '', 1000)).toBe(false);
     expect(shouldProcessScan(null, '   ', 1000)).toBe(false);
+  });
+});
+
+describe('Scanner Camera Selection (selectBestCamera)', () => {
+  it('returns environment facingMode constraint when devices list is empty', () => {
+    expect(selectBestCamera([])).toEqual({ facingMode: 'environment' });
+  });
+
+  it('selects the back/rear camera when multiple cameras exist (typical Android multi-camera setup)', () => {
+    const devices = [
+      { id: 'cam-front', label: 'camera2 1, facing front' },
+      { id: 'cam-back-main', label: 'camera2 0, facing back' },
+      { id: 'cam-back-wide', label: 'camera2 2, facing back wide' },
+    ];
+    expect(selectBestCamera(devices)).toBe('cam-back-main');
+  });
+
+  it('selects camera matching environment label', () => {
+    const devices = [
+      { id: 'cam-1', label: 'Front Camera' },
+      { id: 'cam-2', label: 'Rear Environment Camera' },
+    ];
+    expect(selectBestCamera(devices)).toBe('cam-2');
+  });
+
+  it('falls back to the first available camera if no labels indicate back/rear', () => {
+    const devices = [
+      { id: 'cam-default', label: 'Integrated Webcam' },
+      { id: 'cam-other', label: 'USB Video Device' },
+    ];
+    expect(selectBestCamera(devices)).toBe('cam-default');
+  });
+
+  it('safely falls back to environment facingMode when all camera labels are empty strings', () => {
+    const devicesWithEmptyLabels = [
+      { id: 'cam-0', label: '' },
+      { id: 'cam-1', label: '   ' },
+    ];
+    expect(selectBestCamera(devicesWithEmptyLabels)).toEqual({ facingMode: 'environment' });
+  });
+});
+
+describe('Scanner Video Streaming Verification (ensureVideoStreaming)', () => {
+  it('resolves true immediately when video is already playing with non-zero dimensions', async () => {
+    const mockVideo = {
+      readyState: 4,
+      videoWidth: 1280,
+      videoHeight: 720,
+      paused: false,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    } as unknown as HTMLVideoElement;
+
+    const result = await ensureVideoStreaming(mockVideo, 500);
+    expect(result).toBe(true);
+  });
+
+  it('resolves false on timeout when readyState >= 2 but dimensions remain 0 (black screen guard)', async () => {
+    const mockVideo = {
+      readyState: 2,
+      videoWidth: 0,
+      videoHeight: 0,
+      paused: false,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    } as unknown as HTMLVideoElement;
+
+    const result = await ensureVideoStreaming(mockVideo, 50);
+    expect(result).toBe(false);
+  });
+
+  it('resolves true when playing event fires with positive width and height', async () => {
+    const listeners: Record<string, () => void> = {};
+    const mockVideo = {
+      readyState: 0,
+      videoWidth: 0,
+      videoHeight: 0,
+      paused: true,
+      addEventListener: jest.fn((event: string, cb: () => void) => {
+        listeners[event] = cb;
+      }),
+      removeEventListener: jest.fn(),
+    } as unknown as HTMLVideoElement;
+
+    const streamPromise = ensureVideoStreaming(mockVideo, 1000);
+
+    // Simulate video start
+    (mockVideo as any).videoWidth = 640;
+    (mockVideo as any).videoHeight = 480;
+    if (listeners['playing']) {
+      listeners['playing']();
+    }
+
+    const result = await streamPromise;
+    expect(result).toBe(true);
+  });
+});
+
+describe('Scanner Camera Error Formatting (formatCameraError)', () => {
+  it('formats NotAllowedError as permission denied message', () => {
+    const msg = formatCameraError({ name: 'NotAllowedError', message: 'Permission denied' });
+    expect(msg).toContain('Camera permission denied');
+    expect(msg).toContain('browser site settings');
+  });
+
+  it('formats NotFoundError as no camera message', () => {
+    const msg = formatCameraError({ name: 'NotFoundError', message: 'Requested device not found' });
+    expect(msg).toContain('No camera found on this device');
+  });
+
+  it('formats NotReadableError as in-use / hardware message', () => {
+    const msg = formatCameraError({ name: 'NotReadableError', message: 'Could not start video source' });
+    expect(msg).toContain('in use by another app');
+  });
+
+  it('formats OverconstrainedError properly', () => {
+    const msg = formatCameraError({ name: 'OverconstrainedError', message: 'Constraint not satisfied' });
+    expect(msg).toContain('does not support requested settings');
+  });
+
+  it('falls back to error message or default message for unexpected errors', () => {
+    const msg = formatCameraError({ message: 'Custom hardware failure' });
+    expect(msg).toContain('Custom hardware failure');
+
+    const defaultMsg = formatCameraError(null);
+    expect(defaultMsg).toContain('Could not access the camera');
   });
 });
