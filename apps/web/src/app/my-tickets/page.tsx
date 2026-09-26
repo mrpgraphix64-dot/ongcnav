@@ -86,7 +86,7 @@ function CommercialTicketsContent() {
 
     const validation = validateCommercialLookup(orderNumber, orderMobile);
     if (!validation.isValid) {
-      setError(validation.error || 'Please enter a valid Commercial Order Number and 10-digit mobile number');
+      setError(validation.error || 'Please enter a valid E-Pass Order Number and 10-digit mobile number');
       return;
     }
 
@@ -103,10 +103,10 @@ function CommercialTicketsContent() {
         (err.message && err.message.toLowerCase().includes('not found'))
       ) {
         setError(
-          `Commercial order "${orderNumber.trim().toUpperCase()}" was not found. Please verify your order number and 10-digit mobile number.`,
+          `E-Pass order "${orderNumber.trim().toUpperCase()}" was not found. Please verify your order number and 10-digit mobile number.`,
         );
       } else {
-        setError(err.message || 'Failed to lookup commercial order. Please try again.');
+        setError(err.message || 'Failed to lookup E-Pass order. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -130,9 +130,9 @@ function CommercialTicketsContent() {
             <div className="w-14 h-14 mx-auto rounded-2xl bg-maroon-soft text-maroon flex items-center justify-center border border-maroon/20 shadow-xs">
               <Ticket className="w-7 h-7 text-maroon" />
             </div>
-            <h2 className="font-cinzel font-bold text-2xl text-ink">Commercial Pass Retrieval</h2>
+            <h2 className="font-cinzel font-bold text-2xl text-ink">E-Pass Retrieval</h2>
             <p className="text-xs sm:text-sm text-ink-soft">
-              Enter your Commercial Order Number and registered 10-digit mobile number to access and download your official QR passes.
+              Enter your E-Pass Order Number and registered 10-digit mobile number to access and download your official QR passes.
             </p>
           </div>
 
@@ -151,7 +151,7 @@ function CommercialTicketsContent() {
                 htmlFor="order_number"
                 className="block text-xs font-bold text-ink-soft uppercase tracking-wider mb-2"
               >
-                Commercial Order Number
+                E-Pass Order Number
               </label>
               <div className="relative">
                 <Hash className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -189,7 +189,7 @@ function CommercialTicketsContent() {
                 />
               </div>
               <p className="text-[11px] text-ink-soft mt-1.5">
-                Enter the Indian mobile number provided during commercial ticket booking.
+                Enter the Indian mobile number provided during E-Pass ticket booking.
               </p>
             </div>
 
@@ -199,7 +199,7 @@ function CommercialTicketsContent() {
               className="w-full py-4 rounded-xl text-sm font-bold bg-maroon text-white hover:bg-maroon-dark transition-all duration-200 shadow-md border border-gold/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
               <Search className="w-4 h-4 text-gold-light" />
-              <span>{loading ? 'LOOKING UP ORDER...' : 'FIND COMMERCIAL PASSES'}</span>
+              <span>{loading ? 'LOOKING UP ORDER...' : 'FIND E-PASSES'}</span>
             </button>
           </form>
 
@@ -302,7 +302,7 @@ function CommercialTicketsContent() {
                         <div>
                           <span className="font-bold uppercase tracking-wider">STAGING TEST PAYMENT &bull; SIMULATED TRANSACTION</span>
                           <p className="text-amber-800 text-xs mt-0.5">
-                            This commercial pass was generated using safe staging test mode without live Razorpay payment.
+                            This E-Pass was generated using safe staging test mode without live Razorpay payment.
                           </p>
                         </div>
                       </div>
@@ -310,7 +310,7 @@ function CommercialTicketsContent() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-stone-100">
                       <div>
                         <div className="text-xs font-bold text-ink-soft uppercase tracking-wider">
-                          Commercial Order Reference
+                          E-Pass Order Reference
                         </div>
                         <div className="text-xl sm:text-2xl font-mono font-bold text-maroon">
                           {result.orderNumber}
@@ -414,7 +414,7 @@ function CommercialTicketsContent() {
                         <div>
                           <h3 className="font-cinzel font-bold text-xl text-maroon flex items-center gap-2">
                             <Ticket className="w-5 h-5 text-gold" />
-                            <span>Commercial Passes ({passes.length})</span>
+                            <span>E-Passes ({passes.length})</span>
                           </h3>
                           <span className="text-xs text-stone-500">
                             Present individual QR codes at the entry gate
@@ -491,7 +491,7 @@ function CommercialTicketsContent() {
                                     <span>
                                       {result.ticketType === 'SEASON' || result.ticketType === 'COMMERCIAL_SEASON'
                                         ? 'SEASON PASS'
-                                        : 'COMMERCIAL PASS'}
+                                        : 'E-PASS'}
                                     </span>
                                   </span>
                                 </div>
@@ -523,7 +523,7 @@ function CommercialTicketsContent() {
                                         Category
                                       </span>
                                       <span className="font-semibold text-white">
-                                        {pass.category || 'Commercial Pass'}
+                                        {pass.category || 'E-Pass'}
                                       </span>
                                     </div>
                                     <div>
@@ -608,15 +608,15 @@ export default function MyTicketsPage() {
     <div className="min-h-screen flex flex-col justify-between bg-cream text-ink selection:bg-maroon selection:text-white">
       <PublicHeader />
       <PageHero
-        badge="COMMERCIAL PASSES"
-        title="CHECK COMMERCIAL TICKET"
-        subtitle="Lookup, verify, and retrieve your official commercial entry passes and QR codes."
-        breadcrumb="Commercial Tickets"
+        badge="E-PASSES"
+        title="CHECK E-PASS"
+        subtitle="Lookup, verify, and retrieve your official E-Pass entry passes and QR codes."
+        breadcrumb="E-Pass Tickets"
       />
       <Suspense
         fallback={
           <div className="py-24 text-center text-maroon font-bold">
-            Loading Commercial Ticket Portal...
+            Loading E-Pass Ticket Portal...
           </div>
         }
       >

@@ -650,7 +650,7 @@ export default function BookPassPage() {
               </p>
               {isTestOrder && (
                 <p className="text-xs text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200 max-w-lg mx-auto font-medium">
-                  This commercial pass was generated using safe staging test mode without live Razorpay payment. Official QR codes and emails have been generated for testing.
+                  This E-Pass was generated using safe staging test mode without live Razorpay payment. Official QR codes and emails have been generated for testing.
                 </p>
               )}
             </div>
@@ -982,7 +982,7 @@ export default function BookPassPage() {
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
               <div>
                 <h1 className="font-outfit font-black text-2xl sm:text-3xl text-ink tracking-tight">
-                  Buy Your Commercial Pass
+                  Buy Your E-Pass
                 </h1>
                 <p className="text-xs sm:text-sm text-ink-soft">
                   Official Digital Entry Passes &bull; ONGC Navratri 2026, Ahmedabad
@@ -1024,7 +1024,7 @@ export default function BookPassPage() {
                       <span>1. Choose Category <span className="text-rose-600">*</span></span>
                     </h2>
                     <p className="text-xs text-ink-soft">
-                      Select your preferred commercial pass category
+                      Select your preferred E-Pass category
                     </p>
                   </div>
 

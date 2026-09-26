@@ -20,6 +20,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import PasswordInput from '@/components/PasswordInput';
 import { validateEmployeeLookup, formatEmployeePassDates } from './employee-tickets-utils';
 
 function EmployeeTicketsContent() {
@@ -130,19 +131,16 @@ function EmployeeTicketsContent() {
               >
                 Registered Phone Last 4 Digits <span className="text-maroon">*</span>
               </label>
-              <div className="relative">
-                <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-                <input
-                  type="password"
-                  id="phoneLast4"
-                  maxLength={4}
-                  required
-                  value={phoneLast4}
-                  onChange={(e) => setPhoneLast4(e.target.value.replace(/\D/g, ''))}
-                  placeholder="e.g. 3210"
-                  className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-stone-50 border border-stone-200 text-ink font-mono text-base placeholder:font-sans placeholder:text-stone-400 focus:bg-white focus:outline-none focus:border-maroon shadow-xs transition-colors"
-                />
-              </div>
+              <PasswordInput
+                id="phoneLast4"
+                maxLength={4}
+                required
+                value={phoneLast4}
+                onChange={(e) => setPhoneLast4(e.target.value.replace(/\D/g, ''))}
+                placeholder="e.g. 3210"
+                iconLeft={<Lock className="w-5 h-5" />}
+                className="w-full py-3.5 rounded-xl bg-stone-50 border border-stone-200 text-ink font-mono text-base placeholder:font-sans placeholder:text-stone-400 focus:bg-white focus:outline-none focus:border-maroon shadow-xs transition-colors"
+              />
               <p className="text-[11px] text-ink-soft mt-1.5">
                 Both your CPF and the last 4 digits of your registered mobile number are required for verification.
               </p>

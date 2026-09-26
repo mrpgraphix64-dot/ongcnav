@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -192,5 +193,24 @@ export class CommercialAgentAdminController {
   @ApiOperation({ summary: 'List all allocations across all commercial agents' })
   async getAllAllocations() {
     return this.agentService.getAllAllocationsAdmin();
+  }
+
+  @Get('agents/:id/details')
+  @ApiOperation({ summary: 'Get comprehensive agent profile, sub-agents, allocations, and orders' })
+  async getAgentDetails(@Param('id') id: string) {
+    return this.agentService.getAgentDetailsAdmin(BigInt(id));
+  }
+
+  @Post('agents/:id/toggle-status')
+  @ApiOperation({ summary: 'Toggle agent active/inactive status' })
+  async toggleAgentStatus(@Param('id') id: string) {
+    return this.agentService.toggleAgentStatusAdmin(BigInt(id));
+  }
+
+  @Delete('agents/:id')
+  @ApiOperation({ summary: 'Delete a commercial agent with strict dependency protections' })
+  async deleteAgent(@Req() req: Request, @Param('id') id: string) {
+    const user = (req as any).user;
+    return this.agentService.deleteAgentAdmin(user.id, BigInt(id));
   }
 }

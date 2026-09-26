@@ -80,9 +80,26 @@ export class CommercialAdminController {
   async listOrders(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('source') source?: string,
+    @Query('agentId') agentId?: string,
+    @Query('ticketType') ticketType?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('date') date?: string,
+    @Query('groupBy') groupBy?: string,
   ) {
     const p = page ? parseInt(page, 10) : 1;
     const l = limit ? parseInt(limit, 10) : 20;
-    return this.commercialService.listOrdersAdmin(p, l);
+    return this.commercialService.listOrdersAdmin({
+      page: p,
+      limit: l,
+      source,
+      agentId,
+      ticketType,
+      status,
+      search,
+      date,
+      groupBy,
+    });
   }
 }

@@ -1139,4 +1139,210 @@ export class CommercialAgentService {
       updatedAt: a.updatedAt,
     }));
   }
+
+  /**
+   * Delete an agent account with strict operational dependency protections.
+   */
+  async deleteAgentAdmin(adminUserId: bigint, agentId: bigint) {
+    const agent = await this.prisma.user.findUnique({
+      where: { id: agentId },
+      include: {
+        subAgents: { select: { id: true, name: true } },
+        agentOrders: { select: { id: true } },
+        allocations: true,
+        givenAllocations: { select: { id: true } },
+        allocationEventsPerformed: { select: { id: true } },
+        scannedLogs: { select: { id: true } },
+        scannedCheckins: { select: { id: true } },
+      },
+    });
+
+    if (!agent) {
+      throw new NotFoundException(`Agent with ID ${agentId} not found.`);
+    }
+
+    if (agent.role !== UserRole.COMMERCIAL_AGENT && agent.role !== UserRole.COMMERCIAL_SUB_AGENT) {
+      throw new BadRequestException('Target user is not a commercial agent.');
+    }
+
+    if (agent.subAgents.length > 0) {
+      throw new BadRequestException(
+        'This agent cannot be deleted because they have sub-agents assigned. Remove or reassign sub-agents first, or deactivate the agent.'
+      );
+    }
+
+    if (agent.agentOrders.length > 0) {
+      throw new BadRequestException(
+        'This agent cannot be deleted because historical bookings or allocations are linked to this account. Deactivate the agent instead.'
+      );
+    }
+
+    const hasActiveAllocations = agent.allocations.some(
+      (a) => a.allocatedQuantity > 0 || a.bookedQuantity > 0 || a.subAllocatedQuantity > 0,
+    );
+    if (
+      hasActiveAllocations ||
+      agent.givenAllocations.length > 0 ||
+      agent.allocationEventsPerformed.length > 0 ||
+      agent.scannedLogs.length > 0 ||
+      agent.scannedCheckins.length > 0
+    ) {
+      throw new BadRequestException(
+        'This agent cannot be deleted because historical bookings or allocations are linked to this account. Deactivate the agent instead.'
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.agentAllocation.deleteMany({ where: { agentId } });
+      await tx.gateUser.deleteMany({ where: { userId: agentId } });
+      await tx.auditLog.deleteMany({ where: { userId: agentId } });
+      await tx.user.delete({ where: { id: agentId } });
+    });
+
+    return { message: `Agent '${agent.name}' deleted successfully.` };
+  }
+
+  /**
+   * Toggle agent active/inactive status.
+   */
+  async toggleAgentStatusAdmin(agentId: bigint) {
+    const agent = await this.prisma.user.findUnique({
+      where: { id: agentId },
+      select: { id: true, name: true, isActive: true, role: true },
+    });
+    if (!agent) {
+      throw new NotFoundException(`Agent with ID ${agentId} not found.`);
+    }
+    if (agent.role !== UserRole.COMMERCIAL_AGENT && agent.role !== UserRole.COMMERCIAL_SUB_AGENT) {
+      throw new BadRequestException('Target user is not a commercial agent.');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: agentId },
+      data: { isActive: !agent.isActive },
+    });
+
+    return {
+      id: updated.id.toString(),
+      isActive: updated.isActive,
+      message: `Agent '${agent.name}' ${updated.isActive ? 'activated' : 'deactivated'} successfully.`,
+    };
+  }
+
+  /**
+   * Fetch complete agent profile, sub-agents, allocations, and recent orders for drawer/modal.
+   */
+  async getAgentDetailsAdmin(agentId: bigint) {
+    const agent = await this.prisma.user.findUnique({
+      where: { id: agentId },
+      include: {
+        parentAgent: {
+          select: { id: true, name: true, email: true, phone: true, staffId: true },
+        },
+        subAgents: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            staffId: true,
+            isActive: true,
+            allocations: true,
+            _count: { select: { agentOrders: true } },
+          },
+        },
+        allocations: true,
+        agentOrders: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: {
+            _count: { select: { attendees: true } },
+          },
+        },
+      },
+    });
+
+    if (!agent) {
+      throw new NotFoundException(`Agent with ID ${agentId} not found.`);
+    }
+
+    const totalAllocated = agent.allocations.reduce((sum, a) => sum + a.allocatedQuantity, 0);
+    const totalBooked = agent.allocations.reduce((sum, a) => sum + a.bookedQuantity, 0);
+    const totalSubAllocated = agent.allocations.reduce((sum, a) => sum + a.subAllocatedQuantity, 0);
+    const totalAvailable = Math.max(0, totalAllocated - totalBooked - totalSubAllocated);
+
+    const revenuePaise = agent.agentOrders
+      .filter((o) => o.orderStatus === OrderStatus.PAID)
+      .reduce((sum, o) => sum + o.amountPaise, 0);
+
+    return {
+      id: agent.id.toString(),
+      name: agent.name,
+      email: agent.email,
+      phone: agent.phone,
+      staffId: agent.staffId,
+      role: agent.role,
+      isActive: agent.isActive,
+      parentAgent: agent.parentAgent
+        ? {
+            id: agent.parentAgent.id.toString(),
+            name: agent.parentAgent.name,
+            email: agent.parentAgent.email,
+            phone: agent.parentAgent.phone,
+            staffId: agent.parentAgent.staffId,
+          }
+        : null,
+      subAgents: agent.subAgents.map((sa) => {
+        const saTotalAlloc = sa.allocations.reduce((s, a) => s + a.allocatedQuantity, 0);
+        const saTotalBooked = sa.allocations.reduce((s, a) => s + a.bookedQuantity, 0);
+        const saTotalSub = sa.allocations.reduce((s, a) => s + a.subAllocatedQuantity, 0);
+        const saAvail = Math.max(0, saTotalAlloc - saTotalBooked - saTotalSub);
+        return {
+          id: sa.id.toString(),
+          name: sa.name,
+          email: sa.email,
+          phone: sa.phone,
+          staffId: sa.staffId,
+          isActive: sa.isActive,
+          ordersCount: sa._count.agentOrders,
+          availableQuantity: saAvail,
+        };
+      }),
+      allocations: agent.allocations.map((a) => {
+        const avail = Math.max(0, a.allocatedQuantity - a.bookedQuantity - a.subAllocatedQuantity);
+        const ticketInfo = (COMMERCIAL_TICKET_TYPES as any)[a.passType];
+        return {
+          id: a.id.toString(),
+          passType: a.passType,
+          passTypeName: ticketInfo?.name || a.passType,
+          allocatedQuantity: a.allocatedQuantity,
+          bookedQuantity: a.bookedQuantity,
+          subAllocatedQuantity: a.subAllocatedQuantity,
+          availableQuantity: avail,
+        };
+      }),
+      summary: {
+        totalAllocated,
+        totalBooked,
+        totalSubAllocated,
+        totalAvailable,
+        totalOrders: agent.agentOrders.length,
+        totalSalesInr: revenuePaise / 100,
+      },
+      recentOrders: agent.agentOrders.map((o) => ({
+        id: o.id.toString(),
+        orderNumber: o.orderNumber,
+        customerName: o.customerName,
+        customerMobile: o.customerMobile,
+        ticketType: o.ticketType,
+        quantity: o.quantity,
+        amountInr: o.amountPaise / 100,
+        orderStatus: o.orderStatus,
+        paymentMode: o.paymentMode,
+        passesCount: o._count.attendees,
+        createdAt: o.createdAt,
+      })),
+      createdAt: agent.createdAt,
+    };
+  }
 }

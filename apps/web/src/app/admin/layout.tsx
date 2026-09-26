@@ -92,23 +92,23 @@ const ALL_NAV_ITEMS: NavItem[] = [
     icon: UploadCloud,
     roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'REGISTRATION_STAFF'],
   },
-  // Commercial Orders (Super Admin, Commercial Admin)
+  // E-Pass Orders (Super Admin, Commercial Admin)
   {
-    label: 'Commercial Orders',
+    label: 'E-Pass Orders',
     href: '/admin/commercial/orders',
     icon: CalendarCheck,
     roles: ['SUPER_ADMIN', 'COMMERCIAL_ADMIN'],
   },
-  // Commercial Agents (Super Admin, Commercial Admin)
+  // E-Pass Agents (Super Admin, Commercial Admin)
   {
-    label: 'Commercial Agents',
+    label: 'Agents',
     href: '/admin/commercial/agents',
     icon: Shield,
     roles: ['SUPER_ADMIN', 'COMMERCIAL_ADMIN'],
   },
-  // Agent Portal (Commercial Agent, Commercial Sub Agent)
+  // E-Pass Agent Portal (Commercial Agent, Commercial Sub Agent)
   {
-    label: 'Agent Portal',
+    label: 'E-Pass Agent Portal',
     href: '/agent',
     icon: Calendar,
     roles: ['COMMERCIAL_AGENT', 'COMMERCIAL_SUB_AGENT'],
@@ -279,19 +279,19 @@ function getPageMeta(pathname: string): { title: string; subtitle: string } {
   }
   if (pathname.startsWith('/admin/commercial/orders')) {
     return {
-      title: 'Commercial Orders',
+      title: 'E-Pass Orders',
       subtitle: 'Audit public and agent ticket sales, payment verification, and pass delivery.',
     };
   }
   if (pathname.startsWith('/admin/commercial/agents')) {
     return {
-      title: 'Commercial Agents',
+      title: 'Agents',
       subtitle: 'Agent directory, master inventory allocations, and sub-agent network oversight.',
     };
   }
   if (pathname.startsWith('/agent')) {
     return {
-      title: 'Commercial Agent Portal',
+      title: 'E-Pass Agent Portal',
       subtitle: 'Offline pass booking, inventory balances, and sub-agent distribution.',
     };
   }
@@ -459,7 +459,12 @@ export default function AdminLayout({
     .slice(0, 2)
     .toUpperCase();
 
-  const roleBadgeLabel = normalizedRole.replace(/_/g, ' ');
+  const roleBadgeLabel = (() => {
+    if (normalizedRole === 'COMMERCIAL_ADMIN') return 'E-Pass Admin';
+    if (normalizedRole === 'COMMERCIAL_AGENT') return 'E-Pass Agent';
+    if (normalizedRole === 'COMMERCIAL_SUB_AGENT') return 'E-Pass Sub-Agent';
+    return normalizedRole.replace(/_/g, ' ');
+  })();
 
   return (
     <div className="h-screen w-screen flex flex-col font-sans bg-cream text-ink selection:bg-maroon selection:text-white overflow-hidden">

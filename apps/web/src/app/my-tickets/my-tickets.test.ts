@@ -75,7 +75,7 @@ describe('My-Tickets: Commercial Order Lookup Validation (validateCommercialLook
   it('rejects missing or empty order number', () => {
     const res = validateCommercialLookup('   ', '9876543210');
     expect(res.isValid).toBe(false);
-    expect(res.error).toContain('Commercial Order number');
+    expect(res.error).toContain('E-Pass Order number');
   });
 
   it('rejects empty or missing mobile number', () => {

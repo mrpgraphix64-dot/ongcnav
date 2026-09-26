@@ -27,6 +27,7 @@ import {
   OrderStatus,
   PaymentStatus,
   RegistrationType,
+  UserRole,
 } from '@ongc/shared-types';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
@@ -695,27 +696,239 @@ export class CommercialService {
     };
   }
 
-  async listOrdersAdmin(page = 1, limit = 20) {
+  async listOrdersAdmin(
+    pageOrOptions?:
+      | number
+      | {
+          page?: number;
+          limit?: number;
+          source?: string;
+          agentId?: string;
+          ticketType?: string;
+          status?: string;
+          search?: string;
+          date?: string;
+          groupBy?: string;
+        },
+    legacyLimit?: number,
+  ) {
+    let page = 1;
+    let limit = 20;
+    let source: string | undefined;
+    let agentId: string | undefined;
+    let ticketType: string | undefined;
+    let status: string | undefined;
+    let search: string | undefined;
+    let groupBy: string | undefined;
+
+    if (typeof pageOrOptions === 'object' && pageOrOptions !== null) {
+      page = pageOrOptions.page || 1;
+      limit = pageOrOptions.limit || 20;
+      source = pageOrOptions.source;
+      agentId = pageOrOptions.agentId;
+      ticketType = pageOrOptions.ticketType;
+      status = pageOrOptions.status;
+      search = pageOrOptions.search;
+      groupBy = pageOrOptions.groupBy;
+    } else if (typeof pageOrOptions === 'number') {
+      page = pageOrOptions;
+      limit = legacyLimit || 20;
+    }
+
     const skip = (Math.max(1, page) - 1) * limit;
-    const [total, orders] = await Promise.all([
-      this.prisma.commercialOrder.count(),
-      this.prisma.commercialOrder.findMany({
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
+    const where: any = {
+      registrationType: RegistrationType.COMMERCIAL,
+    };
+
+    if (source && source !== 'ALL') {
+      where.source = source;
+    }
+
+    if (agentId && agentId.trim() !== '') {
+      try {
+        where.agentId = BigInt(agentId);
+      } catch {
+        // Ignore invalid bigint
+      }
+    }
+
+    if (ticketType && ticketType !== 'ALL') {
+      where.ticketType = ticketType;
+    }
+
+    if (status && status !== 'ALL') {
+      where.orderStatus = status as any;
+    }
+
+    if (search && search.trim() !== '') {
+      const q = search.trim();
+      where.OR = [
+        { orderNumber: { contains: q, mode: 'insensitive' } },
+        { customerName: { contains: q, mode: 'insensitive' } },
+        { customerMobile: { contains: q, mode: 'insensitive' } },
+        { customerEmail: { contains: q, mode: 'insensitive' } },
+        { agent: { name: { contains: q, mode: 'insensitive' } } },
+        { agent: { staffId: { contains: q, mode: 'insensitive' } } },
+        { attendees: { some: { ticketNumber: { contains: q, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [total, orders, publicOrdersCount, agentOrdersCount, totalPaidAgg, totalPassesAgg] =
+      await Promise.all([
+        this.prisma.commercialOrder.count({ where }),
+        this.prisma.commercialOrder.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            _count: { select: { attendees: true } },
+            agent: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                staffId: true,
+                role: true,
+                parentAgentId: true,
+                parentAgent: { select: { id: true, name: true } },
+              },
+            },
+            attendees: {
+              select: {
+                id: true,
+                ticketNumber: true,
+                status: true,
+                category: true,
+                bookingDays: true,
+              },
+              take: 20,
+            },
+          },
+        }),
+        this.prisma.commercialOrder.count({
+          where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.PUBLIC },
+        }),
+        this.prisma.commercialOrder.count({
+          where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.AGENT },
+        }),
+        this.prisma.commercialOrder.aggregate({
+          where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
+          _sum: { amountPaise: true },
+        }),
+        this.prisma.commercialOrder.aggregate({
+          where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
+          _sum: { quantity: true },
+        }),
+      ]);
+
+    let agentGroups: any[] = [];
+    if (groupBy === 'agent' || source === 'AGENT') {
+      const agents: any[] = await this.prisma.user.findMany({
+        where: {
+          role: { in: [UserRole.COMMERCIAL_AGENT, UserRole.COMMERCIAL_SUB_AGENT] },
+        },
         include: {
-          _count: { select: { attendees: true } },
-          agent: {
-            select: { id: true, name: true, email: true },
+          parentAgent: { select: { id: true, name: true } },
+          allocations: true,
+          agentOrders: {
+            where: {
+              registrationType: RegistrationType.COMMERCIAL,
+              source: CommercialOrderSource.AGENT,
+              ...(status && status !== 'ALL' ? { orderStatus: status as any } : {}),
+              ...(ticketType && ticketType !== 'ALL' ? { ticketType } : {}),
+            },
+            include: {
+              attendees: {
+                select: { id: true, status: true, dailyCheckins: { select: { id: true } } },
+              },
+            },
           },
         },
-      }),
-    ]);
+        orderBy: [{ parentAgentId: 'asc' }, { name: 'asc' }],
+      });
+
+      agentGroups = agents
+        .filter((ag: any) => {
+          if (search && search.trim() !== '') {
+            const q = search.trim().toLowerCase();
+            const matchesAgent =
+              ag.name.toLowerCase().includes(q) ||
+              (ag.email && ag.email.toLowerCase().includes(q)) ||
+              (ag.phone && ag.phone.toLowerCase().includes(q)) ||
+              (ag.staffId && ag.staffId.toLowerCase().includes(q)) ||
+              (ag.parentAgent && ag.parentAgent.name.toLowerCase().includes(q));
+            const matchesOrderOrCustomer = (ag.agentOrders || []).some(
+              (o: any) =>
+                o.orderNumber.toLowerCase().includes(q) ||
+                o.customerName.toLowerCase().includes(q) ||
+                o.customerMobile.toLowerCase().includes(q) ||
+                o.customerEmail.toLowerCase().includes(q),
+            );
+            return matchesAgent || matchesOrderOrCustomer;
+          }
+          return true;
+        })
+        .map((ag: any) => {
+          const ordersList = ag.agentOrders || [];
+          const ordersCount = ordersList.length;
+          const passesSold = ordersList.reduce((sum: number, o: any) => sum + o.quantity, 0);
+          const totalSalesInr = ordersList
+            .filter((o: any) => o.orderStatus === OrderStatus.PAID)
+            .reduce((sum: number, o: any) => sum + o.amountPaise / 100, 0);
+
+          const allocList = ag.allocations || [];
+          const totalAllocated = allocList.reduce((sum: number, a: any) => sum + a.allocatedQuantity, 0);
+          const totalBooked = allocList.reduce((sum: number, a: any) => sum + a.bookedQuantity, 0);
+          const totalSub = allocList.reduce((sum: number, a: any) => sum + a.subAllocatedQuantity, 0);
+          const availableAllocation = Math.max(0, totalAllocated - totalBooked - totalSub);
+
+          let checkedInPasses = 0;
+          for (const ord of ordersList) {
+            for (const att of (ord.attendees || [])) {
+              if (att.dailyCheckins && att.dailyCheckins.length > 0) {
+                checkedInPasses++;
+              }
+            }
+          }
+
+          return {
+            agent: {
+              id: ag.id.toString(),
+              name: ag.name,
+              email: ag.email,
+              phone: ag.phone,
+              staffId: ag.staffId,
+              role: ag.role,
+              isSubAgent: !!ag.parentAgentId,
+              parentAgent: ag.parentAgent
+                ? { id: ag.parentAgent.id.toString(), name: ag.parentAgent.name }
+                : null,
+            },
+            ordersCount,
+            passesSold,
+            totalSalesInr,
+            availableAllocation,
+            checkedInPasses,
+          };
+        });
+    }
+
+    const totalSalesAllInr = (totalPaidAgg._sum.amountPaise || 0) / 100;
+    const totalPassesAll = totalPassesAgg._sum.quantity || 0;
 
     return {
       total,
       page,
       limit,
+      summary: {
+        totalOrders: publicOrdersCount + agentOrdersCount,
+        totalSalesInr: totalSalesAllInr,
+        totalPasses: totalPassesAll,
+        publicOrdersCount,
+        agentOrdersCount,
+      },
       orders: orders.map((o: any) => {
         const isTestPayment = (o.metadata as any)?.isTestPayment === true;
         return {
@@ -730,12 +943,20 @@ export class CommercialService {
                 id: o.agent.id.toString(),
                 name: o.agent.name,
                 email: o.agent.email,
+                phone: o.agent.phone,
+                staffId: o.agent.staffId,
+                role: o.agent.role,
+                isSubAgent: !!o.agent.parentAgentId,
+                parentAgent: o.agent.parentAgent
+                  ? { id: o.agent.parentAgent.id.toString(), name: o.agent.parentAgent.name }
+                  : null,
               }
             : null,
           customerName: o.customerName,
           customerMobile: o.customerMobile,
           customerEmail: o.customerEmail,
           ticketType: o.ticketType,
+          selectedDates: o.selectedDates,
           quantity: o.quantity,
           amountInr: o.amountPaise / 100,
           currency: o.currency,
@@ -745,10 +966,18 @@ export class CommercialService {
           razorpayOrderId: o.razorpayOrderId,
           razorpayPaymentId: o.razorpayPaymentId,
           passesCount: o._count.attendees,
+          attendees: (o.attendees || []).map((att: any) => ({
+            id: att.id.toString(),
+            ticketNumber: att.ticketNumber,
+            status: att.status,
+            category: att.category,
+            bookingDays: att.bookingDays,
+          })),
           createdAt: o.createdAt,
           paidAt: o.paidAt,
         };
       }),
+      agentGroups,
     };
   }
 

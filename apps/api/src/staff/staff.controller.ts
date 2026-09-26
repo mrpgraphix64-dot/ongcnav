@@ -7,9 +7,11 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Request } from 'express';
 import { StaffService } from './staff.service';
 import { CreateStaffDto, UpdateStaffDto } from './dto/create-staff.dto';
 import { AssignGateDto } from './dto/assign-gate.dto';
@@ -44,14 +46,20 @@ export class StaffController {
 
   @Post()
   @ApiOperation({ summary: 'Create new staff member operator' })
-  async create(@Body() dto: CreateStaffDto) {
-    return this.staffService.create(dto);
+  async create(@Body() dto: CreateStaffDto, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return user !== undefined
+      ? this.staffService.create(dto, user)
+      : this.staffService.create(dto);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Update staff member' })
-  async update(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
-    return this.staffService.update(BigInt(id), dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateStaffDto, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return user !== undefined
+      ? this.staffService.update(BigInt(id), dto, user)
+      : this.staffService.update(BigInt(id), dto);
   }
 
   @Post(':id/toggle')
@@ -89,5 +97,23 @@ export class StaffController {
     @Param('gateId') gateId: string,
   ) {
     return this.staffService.unassignGate(BigInt(id), BigInt(gateId));
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a staff account with operational dependency and RBAC safety checks' })
+  async delete(@Param('id') id: string, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.staffService.deleteStaff(BigInt(id), user);
+  }
+
+  @Post(':id/reset-password')
+  @ApiOperation({ summary: 'Reset staff account password' })
+  async resetPassword(
+    @Param('id') id: string,
+    @Body() body: { password?: string },
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    return this.staffService.resetPassword(BigInt(id), user, body.password);
   }
 }

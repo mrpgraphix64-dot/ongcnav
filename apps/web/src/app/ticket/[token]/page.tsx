@@ -88,7 +88,7 @@ export default function TicketPassPage() {
     ticket.relation === 'Commercial Pass' ||
     !ticket.employee;
   const category = isCommercial
-    ? 'Commercial Pass'
+    ? 'E-Pass'
     : (ticket.relation || ticket.category || 'ONGC Attendee');
   const waMessage = encodeURIComponent(
     `Hi ${attendeeName},\nHere is your official Entry Pass for ONGC Navratri 2026!\n\nTicket ID: ${ticketId}\nCategory: ${category}\nVenue: ONGC Ground, Chandkheda, Ahmedabad\nDate: 11-19 Oct 2026\n\nPlease show this QR ticket at the entry gate.`

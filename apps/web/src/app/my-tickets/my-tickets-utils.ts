@@ -45,7 +45,7 @@ export function validateCommercialLookup(
       isValid: false,
       cleanOrderNumber: '',
       cleanMobile: '',
-      error: 'Please enter your Commercial Order number (e.g. ORD-COMM-...)',
+      error: 'Please enter your E-Pass Order number (e.g. ORD-COMM-...)',
     };
   }
 

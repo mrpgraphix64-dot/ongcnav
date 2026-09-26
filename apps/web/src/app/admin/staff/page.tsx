@@ -12,6 +12,7 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   X,
   RefreshCw,
   DoorOpen,
@@ -20,8 +21,10 @@ import {
   Phone,
   Hash,
   Shield,
+  Trash2,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import PasswordInput from '@/components/PasswordInput';
 
 interface GateItem {
   id: string;
@@ -56,6 +59,10 @@ const ROLES_MAP: Record<string, string> = {
   SCANNER_STAFF: 'Scanner Staff',
   REGISTRATION_STAFF: 'Registration Staff',
   REPORT_VIEWER: 'Report Viewer',
+  COMMERCIAL_ADMIN: 'E-Pass Admin',
+  EMPLOYEE_ADMIN: 'Employee Admin',
+  COMMERCIAL_AGENT: 'E-Pass Agent',
+  COMMERCIAL_SUB_AGENT: 'E-Pass Sub-Agent',
 };
 
 export default function AdminStaffPage() {
@@ -98,6 +105,21 @@ export default function AdminStaffPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Staff Delete Modal State
+  const [staffToDelete, setStaffToDelete] = useState<StaffRecord | null>(null);
+  const [deletingStaff, setDeletingStaff] = useState(false);
+  const [staffDeleteError, setStaffDeleteError] = useState<string | null>(null);
+
+  // Staff Deactivate/Activate Confirmation Modal State
+  const [staffToToggle, setStaffToToggle] = useState<StaffRecord | null>(null);
+  const [togglingStaff, setTogglingStaff] = useState(false);
+
+  // Reset Password Modal State
+  const [staffToResetPwd, setStaffToResetPwd] = useState<StaffRecord | null>(null);
+  const [resetPwdInput, setResetPwdInput] = useState('OngcPass@2026');
+  const [resettingPwd, setResettingPwd] = useState(false);
+  const [resetPwdError, setResetPwdError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -159,6 +181,15 @@ export default function AdminStaffPage() {
 
   const activeOperatorsCount = useMemo(() => {
     return staffList.filter((s) => s.isActive || s.status === 'active').length;
+  }, [staffList]);
+
+  // Dedicated single-admin per domain references
+  const ePassAdmin = useMemo(() => {
+    return staffList.find((s) => s.role === 'COMMERCIAL_ADMIN') || null;
+  }, [staffList]);
+
+  const employeeAdmin = useMemo(() => {
+    return staffList.find((s) => s.role === 'EMPLOYEE_ADMIN') || null;
   }, [staffList]);
 
   // Handle Create Staff
@@ -256,20 +287,80 @@ export default function AdminStaffPage() {
     }
   };
 
-  // Handle Toggle Status
-  const handleToggleStatus = async (staff: StaffRecord) => {
+  // Handle Confirm Toggle Status
+  const handleConfirmToggleStaff = async () => {
+    if (!staffToToggle) return;
     try {
-      setTogglingId(staff.id);
-      await fetchApi(`/admin/staff/${staff.id}/toggle`, {
+      setTogglingStaff(true);
+      await fetchApi(`/admin/staff/${staffToToggle.id}/toggle`, {
         method: 'POST',
       });
-      const newStatus = staff.isActive ? 'deactivated' : 'activated';
-      setMsg({ text: `Staff account '${staff.name}' ${newStatus}.`, type: 'success' });
+      const newStatus = staffToToggle.isActive ? 'deactivated' : 'activated';
+      setMsg({ text: `Staff account '${staffToToggle.name}' ${newStatus}.`, type: 'success' });
+      setStaffToToggle(null);
       loadData();
     } catch (e: any) {
       setMsg({ text: e.message || 'Failed to toggle staff status', type: 'error' });
     } finally {
-      setTogglingId(null);
+      setTogglingStaff(false);
+    }
+  };
+
+  // Handle Confirm Delete Staff
+  const handleConfirmDeleteStaff = async () => {
+    if (!staffToDelete) return;
+    try {
+      setDeletingStaff(true);
+      setStaffDeleteError(null);
+      const res = await fetchApi<any>(`/admin/staff/${staffToDelete.id}`, {
+        method: 'DELETE',
+      });
+      setMsg({ text: res.message || 'Staff member deleted successfully.', type: 'success' });
+      setStaffToDelete(null);
+      loadData();
+    } catch (e: any) {
+      setStaffDeleteError(e.message || 'Failed to delete staff member.');
+    } finally {
+      setDeletingStaff(false);
+    }
+  };
+
+  // Handle Confirm Reset Password
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staffToResetPwd) return;
+    try {
+      setResettingPwd(true);
+      setResetPwdError(null);
+      const res = await fetchApi<any>(`/admin/staff/${staffToResetPwd.id}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ password: resetPwdInput }),
+      });
+      setMsg({ text: res.message || 'Password reset successfully.', type: 'success' });
+      setStaffToResetPwd(null);
+    } catch (e: any) {
+      setResetPwdError(e.message || 'Failed to reset password.');
+    } finally {
+      setResettingPwd(false);
+    }
+  };
+
+  // Handle Deactivate Instead from Delete Modal
+  const handleDeactivateInsteadFromDeleteModal = async () => {
+    if (!staffToDelete) return;
+    try {
+      setDeletingStaff(true);
+      await fetchApi(`/admin/staff/${staffToDelete.id}/toggle`, {
+        method: 'POST',
+      });
+      setMsg({ text: `Staff account '${staffToDelete.name}' deactivated.`, type: 'success' });
+      setStaffToDelete(null);
+      setStaffDeleteError(null);
+      loadData();
+    } catch (e: any) {
+      setStaffDeleteError(e.message || 'Failed to deactivate staff account.');
+    } finally {
+      setDeletingStaff(false);
     }
   };
 
@@ -379,6 +470,238 @@ export default function AdminStaffPage() {
           </button>
         </div>
       )}
+
+      {/* ADMINISTRATORS SECTION */}
+      <div className="bg-white p-5 rounded-2xl border border-stone-200/70 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-[#7A1113]" />
+            <h3 className="font-outfit font-bold text-base text-stone-900">
+              Domain Administrators
+            </h3>
+            <span className="text-[11px] font-semibold text-stone-500 bg-stone-100 px-2.5 py-0.5 rounded-full border border-stone-200">
+              Strict 1 Admin Per Domain
+            </span>
+          </div>
+          <p className="text-xs text-stone-500 hidden sm:block">
+            Global authority managed by Super Admin
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* E-Pass Admin Card */}
+          <div className="p-4 rounded-xl border border-stone-200 bg-[#FAF7F2]/60 space-y-3">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#7A1113]/10 text-[#7A1113] flex items-center justify-center font-bold text-xs shrink-0 border border-[#7A1113]/20">
+                  EP
+                </div>
+                <div>
+                  <h4 className="font-outfit font-bold text-sm text-stone-900">
+                    E-Pass Admin
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold text-stone-500">
+                    Role: COMMERCIAL_ADMIN
+                  </span>
+                </div>
+              </div>
+
+              {ePassAdmin ? (
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    ePassAdmin.isActive
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-stone-100 text-stone-600 border-stone-200'
+                  }`}
+                >
+                  {ePassAdmin.isActive ? 'Active' : 'Inactive'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  Not Configured
+                </span>
+              )}
+            </div>
+
+            {ePassAdmin ? (
+              <div className="space-y-2 text-xs">
+                <div className="bg-white p-3 rounded-lg border border-stone-200/80 space-y-1 shadow-xs">
+                  <div className="font-bold text-stone-900">{ePassAdmin.name}</div>
+                  <div className="text-[11px] text-stone-500">{ePassAdmin.email}</div>
+                  {(ePassAdmin.mobile || ePassAdmin.phone) && (
+                    <div className="text-[11px] text-stone-400">
+                      {ePassAdmin.mobile || ePassAdmin.phone}
+                    </div>
+                  )}
+                  <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
+                    <span>Staff ID: <strong className="font-mono text-[#7A1113]">{ePassAdmin.staffId || '—'}</strong></span>
+                    <span>Last active: {formatTimeAgo(ePassAdmin.last_activity_at)}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <span className="text-[11px] font-bold text-emerald-800 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    E-Pass Admin already exists
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(ePassAdmin)}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStaffToToggle(ePassAdmin)}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                    >
+                      {ePassAdmin.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStaffToResetPwd(ePassAdmin);
+                        setResetPwdInput('OngcPass@2026');
+                      }}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                    >
+                      Reset Password
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 bg-white rounded-lg border border-dashed border-stone-200 space-y-2">
+                <p className="text-xs text-stone-500">
+                  No E-Pass Admin configured for commercial orders, allocations, and inventory.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      role: 'COMMERCIAL_ADMIN',
+                    }));
+                    setShowCreateModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7A1113] hover:bg-[#8F1417] text-white font-bold text-xs shadow-xs transition-all"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Create E-Pass Admin</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Employee Admin Card */}
+          <div className="p-4 rounded-xl border border-stone-200 bg-[#FAF7F2]/60 space-y-3">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold text-xs shrink-0 border border-blue-200">
+                  EA
+                </div>
+                <div>
+                  <h4 className="font-outfit font-bold text-sm text-stone-900">
+                    Employee Admin
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold text-stone-500">
+                    Role: EMPLOYEE_ADMIN
+                  </span>
+                </div>
+              </div>
+
+              {employeeAdmin ? (
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    employeeAdmin.isActive
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-stone-100 text-stone-600 border-stone-200'
+                  }`}
+                >
+                  {employeeAdmin.isActive ? 'Active' : 'Inactive'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  Not Configured
+                </span>
+              )}
+            </div>
+
+            {employeeAdmin ? (
+              <div className="space-y-2 text-xs">
+                <div className="bg-white p-3 rounded-lg border border-stone-200/80 space-y-1 shadow-xs">
+                  <div className="font-bold text-stone-900">{employeeAdmin.name}</div>
+                  <div className="text-[11px] text-stone-500">{employeeAdmin.email}</div>
+                  {(employeeAdmin.mobile || employeeAdmin.phone) && (
+                    <div className="text-[11px] text-stone-400">
+                      {employeeAdmin.mobile || employeeAdmin.phone}
+                    </div>
+                  )}
+                  <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
+                    <span>Staff ID: <strong className="font-mono text-[#7A1113]">{employeeAdmin.staffId || '—'}</strong></span>
+                    <span>Last active: {formatTimeAgo(employeeAdmin.last_activity_at)}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <span className="text-[11px] font-bold text-emerald-800 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    Employee Admin already exists
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(employeeAdmin)}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStaffToToggle(employeeAdmin)}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                    >
+                      {employeeAdmin.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStaffToResetPwd(employeeAdmin);
+                        setResetPwdInput('OngcPass@2026');
+                      }}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                    >
+                      Reset Password
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 bg-white rounded-lg border border-dashed border-stone-200 space-y-2">
+                <p className="text-xs text-stone-500">
+                  No Employee Admin configured for registrations, attendees, and employee operations.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      role: 'EMPLOYEE_ADMIN',
+                    }));
+                    setShowCreateModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-xs transition-all"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Create Employee Admin</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm flex flex-col md:flex-row items-center gap-3">
@@ -575,12 +898,24 @@ export default function AdminStaffPage() {
                             <Edit3 className="w-4 h-4" />
                           </button>
 
-                          {/* Toggle Status */}
+                          {/* Reset Password */}
                           <button
-                            onClick={() => handleToggleStatus(staff)}
-                            disabled={togglingId === staff.id}
+                            onClick={() => {
+                              setStaffToResetPwd(staff);
+                              setResetPwdInput('OngcPass@2026');
+                            }}
                             type="button"
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors disabled:opacity-50"
+                            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
+                            title="Reset Password"
+                          >
+                            <KeyRound className="w-4 h-4" />
+                          </button>
+
+                          {/* Toggle Status (opens confirmation modal) */}
+                          <button
+                            onClick={() => setStaffToToggle(staff)}
+                            type="button"
+                            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
                             title={
                               staff.isActive
                                 ? 'Deactivate Operator Account'
@@ -588,10 +923,23 @@ export default function AdminStaffPage() {
                             }
                           >
                             {staff.isActive ? (
-                              <UserX className="w-4 h-4 text-stone-400 hover:text-rose-600 transition-colors" />
+                              <UserX className="w-4 h-4 text-stone-400 hover:text-amber-600 transition-colors" />
                             ) : (
                               <UserCheck className="w-4 h-4 text-emerald-600" />
                             )}
+                          </button>
+
+                          {/* Delete Staff (opens confirmation modal) */}
+                          <button
+                            onClick={() => {
+                              setStaffToDelete(staff);
+                              setStaffDeleteError(null);
+                            }}
+                            type="button"
+                            className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete Staff Account"
+                          >
+                            <Trash2 className="w-4 h-4 text-stone-400 hover:text-rose-600" />
                           </button>
                         </div>
                       </td>
@@ -606,9 +954,10 @@ export default function AdminStaffPage() {
 
       {/* CREATE STAFF MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 border border-stone-200 shadow-xl">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
+          <div className="min-h-full flex items-center justify-center py-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 sm:space-y-5 border border-stone-200 shadow-xl my-auto">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <h3 className="font-outfit font-bold text-lg text-[#7A1113] flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-amber-500" />
                 <span>Create Staff Operator Account</span>
@@ -690,11 +1039,17 @@ export default function AdminStaffPage() {
                     onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
                   >
-                    {Object.entries(ROLES_MAP).map(([val, label]) => (
-                      <option key={val} value={val}>
-                        {label}
-                      </option>
-                    ))}
+                    {Object.entries(ROLES_MAP).map(([val, label]) => {
+                      const isEPassDisabled = val === 'COMMERCIAL_ADMIN' && !!ePassAdmin && ePassAdmin.isActive;
+                      const isEmployeeDisabled = val === 'EMPLOYEE_ADMIN' && !!employeeAdmin && employeeAdmin.isActive;
+                      const isDisabled = isEPassDisabled || isEmployeeDisabled;
+
+                      return (
+                        <option key={val} value={val} disabled={isDisabled}>
+                          {label} {isDisabled ? '(Already exists)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -717,8 +1072,7 @@ export default function AdminStaffPage() {
                 <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
                   Password * (Min 6 characters)
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   placeholder="••••••••"
                   value={createForm.password}
@@ -799,13 +1153,15 @@ export default function AdminStaffPage() {
             </form>
           </div>
         </div>
+        </div>
       )}
 
       {/* EDIT STAFF MODAL */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 border border-stone-200 shadow-xl">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
+          <div className="min-h-full flex items-center justify-center py-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 sm:space-y-5 border border-stone-200 shadow-xl my-auto">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <h3 className="font-outfit font-bold text-lg text-[#7A1113] flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-amber-500" />
                 <span>Edit Staff Account</span>
@@ -884,11 +1240,25 @@ export default function AdminStaffPage() {
                     onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
                   >
-                    {Object.entries(ROLES_MAP).map(([val, label]) => (
-                      <option key={val} value={val}>
-                        {label}
-                      </option>
-                    ))}
+                    {Object.entries(ROLES_MAP).map(([val, label]) => {
+                      const isEPassDisabled =
+                        val === 'COMMERCIAL_ADMIN' &&
+                        !!ePassAdmin &&
+                        ePassAdmin.isActive &&
+                        ePassAdmin.id !== editForm.id;
+                      const isEmployeeDisabled =
+                        val === 'EMPLOYEE_ADMIN' &&
+                        !!employeeAdmin &&
+                        employeeAdmin.isActive &&
+                        employeeAdmin.id !== editForm.id;
+                      const isDisabled = isEPassDisabled || isEmployeeDisabled;
+
+                      return (
+                        <option key={val} value={val} disabled={isDisabled}>
+                          {label} {isDisabled ? '(Already exists)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -911,8 +1281,7 @@ export default function AdminStaffPage() {
                 <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
                   Change Password (Leave blank to keep current)
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder="Leave blank to keep existing password"
                   value={editForm.password}
                   onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
@@ -981,6 +1350,283 @@ export default function AdminStaffPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+        </div>
+      )}
+
+      {/* DELETE STAFF CONFIRMATION MODAL */}
+      {staffToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
+          <div className="min-h-full flex items-center justify-center py-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl my-auto">
+              <div className="flex items-center gap-3 text-rose-700">
+                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="font-outfit font-bold text-lg text-stone-900">
+                    Delete Staff Account
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Irreversible administrative operation
+                  </p>
+                </div>
+              </div>
+
+              {/* Staff Details Card */}
+              <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200/80 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Staff Name:</span>
+                  <span className="font-bold text-stone-900">{staffToDelete.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Staff ID:</span>
+                  <span className="font-mono font-bold text-[#7A1113]">
+                    {staffToDelete.staffId || staffToDelete.staff_id || '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Email:</span>
+                  <span className="font-semibold text-stone-700">{staffToDelete.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Role:</span>
+                  <span className="font-bold text-stone-800">
+                    {ROLES_MAP[staffToDelete.role] || staffToDelete.role}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Status:</span>
+                  <span
+                    className={`font-bold ${
+                      staffToDelete.isActive ? 'text-emerald-700' : 'text-stone-500'
+                    }`}
+                  >
+                    {staffToDelete.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Error / Audit Safety Notice */}
+              {staffDeleteError ? (
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-3">
+                  <div className="flex items-start gap-2 text-rose-800">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                    <span className="font-medium leading-relaxed">{staffDeleteError}</span>
+                  </div>
+                  <div className="pt-2 border-t border-rose-200/70 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-rose-700 font-semibold">
+                      Recommendation:
+                    </span>
+                    <button
+                      type="button"
+                      disabled={deletingStaff}
+                      onClick={handleDeactivateInsteadFromDeleteModal}
+                      className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition-all"
+                    >
+                      {deletingStaff ? 'Deactivating...' : 'Deactivate Instead'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Are you sure you want to permanently delete this staff account? If this account
+                  has performed scans, issued passes, or generated audit logs, the backend will
+                  safely protect historical records and recommend deactivation instead.
+                </p>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStaffToDelete(null);
+                    setStaffDeleteError(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingStaff}
+                  onClick={handleConfirmDeleteStaff}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                >
+                  {deletingStaff ? 'Checking & Deleting...' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOGGLE STATUS (ACTIVATE / DEACTIVATE) CONFIRMATION MODAL */}
+      {staffToToggle && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
+          <div className="min-h-full flex items-center justify-center py-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl my-auto">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                    staffToToggle.isActive
+                      ? 'bg-amber-100 text-amber-600'
+                      : 'bg-emerald-100 text-emerald-600'
+                  }`}
+                >
+                  {staffToToggle.isActive ? (
+                    <UserX className="w-5 h-5" />
+                  ) : (
+                    <UserCheck className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-outfit font-bold text-lg text-stone-900">
+                    {staffToToggle.isActive
+                      ? 'Deactivate Staff Account'
+                      : 'Activate Staff Account'}
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    {staffToToggle.isActive
+                      ? 'Disable login and operational access'
+                      : 'Restore login and scanner access'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-[#FAF7F2] rounded-xl p-3.5 border border-stone-200 text-xs space-y-1.5">
+                <div>
+                  <span className="text-stone-500">Staff Member: </span>
+                  <span className="font-bold text-stone-900">{staffToToggle.name}</span>
+                </div>
+                <div>
+                  <span className="text-stone-500">Staff ID: </span>
+                  <span className="font-mono font-bold text-[#7A1113]">
+                    {staffToToggle.staffId || staffToToggle.staff_id || '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500">Role: </span>
+                  <span className="font-bold text-stone-800">
+                    {ROLES_MAP[staffToToggle.role] || staffToToggle.role}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-stone-600 leading-relaxed">
+                {staffToToggle.isActive
+                  ? 'Deactivating will immediately prevent this user from logging in or scanning passes at gates. Historical scans and pass issuance audit logs remain completely preserved.'
+                  : 'Activating will immediately restore login and operational access for this staff member.'}
+              </p>
+
+              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setStaffToToggle(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={togglingStaff}
+                  onClick={handleConfirmToggleStaff}
+                  className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 ${
+                    staffToToggle.isActive
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {togglingStaff
+                    ? 'Updating...'
+                    : staffToToggle.isActive
+                    ? 'Deactivate Staff'
+                    : 'Activate Staff'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESET PASSWORD MODAL */}
+      {staffToResetPwd && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
+          <div className="min-h-full flex items-center justify-center py-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl my-auto">
+              <div className="flex items-center gap-3 text-stone-900">
+                <div className="w-10 h-10 rounded-full bg-[#7A1113]/10 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5 text-[#7A1113]" />
+                </div>
+                <div>
+                  <h3 className="font-outfit font-bold text-lg text-stone-900">
+                    Reset Staff Password
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Set a new password for this operator account
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-[#FAF7F2] rounded-xl p-3.5 border border-stone-200 text-xs space-y-1">
+                <div>
+                  <span className="text-stone-500">Staff Member: </span>
+                  <span className="font-bold text-stone-900">{staffToResetPwd.name}</span>
+                </div>
+                <div>
+                  <span className="text-stone-500">Email (Login): </span>
+                  <span className="font-semibold text-stone-700">{staffToResetPwd.email}</span>
+                </div>
+              </div>
+
+              {resetPwdError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{resetPwdError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleConfirmResetPassword} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                    New Password *
+                  </label>
+                  <PasswordInput
+                    required
+                    minLength={6}
+                    value={resetPwdInput}
+                    onChange={(e) => setResetPwdInput(e.target.value)}
+                    placeholder="Enter new secure password"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] font-mono"
+                  />
+                  <p className="text-[11px] text-stone-400 mt-1">
+                    Provide this temporary/new password to the operator so they can sign in.
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStaffToResetPwd(null);
+                      setResetPwdError(null);
+                    }}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={resettingPwd || !resetPwdInput.trim()}
+                    className="px-4 py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                  >
+                    {resettingPwd ? 'Updating Password...' : 'Save New Password'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

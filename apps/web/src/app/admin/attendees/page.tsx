@@ -557,7 +557,7 @@ export default function AdminAttendeesPage() {
               <option value="VVIP">VVIP</option>
               <option value="ONGC STAFF">ONGC Staff</option>
               <option value="FAMILY MEMBER">Family Member</option>
-              <option value="Commercial Pass">All Commercial</option>
+              <option value="Commercial Pass">All E-Passes</option>
               <option value="DAILY">Daily Pass</option>
               <option value="SEASON">Season Pass</option>
               <option value="MANDLI">Mandli Pass</option>
@@ -763,7 +763,7 @@ export default function AdminAttendeesPage() {
                                 </span>
                               </div>
                               <div className="text-[10px] text-stone-500">
-                                Commercial Checkout &bull; {primary.order?.quantity || commTotalCount} passes
+                                E-Pass Checkout &bull; {primary.order?.quantity || commTotalCount} passes
                               </div>
                             </div>
                           ) : primary.employee ? (
@@ -930,7 +930,7 @@ export default function AdminAttendeesPage() {
                               <td className="px-4 py-2.5 text-stone-500 text-[11px]">
                                 {Array.isArray(pass.bookingDays) && pass.bookingDays.length > 0
                                   ? pass.bookingDays.join(', ')
-                                  : primary.order?.ticketType || 'Commercial Pass'}
+                                  : primary.order?.ticketType || 'E-Pass'}
                               </td>
                               <td className="px-4 py-2.5">
                                 <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">

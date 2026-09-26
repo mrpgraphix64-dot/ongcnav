@@ -801,7 +801,7 @@ export default function HomePage() {
           <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
             <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-gold/20 border border-gold/40 text-gold-light text-xs font-bold uppercase tracking-widest shadow-xs">
               <Ticket className="w-3.5 h-3.5" />
-              <span>COMMERCIAL PASSES OPEN</span>
+              <span>E-PASSES OPEN</span>
             </div>
 
             <h2 className="font-cinzel font-extrabold text-3xl sm:text-5xl text-gold-light tracking-wide">

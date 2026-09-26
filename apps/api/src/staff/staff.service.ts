@@ -3,10 +3,12 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffDto, UpdateStaffDto } from './dto/create-staff.dto';
 import { AssignGateDto } from './dto/assign-gate.dto';
+import { UserRole } from '@ongc/shared-types';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -86,7 +88,15 @@ export class StaffService {
     return this.mapStaffUser(user, lastActivity?.scannedAt || null);
   }
 
-  async create(dto: CreateStaffDto) {
+  async create(dto: CreateStaffDto, currentUser?: { id: bigint | string; role: string }) {
+    if (
+      (dto.role === UserRole.COMMERCIAL_ADMIN || dto.role === UserRole.EMPLOYEE_ADMIN || dto.role === UserRole.SUPER_ADMIN) &&
+      currentUser &&
+      currentUser.role !== UserRole.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException('Only a Super Admin can create domain administrator accounts.');
+    }
+
     const email = dto.email.trim().toLowerCase();
     const existingEmail = await this.prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -122,45 +132,122 @@ export class StaffService {
         ? dto.status === 'active'
         : true;
 
+    // Hard rule: Maximum 1 active COMMERCIAL_ADMIN and 1 active EMPLOYEE_ADMIN
+    if (isActive) {
+      if (dto.role === UserRole.COMMERCIAL_ADMIN) {
+        const existingAdmin = await this.prisma.user.findFirst({
+          where: { role: UserRole.COMMERCIAL_ADMIN, isActive: true },
+        });
+        if (existingAdmin) {
+          throw new ConflictException('An active E-Pass Admin already exists. Only one active E-Pass Admin is permitted.');
+        }
+      } else if (dto.role === UserRole.EMPLOYEE_ADMIN) {
+        const existingAdmin = await this.prisma.user.findFirst({
+          where: { role: UserRole.EMPLOYEE_ADMIN, isActive: true },
+        });
+        if (existingAdmin) {
+          throw new ConflictException('An active Employee Admin already exists. Only one active Employee Admin is permitted.');
+        }
+      }
+    }
+
     const rawGateIds = dto.gate_ids ?? dto.gates ?? (dto.gateId ? [dto.gateId] : []);
     const gateIds = Array.isArray(rawGateIds)
       ? rawGateIds.map((g) => BigInt(g)).filter((id) => id > 0)
       : [];
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          name: dto.name.trim(),
-          email,
-          phone: (dto.mobile || dto.phone)?.trim() || null,
-          staffId,
-          role: dto.role as any,
-          isActive,
-          password: hashedPassword,
-        },
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        // Concurrency lock: postgres advisory lock per domain role
+        if (isActive && (dto.role === UserRole.COMMERCIAL_ADMIN || dto.role === UserRole.EMPLOYEE_ADMIN)) {
+          if (typeof tx.$executeRaw === 'function') {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`unique_active_admin_${dto.role}`}))`;
+          }
+          const concurrentCheck = await tx.user.findFirst({
+            where: { role: dto.role as any, isActive: true },
+          });
+          if (concurrentCheck) {
+            const roleLabel = dto.role === UserRole.COMMERCIAL_ADMIN ? 'E-Pass Admin' : 'Employee Admin';
+            throw new ConflictException(`An active ${roleLabel} already exists. Only one active ${roleLabel} is permitted.`);
+          }
+        }
+
+        const user = await tx.user.create({
+          data: {
+            name: dto.name.trim(),
+            email,
+            phone: (dto.mobile || dto.phone)?.trim() || null,
+            staffId,
+            role: dto.role as any,
+            isActive,
+            password: hashedPassword,
+          },
+        });
+
+        if (gateIds.length > 0) {
+          await tx.gateUser.createMany({
+            data: gateIds.map((gateId) => ({
+              userId: user.id,
+              gateId,
+            })),
+          });
+        }
+
+        return user;
       });
 
-      if (gateIds.length > 0) {
-        await tx.gateUser.createMany({
-          data: gateIds.map((gateId) => ({
-            userId: user.id,
-            gateId,
-          })),
-        });
+      return this.findOne(created.id);
+    } catch (err: any) {
+      if (err?.code === 'P2002' || err?.message?.includes('unique_active_commercial_admin')) {
+        throw new ConflictException('An active E-Pass Admin already exists. Only one active E-Pass Admin is permitted.');
       }
-
-      return user;
-    });
-
-    return this.findOne(created.id);
+      if (err?.code === 'P2002' || err?.message?.includes('unique_active_employee_admin')) {
+        throw new ConflictException('An active Employee Admin already exists. Only one active Employee Admin is permitted.');
+      }
+      throw err;
+    }
   }
 
-  async update(id: bigint, dto: UpdateStaffDto) {
+  async update(id: bigint, dto: UpdateStaffDto, currentUser?: { id: bigint | string; role: string }) {
     const existing = await this.prisma.user.findUnique({
       where: { id },
     });
     if (!existing) {
       throw new NotFoundException(`Staff user with ID ${id} not found`);
+    }
+
+    const targetRole = dto.role !== undefined ? (dto.role as UserRole) : (existing.role as UserRole);
+    const targetIsActive =
+      dto.isActive !== undefined
+        ? dto.isActive
+        : dto.status !== undefined
+        ? dto.status === 'active'
+        : existing.isActive;
+
+    if (
+      (dto.role === UserRole.COMMERCIAL_ADMIN || dto.role === UserRole.EMPLOYEE_ADMIN || dto.role === UserRole.SUPER_ADMIN) &&
+      currentUser &&
+      currentUser.role !== UserRole.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException('Only a Super Admin can promote a user to domain administrator.');
+    }
+
+    // Hard rule: Maximum 1 active COMMERCIAL_ADMIN and 1 active EMPLOYEE_ADMIN
+    if (
+      (targetRole === UserRole.COMMERCIAL_ADMIN || targetRole === UserRole.EMPLOYEE_ADMIN) &&
+      targetIsActive
+    ) {
+      const existingAdmin = await this.prisma.user.findFirst({
+        where: {
+          role: targetRole,
+          isActive: true,
+          NOT: { id },
+        },
+      });
+      if (existingAdmin) {
+        const roleLabel = targetRole === UserRole.COMMERCIAL_ADMIN ? 'E-Pass Admin' : 'Employee Admin';
+        throw new ConflictException(`An active ${roleLabel} already exists. Only one active ${roleLabel} is permitted.`);
+      }
     }
 
     const updateData: any = {};
@@ -224,29 +311,56 @@ export class StaffService {
       ? rawGateIds.map((g) => BigInt(g)).filter((gId) => gId > 0)
       : [];
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id },
-        data: updateData,
-      });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if ((targetRole === UserRole.COMMERCIAL_ADMIN || targetRole === UserRole.EMPLOYEE_ADMIN) && targetIsActive) {
+          if (typeof tx.$executeRaw === 'function') {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`unique_active_admin_${targetRole}`}))`;
+          }
+          const concurrentCheck = await tx.user.findFirst({
+            where: {
+              role: targetRole,
+              isActive: true,
+              NOT: { id },
+            },
+          });
+          if (concurrentCheck) {
+            const roleLabel = targetRole === UserRole.COMMERCIAL_ADMIN ? 'E-Pass Admin' : 'Employee Admin';
+            throw new ConflictException(`An active ${roleLabel} already exists. Only one active ${roleLabel} is permitted.`);
+          }
+        }
 
-      if (hasGateUpdate) {
-        await tx.gateUser.deleteMany({
-          where: { userId: id },
+        await tx.user.update({
+          where: { id },
+          data: updateData,
         });
 
-        if (gateIds.length > 0) {
-          await tx.gateUser.createMany({
-            data: gateIds.map((gateId) => ({
-              userId: id,
-              gateId,
-            })),
+        if (hasGateUpdate) {
+          await tx.gateUser.deleteMany({
+            where: { userId: id },
           });
-        }
-      }
-    });
 
-    return this.findOne(id);
+          if (gateIds.length > 0) {
+            await tx.gateUser.createMany({
+              data: gateIds.map((gateId) => ({
+                userId: id,
+                gateId,
+              })),
+            });
+          }
+        }
+      });
+
+      return this.findOne(id);
+    } catch (err: any) {
+      if (err?.code === 'P2002' || err?.message?.includes('unique_active_commercial_admin')) {
+        throw new ConflictException('An active E-Pass Admin already exists. Only one active E-Pass Admin is permitted.');
+      }
+      if (err?.code === 'P2002' || err?.message?.includes('unique_active_employee_admin')) {
+        throw new ConflictException('An active Employee Admin already exists. Only one active Employee Admin is permitted.');
+      }
+      throw err;
+    }
   }
 
   async toggleStatus(id: bigint) {
@@ -257,14 +371,39 @@ export class StaffService {
       throw new NotFoundException(`Staff user with ID ${id} not found`);
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: {
-        isActive: !user.isActive,
-      },
-    });
+    // If activating an inactive domain admin, enforce maximum 1 active admin rule
+    if (!user.isActive && (user.role === UserRole.COMMERCIAL_ADMIN || user.role === UserRole.EMPLOYEE_ADMIN)) {
+      const existingActive = await this.prisma.user.findFirst({
+        where: {
+          role: user.role,
+          isActive: true,
+          NOT: { id },
+        },
+      });
+      if (existingActive) {
+        const roleLabel = user.role === UserRole.COMMERCIAL_ADMIN ? 'E-Pass Admin' : 'Employee Admin';
+        throw new ConflictException(`An active ${roleLabel} already exists. Only one active ${roleLabel} is permitted.`);
+      }
+    }
 
-    return this.findOne(updated.id);
+    try {
+      const updated = await this.prisma.user.update({
+        where: { id },
+        data: {
+          isActive: !user.isActive,
+        },
+      });
+
+      return this.findOne(updated.id);
+    } catch (err: any) {
+      if (err?.code === 'P2002' || err?.message?.includes('unique_active_commercial_admin')) {
+        throw new ConflictException('An active E-Pass Admin already exists. Only one active E-Pass Admin is permitted.');
+      }
+      if (err?.code === 'P2002' || err?.message?.includes('unique_active_employee_admin')) {
+        throw new ConflictException('An active Employee Admin already exists. Only one active Employee Admin is permitted.');
+      }
+      throw err;
+    }
   }
 
   async getActivity(id: bigint, page = 1, limit = 25) {
@@ -381,6 +520,149 @@ export class StaffService {
       where: { userId, gateId },
     });
     return { message: 'Gate unassigned successfully' };
+  }
+
+  async deleteStaff(id: bigint, currentUser: { id: bigint | string; role: string }) {
+    const currentUserId = typeof currentUser.id === 'string' ? BigInt(currentUser.id) : currentUser.id;
+    if (currentUserId === id) {
+      throw new BadRequestException('You cannot delete your own logged-in account.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        gateUsers: true,
+        subAgents: { select: { id: true } },
+        allocations: { select: { id: true } },
+        givenAllocations: { select: { id: true } },
+        agentOrders: { select: { id: true } },
+        scannedCheckins: { select: { id: true } },
+        scannedLogs: { select: { id: true } },
+        reportedIncidents: { select: { id: true } },
+        resolvedIncidents: { select: { id: true } },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Staff user with ID ${id} not found`);
+    }
+
+    // RBAC & Domain isolation
+    const currentRole = currentUser.role;
+    const targetRole = user.role as string;
+
+    // Only SUPER_ADMIN can manage SUPER_ADMIN accounts
+    if (targetRole === UserRole.SUPER_ADMIN) {
+      if (currentRole !== UserRole.SUPER_ADMIN) {
+        throw new ForbiddenException('Only a Super Admin can manage Super Admin accounts.');
+      }
+      const superAdminCount = await this.prisma.user.count({
+        where: { role: UserRole.SUPER_ADMIN, isActive: true },
+      });
+      if (superAdminCount <= 1) {
+        throw new BadRequestException('Cannot delete the last remaining active Super Admin account.');
+      }
+    }
+
+    // Commercial Admin cannot delete Employee Admin, Super Admin, or Event Admin
+    if (currentRole === UserRole.COMMERCIAL_ADMIN) {
+      if (
+        targetRole === UserRole.EMPLOYEE_ADMIN ||
+        targetRole === UserRole.SUPER_ADMIN ||
+        targetRole === UserRole.EVENT_ADMIN
+      ) {
+        throw new ForbiddenException('Commercial Admin cannot delete administrators outside their domain.');
+      }
+    }
+
+    // Employee Admin cannot delete Commercial Admin, Agents, Super Admin, or Event Admin
+    if (currentRole === UserRole.EMPLOYEE_ADMIN) {
+      if (
+        targetRole === UserRole.COMMERCIAL_ADMIN ||
+        targetRole === UserRole.COMMERCIAL_AGENT ||
+        targetRole === UserRole.COMMERCIAL_SUB_AGENT ||
+        targetRole === UserRole.SUPER_ADMIN ||
+        targetRole === UserRole.EVENT_ADMIN
+      ) {
+        throw new ForbiddenException('Employee Admin cannot delete administrators or agents outside their domain.');
+      }
+    }
+
+    // Prevent non-admins from deleting admins
+    if (
+      currentRole !== UserRole.SUPER_ADMIN &&
+      currentRole !== UserRole.EVENT_ADMIN &&
+      (targetRole === UserRole.SUPER_ADMIN || targetRole === UserRole.EVENT_ADMIN)
+    ) {
+      throw new ForbiddenException('Insufficient permissions to delete administrator accounts.');
+    }
+
+    // Last required domain administrator protections
+    if (targetRole === UserRole.COMMERCIAL_ADMIN) {
+      const count = await this.prisma.user.count({
+        where: { role: UserRole.COMMERCIAL_ADMIN, isActive: true },
+      });
+      if (count <= 1) {
+        throw new BadRequestException('Cannot delete the last remaining active E-Pass Admin account.');
+      }
+    }
+    if (targetRole === UserRole.EMPLOYEE_ADMIN) {
+      const count = await this.prisma.user.count({
+        where: { role: UserRole.EMPLOYEE_ADMIN, isActive: true },
+      });
+      if (count <= 1) {
+        throw new BadRequestException('Cannot delete the last remaining active Employee Admin account.');
+      }
+    }
+
+    // Check for linked operational records
+    const hasOperationalRecords =
+      user.scannedCheckins.length > 0 ||
+      user.scannedLogs.length > 0 ||
+      user.agentOrders.length > 0 ||
+      user.allocations.length > 0 ||
+      user.givenAllocations.length > 0 ||
+      user.subAgents.length > 0 ||
+      user.reportedIncidents.length > 0 ||
+      user.resolvedIncidents.length > 0;
+
+    if (hasOperationalRecords) {
+      throw new BadRequestException(
+        'This staff account has linked operational records and cannot be permanently deleted. Deactivate the account instead.'
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.gateUser.deleteMany({ where: { userId: id } });
+      await tx.auditLog.deleteMany({ where: { userId: id } });
+      await tx.user.delete({ where: { id } });
+    });
+
+    return { message: `Staff member '${user.name}' deleted successfully.` };
+  }
+
+  async resetPassword(id: bigint, currentUser: { id: bigint | string; role: string }, newPassword?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`Staff user with ID ${id} not found`);
+    }
+
+    if (
+      user.role === UserRole.SUPER_ADMIN &&
+      currentUser.role !== UserRole.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException('Only a Super Admin can reset a Super Admin password.');
+    }
+
+    const rawPassword = newPassword && newPassword.trim() ? newPassword.trim() : 'OngcPass@2026';
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+
+    return { message: `Password for '${user.name}' has been reset successfully.` };
   }
 
   private mapStaffUser(u: any, lastActivityAt: Date | null) {

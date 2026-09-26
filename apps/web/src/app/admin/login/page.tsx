@@ -11,6 +11,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import PasswordInput from '@/components/PasswordInput';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -147,18 +148,15 @@ export default function AdminLoginPage() {
                   Forgot Password?
                 </Link>
               </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-                <input
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                />
-              </div>
+              <PasswordInput
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                iconLeft={<Lock className="w-4 h-4" />}
+                className="w-full py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              />
             </div>
 
             <div className="pt-2">

@@ -587,7 +587,7 @@ YOUR DIGITAL PASS${data.passes.length > 1 ? 'ES' : ''}:
 ${data.passes
   .map(
     (p, i) => `
-Pass #${i + 1} (${p.category || 'Commercial Pass'})
+Pass #${i + 1} (${p.category || 'E-Pass'})
 Attendee: ${p.attendeeName || data.customerName}
 Ticket ID: ${p.ticketNumber}
 Event Date: ${formattedDates}

@@ -31,6 +31,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import PasswordInput from '@/components/PasswordInput';
 
 const EVENT_DATES = [
   '2026-10-11',
@@ -372,7 +373,7 @@ export default function CommercialAgentPortal() {
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <RefreshCw className="w-8 h-8 text-maroon animate-spin" />
-          <p className="text-sm font-bold text-ink-soft">Loading Commercial Agent Portal...</p>
+          <p className="text-sm font-bold text-ink-soft">Loading E-Pass Agent Portal...</p>
         </div>
       </div>
     );
@@ -390,7 +391,7 @@ export default function CommercialAgentPortal() {
               </div>
               <div>
                 <div className="font-outfit font-bold text-base leading-tight tracking-wide flex items-center gap-2">
-                  <span>Commercial Agent Portal</span>
+                  <span>E-Pass Agent Portal</span>
                   <span className="text-[10px] bg-gold/20 text-gold px-2 py-0.5 rounded-full font-extrabold uppercase border border-gold/40">
                     Offline Sales
                   </span>
@@ -631,7 +632,7 @@ export default function CommercialAgentPortal() {
                     onClick={handleResetBooking}
                     className="px-6 py-3 rounded-xl bg-maroon text-white font-outfit font-bold text-sm hover:bg-maroon-dark transition-colors shadow-sm cursor-pointer"
                   >
-                    + Book Another Commercial Pass
+                    + Book Another E-Pass
                   </button>
                 </div>
               </div>
@@ -641,7 +642,7 @@ export default function CommercialAgentPortal() {
                 {/* Stepper Header */}
                 <div>
                   <h2 className="text-xl font-outfit font-black text-ink">
-                    New Offline Commercial Sale
+                    New Offline E-Pass Sale
                   </h2>
                   <p className="text-xs text-stone-500 mt-1">
                     Book tickets directly on behalf of a walk-in customer. Inventory will be atomically deducted from your allocated quota.
@@ -685,7 +686,7 @@ export default function CommercialAgentPortal() {
                 {bookingStep === 1 && (
                   <div className="space-y-4">
                     <h3 className="font-outfit font-bold text-sm text-ink">
-                      Step 1: Select Commercial Pass Category
+                      Step 1: Select E-Pass Category
                     </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1429,8 +1430,7 @@ export default function CommercialAgentPortal() {
 
               <div>
                 <label className="block text-xs font-bold text-ink mb-1">Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={6}
                   value={subAgentForm.password}
