@@ -34,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser } from '@/lib/auth-session';
 
 interface AttendeePass {
   id: string;
@@ -113,20 +114,33 @@ interface OrdersSummary {
   freeAvailableCount: number;
 }
 
-function isOrderProtected(order: OrderRecord): { isProtected: boolean; reason?: string } {
+function isOrderProtected(
+  order: OrderRecord,
+  isTestDeleteActive: boolean = false,
+): { isProtected: boolean; isTestOrder: boolean; reason?: string } {
+  const isTest = Boolean(
+    order.isTestPayment ||
+      order.razorpayOrderId?.startsWith('TEST_ORD_') ||
+      order.razorpayPaymentId?.startsWith('TEST_PAY_'),
+  );
+
+  if (isTest && isTestDeleteActive) {
+    return { isProtected: false, isTestOrder: true };
+  }
+
   if (order.orderStatus === 'PAID') {
-    return { isProtected: true, reason: 'Order is fully PAID' };
+    return { isProtected: true, isTestOrder: isTest, reason: 'Order is fully PAID' };
   }
   if (order.paymentStatus === 'CAPTURED') {
-    return { isProtected: true, reason: 'Payment is CAPTURED' };
+    return { isProtected: true, isTestOrder: isTest, reason: 'Payment is CAPTURED' };
   }
   if (order.razorpayPaymentId) {
-    return { isProtected: true, reason: 'Razorpay payment ID exists' };
+    return { isProtected: true, isTestOrder: isTest, reason: 'Razorpay payment ID exists' };
   }
   if (order.attendees && order.attendees.some((a) => a.status === 'CHECKED_IN')) {
-    return { isProtected: true, reason: 'Passes are already CHECKED IN' };
+    return { isProtected: true, isTestOrder: isTest, reason: 'Passes are already CHECKED IN' };
   }
-  return { isProtected: false };
+  return { isProtected: false, isTestOrder: isTest };
 }
 
 export default function CommercialOrdersAuditPage() {
@@ -178,6 +192,18 @@ export default function CommercialOrdersAuditPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [ordersToDelete, setOrdersToDelete] = useState<OrderRecord[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Staging Test Data Delete Mode State
+  const [testDataDeleteEnabled, setTestDataDeleteEnabled] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    setCurrentUser(getStoredAuthUser());
+  }, []);
+
+  const isStagingTestCleanupActive = Boolean(
+    testDataDeleteEnabled && currentUser?.role === 'SUPER_ADMIN',
+  );
 
   // Copied feedback
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
@@ -241,6 +267,7 @@ export default function CommercialOrdersAuditPage() {
       const res = await fetchApi<any>(`/admin/commercial/orders?${params.toString()}`);
       setOrders(res.orders || []);
       setTotalOrdersCount(res.total || 0);
+      setTestDataDeleteEnabled(Boolean(res.testDataDeleteEnabled));
       if (res.summary) {
         setSummary({
           totalOrders: res.summary.totalOrders ?? 0,
@@ -290,6 +317,9 @@ export default function CommercialOrdersAuditPage() {
 
         const res = await fetchApi<any>(`/admin/commercial/orders?${params.toString()}`);
         setAgentOrdersMap((prev) => ({ ...prev, [agentId]: res.orders || [] }));
+        if (res.testDataDeleteEnabled !== undefined) {
+          setTestDataDeleteEnabled(Boolean(res.testDataDeleteEnabled));
+        }
       } catch (err: any) {
         console.error(`Failed to load orders for agent ${agentId}:`, err);
       } finally {
@@ -417,10 +447,14 @@ export default function CommercialOrdersAuditPage() {
   const deleteAnalysis = useMemo(() => {
     let safeCount = 0;
     let protectedCount = 0;
+    let testCount = 0;
     const protectedReasons: string[] = [];
 
     ordersToDelete.forEach((ord) => {
-      const check = isOrderProtected(ord);
+      const check = isOrderProtected(ord, isStagingTestCleanupActive);
+      if (check.isTestOrder && isStagingTestCleanupActive) {
+        testCount++;
+      }
       if (check.isProtected) {
         protectedCount++;
         if (check.reason && !protectedReasons.includes(check.reason)) {
@@ -435,9 +469,12 @@ export default function CommercialOrdersAuditPage() {
       total: ordersToDelete.length,
       safeCount,
       protectedCount,
+      testCount,
       protectedReasons,
+      isAllTestOrders: testCount > 0 && testCount === ordersToDelete.length,
+      hasTestOrders: testCount > 0,
     };
-  }, [ordersToDelete]);
+  }, [ordersToDelete, isStagingTestCleanupActive]);
 
   const renderOrdersTable = (agentOrders: OrderRecord[], agentName: string) => {
     if (agentOrders.length === 0) {
@@ -471,7 +508,7 @@ export default function CommercialOrdersAuditPage() {
               {agentOrders.map((ord) => {
                 const showPasses = !!expandedOrderPasses[ord.id];
                 const isSelected = selectedOrderIds.has(ord.id);
-                const protCheck = isOrderProtected(ord);
+                const protCheck = isOrderProtected(ord, isStagingTestCleanupActive);
 
                 return (
                   <React.Fragment key={ord.id}>
@@ -573,7 +610,13 @@ export default function CommercialOrdersAuditPage() {
                           type="button"
                           onClick={() => handleOpenSingleDeleteModal(ord)}
                           className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Order'}
+                          title={
+                            protCheck.isProtected
+                              ? `Protected: ${protCheck.reason}`
+                              : (protCheck.isTestOrder && isStagingTestCleanupActive
+                                ? 'Delete Staging Test Order'
+                                : 'Delete Order')
+                          }
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -633,7 +676,7 @@ export default function CommercialOrdersAuditPage() {
     <div className="space-y-5">
       {/* Top Compact Actions Bar */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
             E-Pass Management
           </span>
@@ -643,6 +686,15 @@ export default function CommercialOrdersAuditPage() {
             {channelTab === 'AGENT' && 'Agent Distribution Channel'}
             {channelTab === 'FREE' && 'Free & Complimentary Passes'}
           </span>
+          {isStagingTestCleanupActive && (
+            <>
+              <span className="text-stone-300">•</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-amber-500/10 text-amber-700 border border-amber-500/20 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                STAGING TEST DATA CLEANUP ENABLED
+              </span>
+            </>
+          )}
         </div>
 
         <button
@@ -1279,7 +1331,7 @@ export default function CommercialOrdersAuditPage() {
                   orders.map((order) => {
                     const showPasses = !!expandedOrderPasses[order.id];
                     const isSelected = selectedOrderIds.has(order.id);
-                    const protCheck = isOrderProtected(order);
+                    const protCheck = isOrderProtected(order, isStagingTestCleanupActive);
 
                     return (
                       <React.Fragment key={order.id}>
@@ -1394,7 +1446,13 @@ export default function CommercialOrdersAuditPage() {
                               type="button"
                               onClick={() => handleOpenSingleDeleteModal(order)}
                               className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                              title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Order'}
+                              title={
+                                protCheck.isProtected
+                                  ? `Protected: ${protCheck.reason}`
+                                  : (protCheck.isTestOrder && isStagingTestCleanupActive
+                                    ? 'Delete Staging Test Order'
+                                    : 'Delete Order')
+                              }
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1528,7 +1586,7 @@ export default function CommercialOrdersAuditPage() {
                   <tbody className="divide-y divide-stone-100 text-stone-900">
                     {orders.map((ord) => {
                       const isSelected = selectedOrderIds.has(ord.id);
-                      const protCheck = isOrderProtected(ord);
+                      const protCheck = isOrderProtected(ord, isStagingTestCleanupActive);
 
                       return (
                         <tr
@@ -1608,7 +1666,13 @@ export default function CommercialOrdersAuditPage() {
                               type="button"
                               onClick={() => handleOpenSingleDeleteModal(ord)}
                               className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                              title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Free Pass'}
+                              title={
+                                protCheck.isProtected
+                                  ? `Protected: ${protCheck.reason}`
+                                  : (protCheck.isTestOrder && isStagingTestCleanupActive
+                                    ? 'Delete Staging Test Order'
+                                    : 'Delete Free Pass')
+                              }
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1694,6 +1758,22 @@ export default function CommercialOrdersAuditPage() {
                 </div>
               </div>
 
+              {/* Staging Test Order Special Notice */}
+              {isStagingTestCleanupActive && deleteAnalysis.hasTestOrders && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-600 text-white">
+                      {deleteAnalysis.testCount === 1 ? 'STAGING TEST ORDER' : 'STAGING TEST ORDERS'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                    {deleteAnalysis.testCount === 1
+                      ? 'This order is marked as a staging test transaction and can be permanently deleted by SUPER_ADMIN.'
+                      : `${deleteAnalysis.testCount} selected order(s) are marked as staging test transactions and can be permanently deleted by SUPER_ADMIN.`}
+                  </p>
+                </div>
+              )}
+
               {deleteAnalysis.protectedCount > 0 && (
                 <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
                   <div className="font-bold flex items-center gap-1.5">
@@ -1713,7 +1793,8 @@ export default function CommercialOrdersAuditPage() {
               ) : (
                 <p className="text-xs text-stone-600 leading-relaxed">
                   Proceeding will permanently remove{' '}
-                  <strong className="text-stone-900 font-bold">{deleteAnalysis.safeCount}</strong> unfulfilled/pending order(s). This action cannot be reversed.
+                  <strong className="text-stone-900 font-bold">{deleteAnalysis.safeCount}</strong>{' '}
+                  {deleteAnalysis.isAllTestOrders ? 'test' : 'unfulfilled/pending'} order(s). This action cannot be reversed.
                 </p>
               )}
             </div>
@@ -1744,9 +1825,9 @@ export default function CommercialOrdersAuditPage() {
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>
-                      {deleteAnalysis.safeCount === 1
-                        ? 'Delete 1 Order'
-                        : `Delete ${deleteAnalysis.safeCount} Orders`}
+                      {deleteAnalysis.isAllTestOrders
+                        ? (deleteAnalysis.testCount === 1 ? 'Delete Test Order' : `Delete ${deleteAnalysis.testCount} Test Orders`)
+                        : (deleteAnalysis.safeCount === 1 ? 'Delete 1 Order' : `Delete ${deleteAnalysis.safeCount} Orders`)}
                     </span>
                   </>
                 )}

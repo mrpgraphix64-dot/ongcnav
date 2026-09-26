@@ -7,6 +7,7 @@ import {
   MailSendResult,
   EmailAttachment,
 } from './mail.types';
+import { getEmailBrandingAttachments } from './branding-assets';
 
 @Injectable()
 export class MailService {
@@ -370,18 +371,19 @@ export class MailService {
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
-          <!-- 1. ONGC NAVRATRI HEADER -->
+          <!-- 1. HEADER WITH NAVRATRI ARTWORK LOGO -->
           <tr>
-            <td style="background: linear-gradient(135deg, #7A1930 0%, #5A0F21 100%); padding: 28px 24px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
-              <div style="font-size: 12px; font-weight: bold; letter-spacing: 2px; color: #F5E6B3; text-transform: uppercase;">
-                Oil and Natural Gas Corporation Ltd.
-              </div>
-              <h1 style="margin: 8px 0 4px 0; font-size: 26px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.5px;">
-                ONGC NAVRATRI 2026
-              </h1>
-              <p style="margin: 0; font-size: 14px; color: #F5E6B3;">
-                Ahmedabad &bull; Official Digital Entry Pass
-              </p>
+            <td style="background-color: #0A0205; background: linear-gradient(180deg, #4A0C1A 0%, #150207 100%); padding: 24px 20px 20px 20px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <img src="cid:navratri-logo" alt="ONGC Navratri 2026" width="360" style="display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto; border: 0;" />
+                    <div style="font-size: 13px; font-weight: 700; color: #F5E6B3; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                      Ahmedabad &bull; Official Digital E-Pass
+                    </div>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
@@ -517,42 +519,95 @@ export class MailService {
               </div>
 
               <!-- 9. OUR PARTNERS / SPONSORS -->
-              <div style="border-top: 1px solid #E5D5BA; padding: 20px 0 16px 0; text-align: center;">
-                <div style="font-size: 11px; font-weight: 800; letter-spacing: 2px; color: #7A1930; text-transform: uppercase; margin-bottom: 12px;">
-                  OUR PARTNERS
-                </div>
-                <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                  <tr>
-                    <td align="center" style="font-size: 12px; color: #4A3B32; padding-bottom: 8px;">
-                      <div style="font-size: 10px; font-weight: bold; color: #8A7264; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">
-                        TITLE SPONSORS
-                      </div>
-                      <strong style="color: #2A1810; font-size: 13px;">Zaira Diamond</strong> &bull; <strong style="color: #2A1810; font-size: 13px;">Om Sanctuary Palace</strong>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td align="center" style="font-size: 12px; color: #4A3B32; padding-top: 4px;">
-                      <div style="font-size: 10px; font-weight: bold; color: #8A7264; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">
-                        MEDIA SPONSOR
-                      </div>
-                      <strong style="color: #2A1810; font-size: 13px;">Lalkaar News</strong>
-                    </td>
-                  </tr>
-                </table>
-              </div>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #E5D5BA; margin-top: 8px; padding-top: 22px;">
+                <tr>
+                  <td align="center" style="padding-bottom: 16px;">
+                    <div style="font-size: 11px; font-weight: 800; letter-spacing: 2px; color: #7A1930; text-transform: uppercase;">
+                      OUR PARTNERS
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-bottom: 10px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #8A7264; text-transform: uppercase; margin-bottom: 12px;">
+                      TITLE SPONSOR
+                    </div>
+                    <!-- TITLE SPONSORS LOGOS (Responsive: side-by-side on desktop, stacks on mobile) -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto; text-align: center;">
+                      <tr>
+                        <td align="center" style="text-align: center; font-size: 0; padding: 0;">
+                          <!--[if mso]>
+                          <table cellpadding="0" cellspacing="0" border="0" align="center"><tr><td valign="middle" style="padding: 6px;">
+                          <![endif]-->
+                          <div style="display: inline-block; vertical-align: middle; padding: 6px; font-size: 13px;">
+                            <table cellpadding="0" cellspacing="0" border="0" style="background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+                              <tr>
+                                <td align="center" valign="middle" style="padding: 10px 14px;">
+                                  <img src="cid:zaira-logo" alt="Zaira Diamond" width="150" style="display: block; width: 150px; max-width: 100%; height: auto; max-height: 65px; object-fit: contain; border: 0;" />
+                                </td>
+                              </tr>
+                            </table>
+                          </div>
+                          <!--[if mso]>
+                          </td><td valign="middle" style="padding: 6px;">
+                          <![endif]-->
+                          <div style="display: inline-block; vertical-align: middle; padding: 6px; font-size: 13px;">
+                            <table cellpadding="0" cellspacing="0" border="0" style="background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+                              <tr>
+                                <td align="center" valign="middle" style="padding: 10px 14px;">
+                                  <img src="cid:om-sanctuary-logo" alt="Om Sanctuary Palace" width="130" style="display: block; width: 130px; max-width: 100%; height: auto; max-height: 65px; object-fit: contain; border: 0;" />
+                                </td>
+                              </tr>
+                            </table>
+                          </div>
+                          <!--[if mso]>
+                          </td></tr></table>
+                          <![endif]-->
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top: 14px; padding-bottom: 6px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #8A7264; text-transform: uppercase; margin-bottom: 10px;">
+                      MEDIA PARTNER
+                    </div>
+                    <!-- Lalkaar News Logo -->
+                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
+                      <tr>
+                        <td align="center" valign="middle" style="padding: 10px 18px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+                          <img src="cid:lalkaar-logo" alt="Lalkaar News" width="95" style="display: block; width: 95px; max-width: 100%; height: auto; max-height: 70px; object-fit: contain; border: 0;" />
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
 
-              <!-- 10. EVENT ORGANISER -->
-              <div style="border-top: 1px solid #E5D5BA; padding: 18px 0 6px 0; text-align: center;">
-                <div style="font-size: 10px; font-weight: 800; letter-spacing: 2px; color: #8A7264; text-transform: uppercase; margin-bottom: 6px;">
-                  EVENT ORGANISER
-                </div>
-                <div style="font-size: 13px; font-weight: 800; color: #7A1930;">
-                  ONGC Navratri 2026 Organizing Committee
-                </div>
-                <div style="font-size: 11px; color: #6E5C50; margin-top: 2px;">
-                  Oil and Natural Gas Corporation Ltd. - Ahmedabad
-                </div>
-              </div>
+              <!-- 10. ORGANISED BY (DIGANT ART) -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #E5D5BA; margin-top: 18px; padding-top: 22px; text-align: center;">
+                <tr>
+                  <td align="center">
+                    <div style="font-size: 10px; font-weight: 800; letter-spacing: 2px; color: #8A7264; text-transform: uppercase; margin-bottom: 12px;">
+                      ORGANISED BY
+                    </div>
+                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
+                      <tr>
+                        <td align="center" style="padding: 8px 12px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.05);">
+                          <img src="cid:digant-art-logo" alt="Digant Art" width="130" style="display: block; width: 130px; max-width: 100%; height: auto; max-height: 130px; border-radius: 8px; border: 0;" />
+                        </td>
+                      </tr>
+                    </table>
+                    <div style="font-size: 12px; font-weight: 700; color: #7A1930; margin-top: 10px; letter-spacing: 0.5px;">
+                      ONGC Navratri 2026
+                    </div>
+                    <div style="font-size: 11px; color: #8A7264; margin-top: 2px;">
+                      Support: <a href="mailto:${this.mailbox}" style="color: #7A1930; text-decoration: none; font-weight: 600;">${this.mailbox}</a>
+                    </div>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
@@ -580,8 +635,9 @@ export class MailService {
 
     const textContent = `
 ONGC NAVRATRI 2026 - OFFICIAL ENTRY PASS
-Oil and Natural Gas Corporation Ltd. - Ahmedabad
-Ahmedabad • Official Digital Entry Pass
+Ahmedabad • Official Digital E-Pass
+
+PAYMENT / BOOKING CONFIRMED • PASS READY
 
 YOUR DIGITAL PASS${data.passes.length > 1 ? 'ES' : ''}:
 ${data.passes
@@ -628,16 +684,22 @@ ENTRY GUIDELINES:
 - Tickets are strictly non-refundable and non-transferable under any circumstances.
 
 OUR PARTNERS:
-Title Sponsors: Zaira Diamond, Om Sanctuary Palace
-Media Sponsor: Lalkaar News
+TITLE SPONSOR:
+Zaira Diamond, Om Sanctuary Palace
 
-EVENT ORGANISER:
-ONGC Navratri 2026 Organizing Committee
-Oil and Natural Gas Corporation Ltd. - Ahmedabad
+MEDIA PARTNER:
+Lalkaar News
+
+ORGANISED BY:
+Digant Art
+ONGC Navratri 2026
 
 Need assistance? Contact us at: ${this.mailbox}
 This is an automated ticket confirmation. Please do not reply to this email.
     `.trim();
+
+    // Attach static branding assets (Navratri logo, sponsors, organiser)
+    attachments.push(...getEmailBrandingAttachments());
 
     return this.sendEmail({
       to: data.customerEmail,

@@ -122,11 +122,14 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).toContain('8:00 PM – 4:00 AM');
       expect(body.html).toContain('non-refundable and non-transferable');
       expect(body.html).toContain('OUR PARTNERS');
-      expect(body.html).toContain('Zaira Diamond');
-      expect(body.html).toContain('Om Sanctuary Palace');
-      expect(body.html).toContain('Lalkaar News');
-      expect(body.html).toContain('EVENT ORGANISER');
-      expect(body.html).toContain('ONGC Navratri 2026 Organizing Committee');
+      expect(body.html).toContain('TITLE SPONSOR');
+      expect(body.html).toContain('MEDIA PARTNER');
+      expect(body.html).toContain('src="cid:zaira-logo"');
+      expect(body.html).toContain('src="cid:om-sanctuary-logo"');
+      expect(body.html).toContain('src="cid:lalkaar-logo"');
+      expect(body.html).toContain('ORGANISED BY');
+      expect(body.html).toContain('src="cid:digant-art-logo"');
+      expect(body.html).toContain('ONGC Navratri 2026');
 
       // Verify pass is positioned BEFORE booking details (Pass-first visual hierarchy)
       const passIndex = body.html.indexOf('YOUR E-PASS');
@@ -141,13 +144,21 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).not.toContain('rzp_');
       expect(body.html).not.toContain('order_DBJOW');
 
-      // Verify attachments contain actual CID QR
+      // Verify attachments contain 1 QR + 5 branding inline CID images = 6 attachments
       expect(body.attachments).toBeDefined();
-      expect(body.attachments.length).toBe(1);
+      expect(body.attachments.length).toBe(6);
       expect(body.attachments[0].filename).toBe('QR-TK-COMM-TEST1-1-A1B2.png');
       expect(body.attachments[0].contentType).toBe('image/png');
       expect(body.attachments[0].cid).toBe('qr-TKCOMMTEST11A1B2-1');
       expect(body.html).toContain(`src="cid:${body.attachments[0].cid}"`);
+
+      // Verify branding attachments are present
+      const cids = body.attachments.map((a: any) => a.cid);
+      expect(cids).toContain('navratri-logo');
+      expect(cids).toContain('zaira-logo');
+      expect(cids).toContain('om-sanctuary-logo');
+      expect(cids).toContain('lalkaar-logo');
+      expect(cids).toContain('digant-art-logo');
     });
 
     it('correctly handles MANDLI pass timing (12:00 AM – 4:00 AM)', async () => {
@@ -289,11 +300,13 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).toContain('11–19 October 2026 (All 9 Nights)');
       expect(body.html).toContain('Mehul Desai');
       expect(body.html).toContain('Rina Desai');
-      expect(body.html).toContain('SCAN AT ENTRY');
-      expect(body.html).toContain('VIEW MY E-PASS');
-      expect(body.attachments).toHaveLength(2);
+      expect(body.attachments).toHaveLength(7);
       expect(body.attachments[0].filename).toBe('QR-TK-COMM-SEAS-1-A1.png');
       expect(body.attachments[1].filename).toBe('QR-TK-COMM-SEAS-2-B2.png');
+      // Plus 5 branding attachments
+      expect(body.attachments.map((a: any) => a.cid)).toEqual(
+        expect.arrayContaining(['navratri-logo', 'zaira-logo', 'om-sanctuary-logo', 'lalkaar-logo', 'digant-art-logo']),
+      );
     });
 
     it('safely handles Hostinger Mail API HTTP errors without crashing', async () => {
@@ -388,6 +401,116 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).not.toContain('SUPER_ADMIN');
       expect(body.html).not.toContain('staffId');
       expect(body.html).not.toContain('agentId');
+    });
+
+    describe('Commercial E-Pass Email Branding & Inline Logo Attachments (Section 10)', () => {
+      it('verifies all 13 requirements for inline CIDs, email safety, and pass hierarchy', async () => {
+        const mockFetch = jest.fn();
+        global.fetch = mockFetch;
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              mailboxes: [{ resourceId: 'AC_TEST_MAILBOX_1', address: 'ticket@ongcnavratri.tech' }],
+            },
+          }),
+        });
+
+        mockFetch.mockResolvedValueOnce({ ok: true, status: 204 });
+
+        const result = await service.sendCommercialTicketEmail({
+          orderNumber: 'ORD-COMM-BRANDING-1',
+          customerName: 'Pooja Shah',
+          customerEmail: 'pooja@example.com',
+          ticketType: 'COMMERCIAL_DAILY',
+          selectedDates: ['2026-10-14'],
+          quantity: 2,
+          amountInr: 1000,
+          passes: [
+            { ticketNumber: 'TK-BRAND-1', token: 'token_pooja_1', category: 'Commercial Pass', attendeeName: 'Pooja Shah' },
+            { ticketNumber: 'TK-BRAND-2', token: 'token_pooja_2', category: 'Commercial Pass', attendeeName: 'Rohan Shah' },
+          ],
+        });
+
+        expect(result.success).toBe(true);
+        const [, sendOptions] = mockFetch.mock.calls[1];
+        const body = JSON.parse(sendOptions.body);
+
+        const attachmentCids = body.attachments.map((a: any) => a.cid);
+
+        // 1. Navratri logo CID is included.
+        expect(attachmentCids).toContain('navratri-logo');
+
+        // 2. Zaira Diamond logo CID is included.
+        expect(attachmentCids).toContain('zaira-logo');
+
+        // 3. Om Sanctuary Palace logo CID is included.
+        expect(attachmentCids).toContain('om-sanctuary-logo');
+
+        // 4. Lalkaar News logo CID is included.
+        expect(attachmentCids).toContain('lalkaar-logo');
+
+        // 5. Digant Art logo CID is included.
+        expect(attachmentCids).toContain('digant-art-logo');
+
+        // 6. HTML references the exact matching CIDs.
+        expect(body.html).toContain('src="cid:navratri-logo"');
+        expect(body.html).toContain('src="cid:zaira-logo"');
+        expect(body.html).toContain('src="cid:om-sanctuary-logo"');
+        expect(body.html).toContain('src="cid:lalkaar-logo"');
+        expect(body.html).toContain('src="cid:digant-art-logo"');
+
+        // 7. No local filesystem paths appear in HTML.
+        expect(body.html).not.toMatch(/C:[\\/]/);
+        expect(body.html).not.toMatch(/\/apps\/api/);
+        expect(body.html).not.toMatch(/\/images\//);
+
+        // 8. No external image URLs are required.
+        expect(body.html).not.toMatch(/<img[^>]+src=["']https?:\/\//);
+
+        // 9. QR CID still works.
+        expect(attachmentCids).toContain('qr-TKBRAND1-1');
+        expect(attachmentCids).toContain('qr-TKBRAND2-2');
+        expect(body.html).toContain('src="cid:qr-TKBRAND1-1"');
+        expect(body.html).toContain('src="cid:qr-TKBRAND2-2"');
+
+        // 10. Multi-pass emails still contain each unique QR.
+        const qrAttachments = body.attachments.filter((a: any) => a.filename.startsWith('QR-'));
+        expect(qrAttachments).toHaveLength(2);
+        expect(qrAttachments[0].cid).not.toBe(qrAttachments[1].cid);
+
+        // 11. Existing ticket/order information is unchanged.
+        expect(body.html).toContain('ORD-COMM-BRANDING-1');
+        expect(body.html).toContain('Pooja Shah');
+        expect(body.html).toContain('Rohan Shah');
+        expect(body.html).toContain('TK-BRAND-1');
+        expect(body.html).toContain('TK-BRAND-2');
+        expect(body.html).toContain('₹1,000');
+
+        // 12. No raw QR token is exposed outside secure link.
+        expect(body.html).toContain('/ticket/token_pooja_1');
+        expect(body.html).toContain('/ticket/token_pooja_2');
+        const token1Count = body.html.split('token_pooja_1').length - 1;
+        expect(token1Count).toBe(1);
+
+        // 13. No payment/internal IDs are exposed.
+        expect(body.html).not.toContain('rzp_');
+        expect(body.html).not.toContain('order_DBJOW');
+        expect(body.html).not.toContain('staffId');
+        expect(body.html).not.toContain('SUPER_ADMIN');
+
+        // Hierarchy check: Navratri logo header -> Digital Pass -> Sponsors -> Organiser
+        const navratriLogoIdx = body.html.indexOf('src="cid:navratri-logo"');
+        const passCardIdx = body.html.indexOf('src="cid:qr-TKBRAND1-1"');
+        const sponsorsIdx = body.html.indexOf('OUR PARTNERS');
+        const organiserIdx = body.html.indexOf('ORGANISED BY');
+        expect(navratriLogoIdx).toBeGreaterThan(-1);
+        expect(passCardIdx).toBeGreaterThan(navratriLogoIdx);
+        expect(sponsorsIdx).toBeGreaterThan(passCardIdx);
+        expect(organiserIdx).toBeGreaterThan(sponsorsIdx);
+      });
     });
   });
 

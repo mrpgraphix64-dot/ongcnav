@@ -88,9 +88,11 @@ export class CommercialAdminController {
     @Query('search') search?: string,
     @Query('date') date?: string,
     @Query('groupBy') groupBy?: string,
+    @Req() req?: Request,
   ) {
     const p = page ? parseInt(page, 10) : 1;
     const l = limit ? parseInt(limit, 10) : 20;
+    const user = req ? (req as any).user : undefined;
     return this.commercialService.listOrdersAdmin({
       page: p,
       limit: l,
@@ -101,6 +103,7 @@ export class CommercialAdminController {
       search,
       date,
       groupBy,
+      userRole: user?.role,
     });
   }
 
@@ -109,7 +112,7 @@ export class CommercialAdminController {
   @ApiOperation({ summary: 'Bulk delete commercial orders with strict dependency and financial protections' })
   async bulkDeleteOrders(@Body() body: { orderIds: string[] }, @Req() req?: Request) {
     const user = req ? (req as any).user : undefined;
-    return this.commercialService.bulkDeleteOrdersAdmin(body?.orderIds || [], user?.role);
+    return this.commercialService.bulkDeleteOrdersAdmin(body?.orderIds || [], user);
   }
 
   @Delete('orders/:id')
@@ -117,6 +120,6 @@ export class CommercialAdminController {
   @ApiOperation({ summary: 'Delete a single commercial order with strict financial protections' })
   async deleteOrder(@Param('id') id: string, @Req() req?: Request) {
     const user = req ? (req as any).user : undefined;
-    return this.commercialService.deleteOrderAdmin(BigInt(id), user?.role);
+    return this.commercialService.deleteOrderAdmin(BigInt(id), user);
   }
 }

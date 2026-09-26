@@ -20,7 +20,11 @@ import {
   calculateServerPricePaise,
   generateOrderNumber,
 } from './commercial.constants';
-import { isCommercialTestPaymentEnabled } from './commercial-test-payment.util';
+import {
+  isCommercialTestPaymentEnabled,
+  isAdminTestDataDeleteEnabled,
+  isStagingTestOrder,
+} from './commercial-test-payment.util';
 import {
   AttendeeStatus,
   CommercialOrderSource,
@@ -58,6 +62,19 @@ export class CommercialService {
       this.configService?.get<string>('COMMERCIAL_TEST_PAYMENT') ||
       process.env.COMMERCIAL_TEST_PAYMENT;
     return isCommercialTestPaymentEnabled(nodeEnv, testPaymentEnv);
+  }
+
+  /**
+   * Safe staging test data delete mode determination.
+   * STRICT FAILSAFE: Automatically disabled and rejected if NODE_ENV=production, missing, or unknown.
+   */
+  isTestDataDeleteEnabled(): boolean {
+    const nodeEnv =
+      this.configService?.get<string>('NODE_ENV') || process.env.NODE_ENV;
+    const testDeleteEnv =
+      this.configService?.get<string>('ADMIN_TEST_DATA_DELETE_ENABLED') ||
+      process.env.ADMIN_TEST_DATA_DELETE_ENABLED;
+    return isAdminTestDataDeleteEnabled(nodeEnv, testDeleteEnv);
   }
 
   generateSecureQrToken(): string {
@@ -770,6 +787,7 @@ export class CommercialService {
           search?: string;
           date?: string;
           groupBy?: string;
+          userRole?: string;
         },
     legacyLimit?: number,
   ) {
@@ -781,6 +799,7 @@ export class CommercialService {
     let status: string | undefined;
     let search: string | undefined;
     let groupBy: string | undefined;
+    let userRole: string | undefined;
 
     if (typeof pageOrOptions === 'object' && pageOrOptions !== null) {
       page = pageOrOptions.page || 1;
@@ -791,6 +810,7 @@ export class CommercialService {
       status = pageOrOptions.status;
       search = pageOrOptions.search;
       groupBy = pageOrOptions.groupBy;
+      userRole = pageOrOptions.userRole;
     } else if (typeof pageOrOptions === 'number') {
       page = pageOrOptions;
       limit = legacyLimit || 20;
@@ -1024,7 +1044,7 @@ export class CommercialService {
     const agentSalesInr = (agentAgg._sum.amountPaise || 0) / 100;
 
     let ordersResult = (orders || []).map((o: any) => {
-      const isTestPayment = (o.metadata as any)?.isTestPayment === true;
+      const isTestPayment = isStagingTestOrder(o);
       return {
         id: o.id.toString(),
         orderNumber: o.orderNumber,
@@ -1124,6 +1144,7 @@ export class CommercialService {
       total: source === 'FREE' && total === 0 ? freePassesCount : total,
       page,
       limit,
+      testDataDeleteEnabled: userRole === UserRole.SUPER_ADMIN && this.isTestDataDeleteEnabled(),
       summary: {
         totalOrders: publicOrdersCount + agentOrdersCount + freeOrdersCount,
         totalSalesInr: totalSalesAllInr,
@@ -1317,7 +1338,15 @@ export class CommercialService {
   /**
    * Delete a single commercial order with strict financial, payment, and ticket protections
    */
-  async deleteOrderAdmin(orderId: bigint, userRole?: string) {
+  /**
+   * Delete a single commercial order with strict financial, payment, and ticket protections.
+   * If SUPER_ADMIN and staging test data delete mode is enabled, explicitly identifiable test orders
+   * are cascade-deleted along with an audit log record.
+   */
+  async deleteOrderAdmin(orderId: bigint, user?: { id?: bigint | string; role?: string } | string) {
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
+
     const order = await this.prisma.commercialOrder.findUnique({
       where: { id: orderId },
       include: {
@@ -1337,10 +1366,82 @@ export class CommercialService {
     }
 
     const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
+    const isTest = isStagingTestOrder(order);
+
+    // TEMPORARY SUPER_ADMIN TEST-DATA DELETE MODE
+    if (testDeleteActive && isTest) {
+      const attendeeIds = (order.attendees || []).map((a: any) => a.id);
+      const ticketNumbers = (order.attendees || []).map((a: any) => a.ticketNumber);
+
+      await this.prisma.$transaction(async (tx: any) => {
+        // 1. Audit log before / as part of deletion with safe metadata
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: 'TEST_DATA_DELETED',
+            details: {
+              orderId: order.id.toString(),
+              orderNumber: order.orderNumber,
+              customerName: order.customerName,
+              customerMobile: order.customerMobile,
+              customerEmail: order.customerEmail,
+              amountInr: order.amountPaise / 100,
+              ticketType: order.ticketType,
+              quantity: order.quantity,
+              razorpayOrderId: order.razorpayOrderId,
+              razorpayPaymentId: order.razorpayPaymentId,
+              attendeeCount: attendeeIds.length,
+              ticketNumbers,
+              reason: 'Staging test data cleanup by SUPER_ADMIN',
+            },
+          },
+        });
+
+        // 2. Cascade delete attendees dependencies (daily checkins, scan logs)
+        if (attendeeIds.length > 0) {
+          await tx.dailyCheckin.deleteMany({
+            where: { attendeeId: { in: attendeeIds } },
+          });
+          await tx.scanLog.deleteMany({
+            where: { attendeeId: { in: attendeeIds } },
+          });
+        }
+
+        // 3. Delete webhook events and allocation events linked to this order
+        await tx.paymentWebhookEvent.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.allocationEvent.deleteMany({
+          where: { orderId: order.id },
+        });
+
+        // 4. Delete attendees
+        if (attendeeIds.length > 0) {
+          await tx.attendee.deleteMany({
+            where: { orderId: order.id },
+          });
+        }
+
+        // 5. Delete order itself
+        await tx.commercialOrder.delete({
+          where: { id: order.id },
+        });
+      });
+
+      return {
+        success: true,
+        action: 'deleted',
+        isTestCleanup: true,
+        message: `Test order ${order.orderNumber} and all associated test data permanently deleted.`,
+        orderNumber: order.orderNumber,
+      };
+    }
+
     const protectionReason = this.getOrderProtectionReason(order);
     if (protectionReason) {
       if (isSuperAdmin) {
-        await this.prisma.$transaction(async (tx) => {
+        await this.prisma.$transaction(async (tx: any) => {
           await tx.commercialOrder.update({
             where: { id: order.id },
             data: { orderStatus: OrderStatus.CANCELLED },
@@ -1364,7 +1465,7 @@ export class CommercialService {
     }
 
     // Safely delete attendees without scans/checkins, then order in a transaction
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
       await tx.attendee.deleteMany({
         where: { orderId: order.id },
       });
@@ -1382,14 +1483,22 @@ export class CommercialService {
   }
 
   /**
-   * Bulk delete commercial orders with strict dependency and financial audit protections
+   * Bulk delete commercial orders with strict dependency and financial audit protections.
+   * When staging test delete mode is active for SUPER_ADMIN, identifiable test orders are cascade-deleted,
+   * while protected real orders remain preserved/cancelled.
    */
-  async bulkDeleteOrdersAdmin(rawOrderIds: string[], userRole?: string) {
+  async bulkDeleteOrdersAdmin(
+    rawOrderIds: string[],
+    user?: { id?: bigint | string; role?: string } | string,
+  ) {
     if (!Array.isArray(rawOrderIds) || rawOrderIds.length === 0) {
       throw new BadRequestException('Please select at least one order to delete.');
     }
 
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
     const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
 
     const orderIds = rawOrderIds
       .map((id) => {
@@ -1419,25 +1528,90 @@ export class CommercialService {
       },
     });
 
+    const eligibleTestOrders: typeof orders = [];
     const protectedOrders: { id: string; orderNumber: string; reason: string }[] = [];
     const deletableOrders: typeof orders = [];
 
     for (const ord of orders) {
-      const reason = this.getOrderProtectionReason(ord);
-      if (reason) {
-        protectedOrders.push({
-          id: ord.id.toString(),
-          orderNumber: ord.orderNumber,
-          reason,
-        });
+      const isTest = isStagingTestOrder(ord);
+      if (testDeleteActive && isTest) {
+        eligibleTestOrders.push(ord);
       } else {
-        deletableOrders.push(ord);
+        const reason = this.getOrderProtectionReason(ord);
+        if (reason) {
+          protectedOrders.push({
+            id: ord.id.toString(),
+            orderNumber: ord.orderNumber,
+            reason,
+          });
+        } else {
+          deletableOrders.push(ord);
+        }
       }
     }
 
     const protectedIds = protectedOrders.map((p) => BigInt(p.id));
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
+      // 1. Process eligible test orders (cascading cleanup + audit logs)
+      for (const testOrder of eligibleTestOrders) {
+        const attendeeIds = (testOrder.attendees || []).map((a: any) => a.id);
+        const ticketNumbers = (testOrder.attendees || []).map((a: any) => a.ticketNumber);
+
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: 'TEST_DATA_DELETED',
+            details: {
+              orderId: testOrder.id.toString(),
+              orderNumber: testOrder.orderNumber,
+              customerName: testOrder.customerName,
+              customerMobile: testOrder.customerMobile,
+              customerEmail: testOrder.customerEmail,
+              amountInr: testOrder.amountPaise / 100,
+              ticketType: testOrder.ticketType,
+              quantity: testOrder.quantity,
+              razorpayOrderId: testOrder.razorpayOrderId,
+              razorpayPaymentId: testOrder.razorpayPaymentId,
+              attendeeCount: attendeeIds.length,
+              ticketNumbers,
+              reason: 'Staging test data bulk cleanup by SUPER_ADMIN',
+            },
+          },
+        });
+      }
+
+      if (eligibleTestOrders.length > 0) {
+        const testOrderIds = eligibleTestOrders.map((o) => o.id);
+        const testAttendeeIds = eligibleTestOrders.flatMap((o) =>
+          (o.attendees || []).map((a: any) => a.id),
+        );
+
+        if (testAttendeeIds.length > 0) {
+          await tx.dailyCheckin.deleteMany({
+            where: { attendeeId: { in: testAttendeeIds } },
+          });
+          await tx.scanLog.deleteMany({
+            where: { attendeeId: { in: testAttendeeIds } },
+          });
+        }
+        await tx.paymentWebhookEvent.deleteMany({
+          where: { orderId: { in: testOrderIds } },
+        });
+        await tx.allocationEvent.deleteMany({
+          where: { orderId: { in: testOrderIds } },
+        });
+        if (testAttendeeIds.length > 0) {
+          await tx.attendee.deleteMany({
+            where: { orderId: { in: testOrderIds } },
+          });
+        }
+        await tx.commercialOrder.deleteMany({
+          where: { id: { in: testOrderIds } },
+        });
+      }
+
+      // 2. Regular unprotected deletable orders
       if (deletableOrders.length > 0) {
         const deletableIds = deletableOrders.map((o) => o.id);
         await tx.attendee.deleteMany({
@@ -1447,49 +1621,43 @@ export class CommercialService {
           where: { id: { in: deletableIds } },
         });
       }
-      if (isSuperAdmin && protectedIds.length > 0) {
-        await tx.commercialOrder.updateMany({
-          where: { id: { in: protectedIds } },
-          data: { orderStatus: OrderStatus.CANCELLED },
-        });
-        await tx.attendee.updateMany({
-          where: { orderId: { in: protectedIds } },
-          data: { status: AttendeeStatus.REVOKED },
-        });
-      }
+      // Protected real orders are NEVER deleted, cancelled, or state-mutated in bulk delete
     });
 
-    const deletedCount = deletableOrders.length;
+    const testDeletedCount = eligibleTestOrders.length;
+    const normalDeletedCount = deletableOrders.length;
     const protectedCount = protectedOrders.length;
+    const totalDeletedCount = testDeletedCount + normalDeletedCount;
 
     let message = '';
-    if (deletedCount > 0 && protectedCount === 0) {
-      message = `Successfully deleted ${deletedCount} order(s).`;
-    } else if (deletedCount > 0 && protectedCount > 0) {
-      if (isSuperAdmin) {
-        message = `Deleted ${deletedCount} order(s). ${protectedCount} order(s) with financial history were cancelled to preserve audit records.`;
-      } else {
-        message = `Deleted ${deletedCount} order(s). ${protectedCount} order(s) could not be deleted because they contain financial or ticket records.`;
+    if (testDeletedCount > 0) {
+      message = `Permanently deleted ${testDeletedCount} staging test order(s).`;
+      if (normalDeletedCount > 0) {
+        message += ` Deleted ${normalDeletedCount} unfulfilled order(s).`;
       }
+      if (protectedCount > 0) {
+        message += ` ${protectedCount} protected real order(s) were preserved untouched.`;
+      }
+    } else if (normalDeletedCount > 0 && protectedCount === 0) {
+      message = `Successfully deleted ${normalDeletedCount} order(s).`;
+    } else if (normalDeletedCount > 0 && protectedCount > 0) {
+      message = `Deleted ${normalDeletedCount} order(s). ${protectedCount} protected order(s) with financial history were preserved untouched.`;
     } else {
-      if (isSuperAdmin) {
-        message = `All ${protectedCount} selected order(s) have financial or ticket records and were cancelled to preserve audit records.`;
-      } else {
-        message = `None of the selected orders could be deleted. All ${protectedCount} order(s) contain financial, payment, or ticket records.`;
-      }
+      message = `None of the selected orders could be deleted. All ${protectedCount} order(s) contain financial, payment, or ticket records and were preserved.`;
     }
+
+    const allDeletedList = [
+      ...eligibleTestOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber, isTestCleanup: true })),
+      ...deletableOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber })),
+    ];
 
     return {
       totalSelected: rawOrderIds.length,
-      deletedCount: isSuperAdmin ? deletedCount + protectedCount : deletedCount,
-      protectedCount: isSuperAdmin ? 0 : protectedCount,
-      deletedOrders: isSuperAdmin
-        ? [
-            ...deletableOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber })),
-            ...protectedOrders.map((o) => ({ id: o.id, orderNumber: o.orderNumber })),
-          ]
-        : deletableOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber })),
-      protectedOrders: isSuperAdmin ? [] : protectedOrders,
+      deletedCount: totalDeletedCount,
+      testDeletedCount,
+      protectedCount,
+      deletedOrders: allDeletedList,
+      protectedOrders,
       message,
     };
   }
