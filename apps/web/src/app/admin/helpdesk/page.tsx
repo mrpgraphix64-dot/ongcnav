@@ -19,6 +19,7 @@ import {
   Hash,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 
 interface GateOption {
   id: string;
@@ -84,13 +85,16 @@ export default function AdminHelpDeskPage() {
 
   // Load current user role and initial gates
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('ongc_admin_user');
-      if (stored) {
-        const u = JSON.parse(stored);
-        if (u?.role) setUserRole(u.role.toUpperCase());
+    const stored = getStoredAuthUser();
+    if (stored?.role) {
+      setUserRole(stored.role.toUpperCase());
+    }
+
+    const unsubscribe = subscribeToAuthSync((event) => {
+      if (event.type === 'LOGIN' && event.user?.role) {
+        setUserRole(event.user.role.toUpperCase());
       }
-    } catch {}
+    });
 
     async function init() {
       try {
@@ -121,6 +125,10 @@ export default function AdminHelpDeskPage() {
     }
 
     init();
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleSearch = useCallback(

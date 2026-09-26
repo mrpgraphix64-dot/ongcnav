@@ -76,6 +76,14 @@ export class GatesController {
     return this.gatesService.toggleStatus(BigInt(id));
   }
 
+  @Post('bulk-delete')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.GATE_MANAGER)
+  @ApiOperation({ summary: 'Bulk safe gate deletion with entry history preservation' })
+  async bulkRemove(@Body() body: { ids: string[] }) {
+    const gateIds = (body.ids || []).map((id) => BigInt(id));
+    return this.gatesService.bulkRemove(gateIds);
+  }
+
   @Delete(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.GATE_MANAGER)
   @ApiOperation({ summary: 'Safe gate deletion with entry history preservation' })

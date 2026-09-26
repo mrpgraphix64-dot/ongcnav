@@ -31,6 +31,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { clearStoredAuth } from '@/lib/auth-session';
 import PasswordInput from '@/components/PasswordInput';
 
 const EVENT_DATES = [
@@ -117,7 +118,6 @@ export default function CommercialAgentPortal() {
     email: '',
     phone: '',
     password: '',
-    staffId: '',
   });
   const [subAgentSubmitting, setSubAgentSubmitting] = useState(false);
 
@@ -176,7 +176,8 @@ export default function CommercialAgentPortal() {
       setAllocations(allocData.allocations || []);
       setSummary(allocData.summary || null);
     } catch (err: any) {
-      if (err?.message?.includes('Authentication required') || err?.status === 401) {
+      if (err?.message?.includes('Authentication required') || err?.status === 401 || err?.status === 403) {
+        clearStoredAuth();
         router.push('/agent/login');
         return;
       }
@@ -230,9 +231,7 @@ export default function CommercialAgentPortal() {
     try {
       await fetchApi('/auth/logout', { method: 'POST' });
     } catch {}
-    try {
-      localStorage.removeItem('ongc_admin_user');
-    } catch {}
+    clearStoredAuth();
     router.push('/agent/login');
   };
 
@@ -321,7 +320,7 @@ export default function CommercialAgentPortal() {
         body: JSON.stringify(subAgentForm),
       });
       setShowAddSubAgentModal(false);
-      setSubAgentForm({ name: '', email: '', phone: '', password: '', staffId: '' });
+      setSubAgentForm({ name: '', email: '', phone: '', password: '' });
       loadSubAgents();
     } catch (err: any) {
       alert(err.message || 'Failed to create sub-agent.');
@@ -390,9 +389,11 @@ export default function CommercialAgentPortal() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gold/20 border border-gold/40 flex items-center justify-center font-outfit font-black text-gold text-lg">
-                ONGC
-              </div>
+              <img
+                src="/images/logo-web.png"
+                alt="ONGC Logo"
+                className="h-9 w-auto object-contain shrink-0"
+              />
               <div>
                 <div className="font-outfit font-bold text-base leading-tight tracking-wide flex items-center gap-2">
                   <span>E-Pass Agent Portal</span>
@@ -401,7 +402,7 @@ export default function CommercialAgentPortal() {
                   </span>
                 </div>
                 <p className="text-xs text-stone-200">
-                  {agentProfile?.name} • Staff ID: {agentProfile?.staffId || agentProfile?.id}
+                  {agentProfile?.name}{agentProfile?.email ? ` • ${agentProfile.email}` : ''} • {agentProfile?.role === 'COMMERCIAL_SUB_AGENT' ? 'Sub-Agent' : 'Master Agent'}
                 </p>
               </div>
             </div>
@@ -448,6 +449,9 @@ export default function CommercialAgentPortal() {
               </div>
               <div className="bg-white/10 px-3 py-1 rounded-lg border border-white/10">
                 Sub-Allocated: <span className="font-bold text-amber-300">{summary?.totalSubAllocated || 0}</span>
+              </div>
+              <div className="bg-white/10 px-3 py-1 rounded-lg border border-white/10">
+                Checked In: <span className="font-bold text-indigo-300">{summary?.checkedIn || 0}</span>
               </div>
               <div className="bg-gold/20 px-3 py-1 rounded-lg border border-gold/40 text-gold">
                 Available to Sell: <span className="font-black text-sm">{summary?.totalAvailable || 0}</span>
@@ -969,18 +973,10 @@ export default function CommercialAgentPortal() {
                         </p>
                       </div>
 
-                      <div className="pt-2">
-                        <label className="flex items-start gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={termsAccepted}
-                            onChange={(e) => setTermsAccepted(e.target.checked)}
-                            className="mt-0.5 rounded border-stone-300 text-maroon focus:ring-maroon"
-                          />
-                          <span className="text-xs text-stone-600">
-                            Customer agrees to the non-refundable event terms, unique QR check-in policy, and event timings.
-                          </span>
-                        </label>
+                      <div className="pt-2 p-3 rounded-xl bg-stone-50 border border-stone-200">
+                        <p className="text-xs text-stone-600">
+                          By confirming this offline sale, the customer agrees to the non-refundable event terms, unique QR check-in policy, and event timings.
+                        </p>
                       </div>
                     </div>
 
@@ -1006,10 +1002,6 @@ export default function CommercialAgentPortal() {
                           }
                           if (!customerEmail.trim() || !customerEmail.includes('@')) {
                             setBookingError('A valid email address is required.');
-                            return;
-                          }
-                          if (!termsAccepted) {
-                            setBookingError('Please accept the ticket terms to proceed.');
                             return;
                           }
                           setBookingError(null);
@@ -1319,11 +1311,6 @@ export default function CommercialAgentPortal() {
                         <p className="text-xs text-stone-500">
                           {sa.phone} • {sa.email}
                         </p>
-                        {sa.staffId && (
-                          <span className="text-[10px] font-mono bg-stone-100 text-stone-600 px-2 py-0.5 rounded">
-                            ID: {sa.staffId}
-                          </span>
-                        )}
                       </div>
 
                       <div className="text-right">
@@ -1439,16 +1426,6 @@ export default function CommercialAgentPortal() {
                   minLength={6}
                   value={subAgentForm.password}
                   onChange={(e) => setSubAgentForm({ ...subAgentForm, password: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-ink mb-1">Staff / Agent ID (Optional)</label>
-                <input
-                  type="text"
-                  value={subAgentForm.staffId}
-                  onChange={(e) => setSubAgentForm({ ...subAgentForm, staffId: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon"
                 />
               </div>

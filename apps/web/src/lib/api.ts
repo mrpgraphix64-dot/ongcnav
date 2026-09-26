@@ -1,3 +1,5 @@
+import { clearStoredAuth } from './auth-session';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export async function fetchApi<T = any>(
@@ -27,10 +29,17 @@ export async function fetchApi<T = any>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // If unauthorized and not an intentional login attempt, clear cached auth across tabs
+    if (response.status === 401 && !endpoint.includes('/auth/login')) {
+      clearStoredAuth();
+    }
+
     const errorMsg =
       (data && (data.message || data.error)) ||
       `Request failed with status ${response.status}`;
-    throw new Error(Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg);
+    const error: any = new Error(Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg);
+    error.status = response.status;
+    throw error;
   }
 
   // The NestJS backend's global TransformInterceptor wraps most responses as

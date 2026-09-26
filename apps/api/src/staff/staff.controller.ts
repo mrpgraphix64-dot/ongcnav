@@ -74,14 +74,16 @@ export class StaffController {
 
   @Post(':id/toggle')
   @ApiOperation({ summary: 'Toggle staff member active/inactive status' })
-  async toggle(@Param('id') id: string) {
-    return this.staffService.toggleStatus(BigInt(id));
+  async toggle(@Param('id') id: string, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return this.staffService.toggleStatus(BigInt(id), user);
   }
 
   @Post(':id/toggle-status')
   @ApiOperation({ summary: 'Toggle staff member active/inactive status (Laravel alias)' })
-  async toggleStatus(@Param('id') id: string) {
-    return this.staffService.toggleStatus(BigInt(id));
+  async toggleStatus(@Param('id') id: string, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return this.staffService.toggleStatus(BigInt(id), user);
   }
 
   @Get(':id/activity')
@@ -107,6 +109,14 @@ export class StaffController {
     @Param('gateId') gateId: string,
   ) {
     return this.staffService.unassignGate(BigInt(id), BigInt(gateId));
+  }
+
+  @Post('bulk-delete')
+  @ApiOperation({ summary: 'Bulk delete staff accounts with operational dependency and RBAC safety checks' })
+  async bulkDelete(@Body() body: { ids: string[] }, @Req() req: Request) {
+    const user = (req as any).user;
+    const staffIds = (body.ids || []).map((id) => BigInt(id));
+    return this.staffService.bulkDeleteStaff(staffIds, user);
   }
 
   @Delete(':id')

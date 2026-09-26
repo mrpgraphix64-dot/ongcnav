@@ -12,6 +12,7 @@ import {
   Ticket,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { setStoredAuthUser } from '@/lib/auth-session';
 import PasswordInput from '@/components/PasswordInput';
 
 function AgentLoginForm() {
@@ -39,9 +40,7 @@ function AgentLoginForm() {
       });
 
       if (res?.user) {
-        try {
-          localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
-        } catch {}
+        setStoredAuthUser(res.user);
       }
 
       const role = String(res?.user?.role || '').toUpperCase();

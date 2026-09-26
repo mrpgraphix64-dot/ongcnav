@@ -432,7 +432,7 @@ export default function AdminDailyClosingPage() {
                           <td className="py-3.5 px-4">
                             <div className="font-outfit font-bold text-sm text-ink">{s.name}</div>
                             <div className="font-mono text-[10px] text-stone-500">
-                              {s.staff_id || s.email}
+                              {s.email}
                             </div>
                           </td>
                           <td className="py-3.5 px-3">

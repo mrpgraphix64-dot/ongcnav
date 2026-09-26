@@ -135,9 +135,10 @@ export class AttendeesController {
 
   @Delete('bulk')
   @ApiOperation({ summary: 'Batch delete selected attendees' })
-  async bulkDestroy(@Body('ids') rawIds: (string | number)[]) {
+  async bulkDestroy(@Body('ids') rawIds: (string | number)[], @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
     const ids = (rawIds || []).map((id) => BigInt(id));
-    return this.attendeesService.bulkDestroy(ids);
+    return this.attendeesService.bulkDestroy(ids, user?.role);
   }
 
   @Post('bulk/validate')
@@ -238,8 +239,9 @@ export class AttendeesController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a single attendee' })
-  async destroy(@Param('id') id: string) {
-    return this.attendeesService.destroy(BigInt(id));
+  async destroy(@Param('id') id: string, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return this.attendeesService.destroy(BigInt(id), user?.role);
   }
 
   @Get('employees/:id/photo')

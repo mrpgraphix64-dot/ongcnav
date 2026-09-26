@@ -87,6 +87,7 @@ interface AgentGroup {
     staffId?: string | null;
     role: string;
     isSubAgent: boolean;
+    parentAgentId?: string | null;
     parentAgent?: { id: string; name: string } | null;
   };
   ordersCount: number;
@@ -186,6 +187,41 @@ export default function CommercialOrdersAuditPage() {
     setCopiedOrderId(id);
     setTimeout(() => setCopiedOrderId(null), 1800);
   };
+
+  interface AgentGroupWithSubs extends AgentGroup {
+    subGroups: AgentGroup[];
+  }
+
+  const hierarchicalAgentGroups = useMemo<AgentGroupWithSubs[]>(() => {
+    const masterMap = new Map<string, AgentGroupWithSubs>();
+    const subGroups: AgentGroup[] = [];
+
+    for (const group of agentGroups) {
+      const isSub =
+        group.agent.isSubAgent ||
+        group.agent.role === 'COMMERCIAL_SUB_AGENT' ||
+        !!group.agent.parentAgent?.id ||
+        !!group.agent.parentAgentId;
+
+      if (isSub) {
+        subGroups.push(group);
+      } else {
+        masterMap.set(group.agent.id, { ...group, subGroups: [] });
+      }
+    }
+
+    for (const sub of subGroups) {
+      const parentId =
+        sub.agent.parentAgent?.id || sub.agent.parentAgentId;
+      if (parentId && masterMap.has(parentId)) {
+        masterMap.get(parentId)!.subGroups.push(sub);
+      } else {
+        masterMap.set(sub.agent.id, { ...sub, subGroups: [] });
+      }
+    }
+
+    return Array.from(masterMap.values());
+  }, [agentGroups]);
 
   // Load Main Data
   const loadOrders = useCallback(async () => {
@@ -403,6 +439,196 @@ export default function CommercialOrdersAuditPage() {
     };
   }, [ordersToDelete]);
 
+  const renderOrdersTable = (agentOrders: OrderRecord[], agentName: string) => {
+    if (agentOrders.length === 0) {
+      return (
+        <div className="p-6 text-center bg-white rounded-xl border border-stone-200 text-xs text-stone-500">
+          No orders placed by {agentName} match the current filter criteria.
+        </div>
+      );
+    }
+    return (
+      <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="px-3 py-3 w-8 text-center">
+                  <span className="sr-only">Select</span>
+                </th>
+                <th className="px-4 py-3">Order Number</th>
+                <th className="px-4 py-3">Customer Details</th>
+                <th className="px-4 py-3">Pass Type & Dates</th>
+                <th className="px-4 py-3 text-center">Qty</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3">Payment Mode</th>
+                <th className="px-4 py-3">Order Date</th>
+                <th className="px-4 py-3 text-center">Passes</th>
+                <th className="px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100 text-stone-900">
+              {agentOrders.map((ord) => {
+                const showPasses = !!expandedOrderPasses[ord.id];
+                const isSelected = selectedOrderIds.has(ord.id);
+                const protCheck = isOrderProtected(ord);
+
+                return (
+                  <React.Fragment key={ord.id}>
+                    <tr className={`transition-colors ${isSelected ? 'bg-rose-50/40' : 'hover:bg-[#FAF7F2]/40'}`}>
+                      <td className="px-3 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSelectOrder(ord.id)}
+                          className="text-stone-400 hover:text-stone-700"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-rose-600" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-[#7A1113]">
+                            {ord.orderNumber}
+                          </span>
+                          <button
+                            onClick={() => copyToClipboard(ord.orderNumber, ord.id)}
+                            className="text-stone-400 hover:text-stone-700 p-0.5"
+                            title="Copy Order Number"
+                          >
+                            {copiedOrderId === ord.id ? (
+                              <Check className="w-3 h-3 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-stone-900">{ord.customerName}</div>
+                        <div className="text-[11px] text-stone-500">
+                          {ord.customerMobile} • {ord.customerEmail}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-stone-800">
+                          {ord.ticketType === 'COMMERCIAL_SEASON'
+                            ? 'Season Pass (All 9 Days)'
+                            : 'Daily Pass'}
+                        </div>
+                        {ord.selectedDates && ord.selectedDates.length > 0 && (
+                          <div className="text-[10px] text-stone-500 flex items-center gap-1 mt-0.5">
+                            <Calendar className="w-3 h-3 text-stone-400 shrink-0" />
+                            <span>{ord.selectedDates.join(', ')}</span>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3 font-bold text-center">
+                        {ord.quantity}
+                      </td>
+
+                      <td className="px-4 py-3 font-outfit font-black text-right text-stone-900">
+                        ₹{ord.amountInr.toLocaleString('en-IN')}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          {ord.paymentMode || 'AGENT OFFLINE'}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3 text-stone-500 whitespace-nowrap">
+                        {new Date(ord.createdAt).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
+
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleOrderPasses(ord.id)}
+                          className="p-1 rounded text-stone-500 hover:text-[#7A1113] hover:bg-stone-100 transition-colors"
+                          title="View Attendee Passes"
+                        >
+                          {showPasses ? (
+                            <ChevronUp className="w-4 h-4 text-[#7A1113]" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSingleDeleteModal(ord)}
+                          className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Order'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+
+                    {/* Nested Attendee Passes View */}
+                    {showPasses && (
+                      <tr>
+                        <td colSpan={10} className="p-3 bg-stone-50 border-y border-stone-200">
+                          <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
+                            <div className="flex items-center justify-between text-xs font-bold text-stone-700">
+                              <span className="flex items-center gap-1.5 text-[#7A1113]">
+                                <Ticket className="w-3.5 h-3.5" />
+                                Attendee Passes for Order #{ord.orderNumber} ({ord.attendees.length})
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                              {ord.attendees.map((att, idx) => (
+                                <div
+                                  key={att.id}
+                                  className="p-2.5 rounded-lg border border-stone-200 bg-[#FAF7F2] text-xs space-y-1"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-mono font-bold text-[#7A1113]">
+                                      {att.ticketNumber}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-stone-200 text-stone-700">
+                                      Pass #{idx + 1}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-stone-600 font-medium">
+                                    Type: {att.category || 'E-Pass'}
+                                  </div>
+                                  <div className="text-[10px] text-stone-500">
+                                    Status: <span className="font-semibold text-emerald-700">{att.status}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-5">
       {/* Top Compact Actions Bar */}
@@ -448,7 +674,7 @@ export default function CommercialOrdersAuditPage() {
           <div className="flex items-center justify-between w-full">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
               <CreditCard className="w-4 h-4 text-blue-600" />
-              ONLINE PASSES
+              ONLINE PASSES ({summary.publicPassesCount} Tickets)
             </span>
             {channelTab === 'PUBLIC' && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
@@ -468,7 +694,7 @@ export default function CommercialOrdersAuditPage() {
                 ₹{summary.publicSalesInr.toLocaleString('en-IN')}
               </div>
               <div className="text-[11px] text-blue-700/80 font-medium">
-                {summary.publicPassesCount.toLocaleString()} passes sold
+                {summary.publicPassesCount.toLocaleString()} tickets sold
               </div>
             </div>
           </div>
@@ -490,7 +716,7 @@ export default function CommercialOrdersAuditPage() {
           <div className="flex items-center justify-between w-full">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
               <Users className="w-4 h-4 text-amber-600" />
-              AGENT PASSES
+              AGENT PASSES ({summary.agentPassesCount} Tickets)
             </span>
             {channelTab === 'AGENT' && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-600 text-white">
@@ -510,7 +736,7 @@ export default function CommercialOrdersAuditPage() {
                 ₹{summary.agentSalesInr.toLocaleString('en-IN')}
               </div>
               <div className="text-[11px] text-amber-700/80 font-medium">
-                {summary.agentPassesCount.toLocaleString()} passes sold
+                {summary.agentPassesCount.toLocaleString()} tickets sold
               </div>
             </div>
           </div>
@@ -532,7 +758,7 @@ export default function CommercialOrdersAuditPage() {
           <div className="flex items-center justify-between w-full">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
               <Gift className="w-4 h-4 text-emerald-600" />
-              FREE PASSES
+              FREE PASSES ({summary.freePassesCount} Tickets)
             </span>
             {channelTab === 'FREE' && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
@@ -607,7 +833,7 @@ export default function CommercialOrdersAuditPage() {
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              ONLINE PASSES ({summary.publicOrdersCount})
+              ONLINE PASSES ({summary.publicPassesCount} Tickets)
             </button>
             <button
               onClick={() => {
@@ -620,7 +846,7 @@ export default function CommercialOrdersAuditPage() {
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              AGENT PASSES ({summary.agentOrdersCount})
+              AGENT PASSES ({summary.agentPassesCount} Tickets)
             </button>
             <button
               onClick={() => {
@@ -633,7 +859,7 @@ export default function CommercialOrdersAuditPage() {
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              FREE PASSES ({summary.freePassesCount})
+              FREE PASSES ({summary.freePassesCount} Tickets)
             </button>
           </div>
 
@@ -663,7 +889,7 @@ export default function CommercialOrdersAuditPage() {
             ) : (
               <div className="text-xs text-stone-500 font-medium">
                 {channelTab === 'AGENT'
-                  ? `${agentGroups.length} Active Agent Groups`
+                  ? `${hierarchicalAgentGroups.length} Active Agent Groups`
                   : `Showing ${orders.length} of ${totalOrdersCount} records`}
               </div>
             )}
@@ -678,7 +904,7 @@ export default function CommercialOrdersAuditPage() {
               type="text"
               placeholder={
                 channelTab === 'AGENT'
-                  ? 'Search agent by name, staff ID, phone, or customer order under agent...'
+                  ? 'Search agent by name, phone, or customer order under agent...'
                   : channelTab === 'FREE'
                   ? 'Search by ticket number, recipient name, mobile, or email...'
                   : 'Search by order number, customer name, mobile, or email...'
@@ -736,7 +962,7 @@ export default function CommercialOrdersAuditPage() {
               <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#7A1113] mb-2" />
               <span>Loading agent pass groups...</span>
             </div>
-          ) : agentGroups.length === 0 ? (
+          ) : hierarchicalAgentGroups.length === 0 ? (
             <div className="p-12 text-center bg-white rounded-2xl border border-stone-200 text-stone-500 text-xs">
               <Users className="w-10 h-10 text-stone-300 mx-auto mb-2" />
               <p className="font-semibold text-stone-700">No agent orders or sales found</p>
@@ -747,8 +973,8 @@ export default function CommercialOrdersAuditPage() {
               </p>
             </div>
           ) : (
-            agentGroups.map((group) => {
-              const { agent } = group;
+            hierarchicalAgentGroups.map((group) => {
+              const { agent, subGroups } = group;
               const isExpanded = !!expandedAgentIds[agent.id];
               const isLoadingOrders = !!agentOrdersLoading[agent.id];
               const agentOrders = agentOrdersMap[agent.id] || [];
@@ -765,7 +991,7 @@ export default function CommercialOrdersAuditPage() {
                   key={agent.id}
                   className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden transition-all"
                 >
-                  {/* Agent Group Card Header */}
+                  {/* Master Agent Group Card Header */}
                   <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#FAF7F2]/50 border-b border-stone-100">
                     <div className="flex items-start gap-3.5 min-w-0">
                       <div className="w-10 h-10 rounded-full bg-[#7A1113] text-white font-outfit font-bold text-xs flex items-center justify-center shrink-0 shadow-sm">
@@ -777,35 +1003,19 @@ export default function CommercialOrdersAuditPage() {
                           <h3 className="font-outfit font-bold text-base text-stone-900 truncate">
                             {agent.name}
                           </h3>
-                          {agent.isSubAgent ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
-                              Sub-Agent
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#7A1113]/10 text-[#7A1113] border border-[#7A1113]/20">
-                              Master Agent
-                            </span>
-                          )}
-                          {agent.staffId && (
-                            <span className="font-mono text-xs font-bold text-[#7A1113] bg-white px-2 py-0.5 rounded border border-stone-200">
-                              {agent.staffId}
-                            </span>
-                          )}
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#7A1113]/10 text-[#7A1113] border border-[#7A1113]/20">
+                            Master Agent
+                          </span>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500 mt-1">
                           <span>{agent.email}</span>
                           {agent.phone && <span>• {agent.phone}</span>}
-                          {agent.isSubAgent && agent.parentAgent && (
-                            <span className="text-amber-800 font-medium">
-                              • Parent: <strong className="font-bold">{agent.parentAgent.name}</strong>
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Agent Metrics & Expand Action */}
+                    {/* Master Agent Metrics & Expand Action */}
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-4 pt-2 lg:pt-0 border-t lg:border-t-0 border-stone-200/60">
                       <div className="grid grid-cols-5 gap-3 text-center sm:text-right">
                         <div>
@@ -819,7 +1029,7 @@ export default function CommercialOrdersAuditPage() {
 
                         <div>
                           <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                            Passes Sold
+                            Tickets Sold
                           </div>
                           <div className="font-outfit font-black text-sm text-amber-700">
                             {group.passesSold}
@@ -873,198 +1083,139 @@ export default function CommercialOrdersAuditPage() {
                     </div>
                   </div>
 
-                  {/* Expanded Agent Orders Drill-Down */}
+                  {/* Expanded Master Agent Direct Orders */}
                   {isExpanded && (
-                    <div className="p-4 bg-stone-50/70 border-t border-stone-100 space-y-3">
+                    <div className="p-4 bg-stone-50/70 border-b border-stone-100 space-y-3">
+                      <div className="text-xs font-bold uppercase tracking-wider text-stone-600">
+                        Direct Orders Placed by {agent.name}
+                      </div>
                       {isLoadingOrders ? (
                         <div className="p-6 text-center text-xs text-stone-500">
                           <RefreshCw className="w-4 h-4 animate-spin mx-auto text-[#7A1113] mb-1" />
                           <span>Fetching orders placed by {agent.name}...</span>
                         </div>
-                      ) : agentOrders.length === 0 ? (
-                        <div className="p-6 text-center bg-white rounded-xl border border-stone-200 text-xs text-stone-500">
-                          No orders placed by this agent match the current filter criteria.
-                        </div>
                       ) : (
-                        <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-xs">
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                              <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
-                                <tr>
-                                  <th className="px-3 py-3 w-8 text-center">
-                                    <span className="sr-only">Select</span>
-                                  </th>
-                                  <th className="px-4 py-3">Order Number</th>
-                                  <th className="px-4 py-3">Customer Details</th>
-                                  <th className="px-4 py-3">Pass Type & Dates</th>
-                                  <th className="px-4 py-3 text-center">Qty</th>
-                                  <th className="px-4 py-3 text-right">Amount</th>
-                                  <th className="px-4 py-3">Payment Mode</th>
-                                  <th className="px-4 py-3">Order Date</th>
-                                  <th className="px-4 py-3 text-center">Passes</th>
-                                  <th className="px-4 py-3 text-center">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-stone-100 text-stone-900">
-                                {agentOrders.map((ord) => {
-                                  const showPasses = !!expandedOrderPasses[ord.id];
-                                  const isSelected = selectedOrderIds.has(ord.id);
-                                  const protCheck = isOrderProtected(ord);
-
-                                  return (
-                                    <React.Fragment key={ord.id}>
-                                      <tr className={`transition-colors ${isSelected ? 'bg-rose-50/40' : 'hover:bg-[#FAF7F2]/40'}`}>
-                                        <td className="px-3 py-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleToggleSelectOrder(ord.id)}
-                                            className="text-stone-400 hover:text-stone-700"
-                                          >
-                                            {isSelected ? (
-                                              <CheckSquare className="w-4 h-4 text-rose-600" />
-                                            ) : (
-                                              <Square className="w-4 h-4" />
-                                            )}
-                                          </button>
-                                        </td>
-
-                                        <td className="px-4 py-3">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="font-mono font-bold text-[#7A1113]">
-                                              {ord.orderNumber}
-                                            </span>
-                                            <button
-                                              onClick={() => copyToClipboard(ord.orderNumber, ord.id)}
-                                              className="text-stone-400 hover:text-stone-700 p-0.5"
-                                              title="Copy Order Number"
-                                            >
-                                              {copiedOrderId === ord.id ? (
-                                                <Check className="w-3 h-3 text-emerald-600" />
-                                              ) : (
-                                                <Copy className="w-3 h-3" />
-                                              )}
-                                            </button>
-                                          </div>
-                                        </td>
-
-                                        <td className="px-4 py-3">
-                                          <div className="font-bold text-stone-900">{ord.customerName}</div>
-                                          <div className="text-[11px] text-stone-500">
-                                            {ord.customerMobile} • {ord.customerEmail}
-                                          </div>
-                                        </td>
-
-                                        <td className="px-4 py-3">
-                                          <div className="font-semibold text-stone-800">
-                                            {ord.ticketType === 'COMMERCIAL_SEASON'
-                                              ? 'Season Pass (All 9 Days)'
-                                              : 'Daily Pass'}
-                                          </div>
-                                          {ord.selectedDates && ord.selectedDates.length > 0 && (
-                                            <div className="text-[10px] text-stone-500 flex items-center gap-1 mt-0.5">
-                                              <Calendar className="w-3 h-3 text-stone-400 shrink-0" />
-                                              <span>{ord.selectedDates.join(', ')}</span>
-                                            </div>
-                                          )}
-                                        </td>
-
-                                        <td className="px-4 py-3 font-bold text-center">
-                                          {ord.quantity}
-                                        </td>
-
-                                        <td className="px-4 py-3 font-outfit font-black text-right text-stone-900">
-                                          ₹{ord.amountInr.toLocaleString('en-IN')}
-                                        </td>
-
-                                        <td className="px-4 py-3">
-                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                            {ord.paymentMode || 'AGENT OFFLINE'}
-                                          </span>
-                                        </td>
-
-                                        <td className="px-4 py-3 text-stone-500 whitespace-nowrap">
-                                          {new Date(ord.createdAt).toLocaleDateString('en-IN', {
-                                            day: '2-digit',
-                                            month: 'short',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                          })}
-                                        </td>
-
-                                        <td className="px-4 py-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => toggleOrderPasses(ord.id)}
-                                            className="p-1 rounded text-stone-500 hover:text-[#7A1113] hover:bg-stone-100 transition-colors"
-                                            title="View Attendee Passes"
-                                          >
-                                            {showPasses ? (
-                                              <ChevronUp className="w-4 h-4 text-[#7A1113]" />
-                                            ) : (
-                                              <ChevronDown className="w-4 h-4" />
-                                            )}
-                                          </button>
-                                        </td>
-
-                                        <td className="px-4 py-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenSingleDeleteModal(ord)}
-                                            className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                            title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Order'}
-                                          >
-                                            <Trash2 className="w-4 h-4" />
-                                          </button>
-                                        </td>
-                                      </tr>
-
-                                      {/* Nested Attendee Passes View */}
-                                      {showPasses && (
-                                        <tr>
-                                          <td colSpan={10} className="p-3 bg-stone-50 border-y border-stone-200">
-                                            <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
-                                              <div className="flex items-center justify-between text-xs font-bold text-stone-700">
-                                                <span className="flex items-center gap-1.5 text-[#7A1113]">
-                                                  <Ticket className="w-3.5 h-3.5" />
-                                                  Attendee Passes for Order #{ord.orderNumber} ({ord.attendees.length})
-                                                </span>
-                                              </div>
-
-                                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                                {ord.attendees.map((att, idx) => (
-                                                  <div
-                                                    key={att.id}
-                                                    className="p-2.5 rounded-lg border border-stone-200 bg-[#FAF7F2] text-xs space-y-1"
-                                                  >
-                                                    <div className="flex items-center justify-between">
-                                                      <span className="font-mono font-bold text-[#7A1113]">
-                                                        {att.ticketNumber}
-                                                      </span>
-                                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-stone-200 text-stone-700">
-                                                        Pass #{idx + 1}
-                                                      </span>
-                                                    </div>
-                                                    <div className="text-[11px] text-stone-600 font-medium">
-                                                      Type: {att.category || 'E-Pass'}
-                                                    </div>
-                                                    <div className="text-[10px] text-stone-500">
-                                                      Status: <span className="font-semibold text-emerald-700">{att.status}</span>
-                                                    </div>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      )}
-                                    </React.Fragment>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        renderOrdersTable(agentOrders, agent.name)
                       )}
+                    </div>
+                  )}
+
+                  {/* Nested Sub-Agents Section */}
+                  {subGroups && subGroups.length > 0 && (
+                    <div className="p-4 sm:p-5 bg-amber-50/20 border-t border-stone-100 space-y-3">
+                      <div className="text-xs font-bold uppercase tracking-wider text-stone-600 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-amber-700" />
+                        <span>Sub-Agents Assigned ({subGroups.length})</span>
+                      </div>
+
+                      <div className="space-y-3 pl-2 sm:pl-3 border-l-2 border-amber-300">
+                        {subGroups.map((subGroup) => {
+                          const subAgent = subGroup.agent;
+                          const isSubExpanded = !!expandedAgentIds[subAgent.id];
+                          const isSubLoading = !!agentOrdersLoading[subAgent.id];
+                          const subOrders = agentOrdersMap[subAgent.id] || [];
+
+                          return (
+                            <div
+                              key={subAgent.id}
+                              className="bg-white rounded-xl border border-stone-200 shadow-2xs overflow-hidden"
+                            >
+                              <div className="p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-outfit font-bold text-sm text-stone-900">
+                                      {subAgent.name}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200">
+                                      Sub-Agent
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-stone-500 mt-0.5 flex flex-wrap gap-x-2">
+                                    <span>{subAgent.email}</span>
+                                    {subAgent.phone && <span>• {subAgent.phone}</span>}
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap sm:flex-nowrap items-center gap-4 text-right">
+                                  <div className="grid grid-cols-5 gap-3 text-center sm:text-right">
+                                    <div>
+                                      <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                        Orders
+                                      </div>
+                                      <div className="font-outfit font-black text-xs text-stone-800">
+                                        {subGroup.ordersCount}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                        Tickets Sold
+                                      </div>
+                                      <div className="font-outfit font-black text-xs text-amber-700">
+                                        {subGroup.passesSold}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                        Total Sales
+                                      </div>
+                                      <div className="font-outfit font-black text-xs text-emerald-600">
+                                        ₹{subGroup.totalSalesInr.toLocaleString('en-IN')}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                        Quota Left
+                                      </div>
+                                      <div className="font-outfit font-black text-xs text-stone-700">
+                                        {subGroup.availableAllocation}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                                        Checked In
+                                      </div>
+                                      <div className="font-outfit font-black text-xs text-blue-600">
+                                        {subGroup.checkedInPasses}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleAgentExpand(subAgent.id)}
+                                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold text-xs transition-all shadow-xs shrink-0 ${
+                                      isSubExpanded
+                                        ? 'bg-[#7A1113] text-white hover:bg-[#8F1417]'
+                                        : 'bg-white text-stone-700 border border-stone-200 hover:border-stone-300'
+                                    }`}
+                                  >
+                                    <span>{isSubExpanded ? 'Hide Orders' : 'View Orders'}</span>
+                                    {isSubExpanded ? (
+                                      <ChevronUp className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Expanded Sub-Agent Orders */}
+                              {isSubExpanded && (
+                                <div className="p-3.5 bg-stone-50 border-t border-stone-100">
+                                  {isSubLoading ? (
+                                    <div className="p-4 text-center text-xs text-stone-500">
+                                      <RefreshCw className="w-4 h-4 animate-spin mx-auto text-[#7A1113] mb-1" />
+                                      <span>Fetching orders placed by {subAgent.name}...</span>
+                                    </div>
+                                  ) : (
+                                    renderOrdersTable(subOrders, subAgent.name)
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

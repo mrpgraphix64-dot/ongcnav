@@ -160,10 +160,18 @@ describe('AttendeesController & RBAC Parity Tests', () => {
     });
 
     it('bulkDestroy converts IDs and calls bulkDestroy', async () => {
-      service.bulkDestroy.mockResolvedValueOnce({ success: true, message: 'Deleted' });
+      service.bulkDestroy.mockResolvedValueOnce({
+        success: true,
+        totalSelected: 2,
+        deletedCount: 2,
+        protectedCount: 0,
+        deletedTickets: ['10', '20'],
+        protectedTickets: [],
+        message: 'Deleted',
+      });
 
       await controller.bulkDestroy(['10', '20']);
-      expect(service.bulkDestroy).toHaveBeenCalledWith([BigInt(10), BigInt(20)]);
+      expect(service.bulkDestroy).toHaveBeenCalledWith([BigInt(10), BigInt(20)], undefined);
     });
 
     it('bulkRegenerateQr converts IDs and calls bulkRegenerateQr', async () => {

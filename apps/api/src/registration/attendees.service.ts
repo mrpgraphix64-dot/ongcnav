@@ -8,7 +8,7 @@ import {
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendeeStatus, UserRole } from '@ongc/shared-types';
+import { AttendeeStatus, OrderStatus, PaymentStatus, UserRole } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 
 const VALID_CATEGORIES = ['General', 'VIP', 'VVIP', 'ONGC STAFF', 'FAMILY MEMBER'];
@@ -841,27 +841,163 @@ export class AttendeesService {
     };
   }
 
-  async destroy(id: bigint) {
+  async destroy(id: bigint, userRole?: string) {
     const attendee = await this.findOne(id);
+    const protectionReason = await this.getAttendeeProtectionReason(id);
+    if (protectionReason) {
+      if (userRole === UserRole.SUPER_ADMIN) {
+        await this.prisma.attendee.update({
+          where: { id },
+          data: { status: AttendeeStatus.REVOKED },
+        });
+        return {
+          success: true,
+          action: 'revoked',
+          message: `Attendee '${attendee.name}' has historical entry or financial records and was revoked to preserve audit history.`,
+        };
+      }
+      throw new BadRequestException(
+        `Attendee '${attendee.name}' cannot be deleted because ${protectionReason}.`,
+      );
+    }
     await this.prisma.attendee.delete({ where: { id } });
     return {
       success: true,
+      action: 'deleted',
       message: `Attendee ${attendee.name} deleted.`,
     };
   }
 
-  async bulkDestroy(ids: bigint[]) {
+  async bulkDestroy(ids: bigint[], userRole?: string) {
     if (!ids || ids.length === 0) {
       throw new BadRequestException('No attendee IDs provided');
     }
 
-    const count = await this.prisma.attendee.count({ where: { id: { in: ids } } });
-    await this.prisma.attendee.deleteMany({ where: { id: { in: ids } } });
+    const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+
+    const attendees = await this.prisma.attendee.findMany({
+      where: { id: { in: ids } },
+      include: {
+        dailyCheckins: { select: { id: true } },
+        scanLogs: { select: { id: true } },
+        order: {
+          select: {
+            orderStatus: true,
+            paymentStatus: true,
+            razorpayPaymentId: true,
+          },
+        },
+      },
+    });
+
+    const deletableIds: bigint[] = [];
+    const protectedTickets: Array<{ id: string; name: string; ticketNumber: string; reason: string }> = [];
+
+    for (const att of attendees) {
+      let reason: string | null = null;
+      if (att.dailyCheckins && att.dailyCheckins.length > 0) {
+        reason = 'it contains checked-in passes or entry records';
+      } else if (att.scanLogs && att.scanLogs.length > 0) {
+        reason = 'it contains scan audit logs';
+      } else if (
+        att.order &&
+        (att.order.orderStatus === OrderStatus.PAID ||
+          att.order.paymentStatus === PaymentStatus.CAPTURED ||
+          att.order.razorpayPaymentId)
+      ) {
+        reason = 'it belongs to a confirmed/paid transaction';
+      }
+
+      if (reason) {
+        protectedTickets.push({
+          id: att.id.toString(),
+          name: att.name || 'Unknown',
+          ticketNumber: att.ticketNumber,
+          reason,
+        });
+      } else {
+        deletableIds.push(att.id);
+      }
+    }
+
+    const protectedIds = protectedTickets.map((p) => BigInt(p.id));
+
+    await this.prisma.$transaction(async (tx) => {
+      if (deletableIds.length > 0) {
+        await tx.attendee.deleteMany({ where: { id: { in: deletableIds } } });
+      }
+      if (isSuperAdmin && protectedIds.length > 0) {
+        await tx.attendee.updateMany({
+          where: { id: { in: protectedIds } },
+          data: { status: AttendeeStatus.REVOKED },
+        });
+      }
+    });
+
+    const deletedCount = deletableIds.length;
+    const protectedCount = protectedTickets.length;
+
+    let message = '';
+    if (deletedCount > 0 && protectedCount === 0) {
+      message = `Successfully deleted ${deletedCount} attendee(s).`;
+    } else if (deletedCount > 0 && protectedCount > 0) {
+      if (isSuperAdmin) {
+        message = `Deleted ${deletedCount} attendee(s). ${protectedCount} record(s) with check-in or payment history were revoked to preserve audit trails.`;
+      } else {
+        message = `Deleted ${deletedCount} attendee(s). ${protectedCount} record(s) could not be deleted because they contain check-in, scan, or payment records.`;
+      }
+    } else {
+      if (isSuperAdmin) {
+        message = `All ${protectedCount} selected attendee(s) have check-in or payment records and were revoked to preserve audit trails.`;
+      } else {
+        message = `None of the selected attendees could be deleted. All ${protectedCount} record(s) contain financial or entry records.`;
+      }
+    }
 
     return {
       success: true,
-      message: `${count} attendee(s) deleted.`,
+      totalSelected: ids.length,
+      deletedCount: isSuperAdmin ? deletedCount + protectedCount : deletedCount,
+      protectedCount: isSuperAdmin ? 0 : protectedCount,
+      deletedTickets: isSuperAdmin
+        ? [...deletableIds, ...protectedIds].map((id) => id.toString())
+        : deletableIds.map((id) => id.toString()),
+      protectedTickets: isSuperAdmin ? [] : protectedTickets,
+      message,
     };
+  }
+
+  private async getAttendeeProtectionReason(id: bigint): Promise<string | null> {
+    const att = await this.prisma.attendee.findUnique({
+      where: { id },
+      include: {
+        dailyCheckins: { select: { id: true } },
+        scanLogs: { select: { id: true } },
+        order: {
+          select: {
+            orderStatus: true,
+            paymentStatus: true,
+            razorpayPaymentId: true,
+          },
+        },
+      },
+    });
+    if (!att) return null;
+    if (att.dailyCheckins && att.dailyCheckins.length > 0) {
+      return 'it contains checked-in passes or entry records';
+    }
+    if (att.scanLogs && att.scanLogs.length > 0) {
+      return 'it contains scan audit logs';
+    }
+    if (
+      att.order &&
+      (att.order.orderStatus === OrderStatus.PAID ||
+        att.order.paymentStatus === PaymentStatus.CAPTURED ||
+        att.order.razorpayPaymentId)
+    ) {
+      return 'it belongs to a confirmed/paid transaction';
+    }
+    return null;
   }
 
   async getQrImageBuffer(id: bigint): Promise<{ buffer: Buffer; filename: string }> {

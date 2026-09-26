@@ -123,6 +123,13 @@ export class CommercialAgentService {
     const totalSubAllocated = formatted.reduce((acc, cur) => acc + cur.subAllocatedQuantity, 0);
     const totalAvailable = formatted.reduce((acc, cur) => acc + cur.availableQuantity, 0);
 
+    const checkedIn = await this.prisma.attendee.count({
+      where: {
+        order: { agentId: agentUserId },
+        dailyCheckins: { some: {} },
+      },
+    });
+
     return {
       allocations: formatted,
       summary: {
@@ -130,6 +137,10 @@ export class CommercialAgentService {
         totalBooked,
         totalSubAllocated,
         totalAvailable,
+        directSold: totalBooked,
+        subAllocated: totalSubAllocated,
+        availableToSell: totalAvailable,
+        checkedIn,
       },
     };
   }
@@ -432,7 +443,6 @@ export class CommercialAgentService {
 
     const cleanEmail = dto.email.trim().toLowerCase();
     const cleanPhone = dto.phone.trim();
-    const cleanStaffId = dto.staffId?.trim() || null;
 
     // Check unique conflicts
     const conflict = await this.prisma.user.findFirst({
@@ -440,14 +450,13 @@ export class CommercialAgentService {
         OR: [
           { email: { equals: cleanEmail, mode: 'insensitive' } },
           { phone: cleanPhone },
-          ...(cleanStaffId ? [{ staffId: cleanStaffId }] : []),
         ],
       },
     });
 
     if (conflict) {
       throw new ConflictException(
-        'An account with this email, mobile number, or ID already exists.',
+        'An account with this email or mobile number already exists.',
       );
     }
 
@@ -458,7 +467,7 @@ export class CommercialAgentService {
         name: dto.name.trim(),
         email: cleanEmail,
         phone: cleanPhone,
-        staffId: cleanStaffId,
+        staffId: null,
         password: hashedPassword,
         role: UserRole.COMMERCIAL_SUB_AGENT,
         parentAgentId,
@@ -471,7 +480,6 @@ export class CommercialAgentService {
       name: subAgent.name,
       email: subAgent.email,
       phone: subAgent.phone,
-      staffId: subAgent.staffId,
       role: subAgent.role,
       parentAgentId: parentAgentId.toString(),
       createdAt: subAgent.createdAt,
@@ -812,21 +820,19 @@ export class CommercialAgentService {
   async createAgentAdmin(adminUserId: bigint, dto: CreateAgentDto) {
     const cleanEmail = dto.email.trim().toLowerCase();
     const cleanPhone = dto.phone.trim();
-    const cleanStaffId = dto.staffId?.trim() || null;
 
     const conflict = await this.prisma.user.findFirst({
       where: {
         OR: [
           { email: { equals: cleanEmail, mode: 'insensitive' } },
           { phone: cleanPhone },
-          ...(cleanStaffId ? [{ staffId: cleanStaffId }] : []),
         ],
       },
     });
 
     if (conflict) {
       throw new ConflictException(
-        'An account with this email, mobile number, or ID already exists.',
+        'An account with this email or mobile number already exists.',
       );
     }
 
@@ -837,7 +843,7 @@ export class CommercialAgentService {
         name: dto.name.trim(),
         email: cleanEmail,
         phone: cleanPhone,
-        staffId: cleanStaffId,
+        staffId: null,
         password: hashedPassword,
         role: UserRole.COMMERCIAL_AGENT,
         isActive: true,
@@ -849,7 +855,6 @@ export class CommercialAgentService {
       name: agent.name,
       email: agent.email,
       phone: agent.phone,
-      staffId: agent.staffId,
       role: agent.role,
       isActive: agent.isActive,
       createdAt: agent.createdAt,
@@ -1013,7 +1018,6 @@ export class CommercialAgentService {
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
         { phone: { contains: q, mode: 'insensitive' } },
-        { staffId: { contains: q, mode: 'insensitive' } },
       ];
     }
 
@@ -1036,6 +1040,26 @@ export class CommercialAgentService {
       }),
     ]);
 
+    const agentIds = agents.map((ag) => ag.id);
+    const checkedInOrders = await this.prisma.commercialOrder.findMany({
+      where: { agentId: { in: agentIds } },
+      select: {
+        agentId: true,
+        attendees: {
+          where: { dailyCheckins: { some: {} } },
+          select: { id: true },
+        },
+      },
+    });
+
+    const agentCheckedInMap = new Map<string, number>();
+    for (const ord of checkedInOrders) {
+      if (ord.agentId) {
+        const k = ord.agentId.toString();
+        agentCheckedInMap.set(k, (agentCheckedInMap.get(k) || 0) + ord.attendees.length);
+      }
+    }
+
     return {
       total,
       page: p,
@@ -1057,13 +1081,15 @@ export class CommercialAgentService {
           0,
           totalAllocated - totalBooked - totalSubAllocated,
         );
+        const checkedIn = agentCheckedInMap.get(ag.id.toString()) || 0;
 
         return {
           id: ag.id.toString(),
           name: ag.name,
           email: ag.email,
           phone: ag.phone,
-          staffId: ag.staffId,
+          role: ag.role,
+          parentAgentId: ag.parentAgentId ? ag.parentAgentId.toString() : null,
           isActive: ag.isActive,
           parentAgent: ag.parentAgent
             ? {
@@ -1090,6 +1116,10 @@ export class CommercialAgentService {
             totalBooked,
             totalSubAllocated,
             totalAvailable,
+            directSold: totalBooked,
+            subAllocated: totalSubAllocated,
+            availableToSell: totalAvailable,
+            checkedIn,
           },
           createdAt: ag.createdAt,
         };
@@ -1140,16 +1170,41 @@ export class CommercialAgentService {
     }));
   }
 
+  async getOrCreateSystemArchiveUser(tx?: any): Promise<bigint> {
+    const client = tx || this.prisma;
+    const existing = await client.user.findFirst({
+      where: { email: 'system-archive@ongc.internal' },
+    });
+    if (existing) {
+      return existing.id;
+    }
+    const created = await client.user.create({
+      data: {
+        name: 'Archived System Actor',
+        email: 'system-archive@ongc.internal',
+        phone: '0000000000',
+        staffId: 'SYS-ARCHIVE',
+        password: 'N/A',
+        role: UserRole.GATE_OPERATOR,
+        isActive: false,
+      },
+    });
+    return created.id;
+  }
+
   /**
-   * Delete an agent account with strict operational dependency protections.
+   * Delete an agent account with strict operational dependency protections for domain admins,
+   * while giving SUPER_ADMIN full administrative control with historical record preservation.
    */
-  async deleteAgentAdmin(adminUserId: bigint, agentId: bigint) {
+  async deleteAgentAdmin(adminUserId: bigint, agentId: bigint, callerRole?: string) {
+    const isSuperAdmin = callerRole === UserRole.SUPER_ADMIN;
+
     const agent = await this.prisma.user.findUnique({
       where: { id: agentId },
       include: {
-        subAgents: { select: { id: true, name: true } },
-        agentOrders: { select: { id: true } },
-        allocations: true,
+        subAgents: { select: { id: true, name: true, email: true, staffId: true, role: true } },
+        agentOrders: true,
+        allocations: { include: { events: true } },
         givenAllocations: { select: { id: true } },
         allocationEventsPerformed: { select: { id: true } },
         scannedLogs: { select: { id: true } },
@@ -1165,35 +1220,129 @@ export class CommercialAgentService {
       throw new BadRequestException('Target user is not a commercial agent.');
     }
 
-    if (agent.subAgents.length > 0) {
-      throw new BadRequestException(
-        'This agent cannot be deleted because they have sub-agents assigned. Remove or reassign sub-agents first, or deactivate the agent.'
-      );
-    }
+    if (!isSuperAdmin) {
+      if (agent.subAgents.length > 0) {
+        throw new BadRequestException(
+          'This agent cannot be deleted because they have sub-agents assigned. Remove or reassign sub-agents first, or deactivate the agent.',
+        );
+      }
 
-    if (agent.agentOrders.length > 0) {
-      throw new BadRequestException(
-        'This agent cannot be deleted because historical bookings or allocations are linked to this account. Deactivate the agent instead.'
-      );
-    }
+      if (agent.agentOrders.length > 0) {
+        throw new BadRequestException(
+          'This agent cannot be deleted because historical bookings or allocations are linked to this account. Deactivate the agent instead.',
+        );
+      }
 
-    const hasActiveAllocations = agent.allocations.some(
-      (a) => a.allocatedQuantity > 0 || a.bookedQuantity > 0 || a.subAllocatedQuantity > 0,
-    );
-    if (
-      hasActiveAllocations ||
-      agent.givenAllocations.length > 0 ||
-      agent.allocationEventsPerformed.length > 0 ||
-      agent.scannedLogs.length > 0 ||
-      agent.scannedCheckins.length > 0
-    ) {
-      throw new BadRequestException(
-        'This agent cannot be deleted because historical bookings or allocations are linked to this account. Deactivate the agent instead.'
+      const hasActiveAllocations = agent.allocations.some(
+        (a) => a.allocatedQuantity > 0 || a.bookedQuantity > 0 || a.subAllocatedQuantity > 0,
       );
+      if (
+        hasActiveAllocations ||
+        agent.givenAllocations.length > 0 ||
+        agent.allocationEventsPerformed.length > 0 ||
+        agent.scannedLogs.length > 0 ||
+        agent.scannedCheckins.length > 0
+      ) {
+        throw new BadRequestException(
+          'This agent cannot be deleted because historical bookings or allocations are linked to this account. Deactivate the agent instead.',
+        );
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.agentAllocation.deleteMany({ where: { agentId } });
+      // 1. Automatically convert sub-agents into independent master agents and record hierarchy change in audit history
+      if (agent.subAgents && agent.subAgents.length > 0) {
+        await tx.user.updateMany({
+          where: { parentAgentId: agentId },
+          data: {
+            role: UserRole.COMMERCIAL_AGENT,
+            parentAgentId: null,
+          },
+        });
+
+        for (const sub of agent.subAgents) {
+          await tx.auditLog.create({
+            data: {
+              userId: sub.id,
+              action: 'SUB_AGENT_CONVERTED_TO_MASTER',
+              details: {
+                subAgentId: sub.id.toString(),
+                subAgentName: sub.name,
+                subAgentEmail: (sub as any).email || null,
+                subAgentStaffId: (sub as any).staffId || null,
+                previousRole: (sub as any).role || UserRole.COMMERCIAL_SUB_AGENT,
+                newRole: UserRole.COMMERCIAL_AGENT,
+                previousParentAgentId: agent.id.toString(),
+                previousParentAgentName: agent.name,
+                previousParentAgentEmail: agent.email,
+                previousParentAgentStaffId: agent.staffId || null,
+                changeReason: `Master agent '${agent.name}' was administratively deleted by SUPER_ADMIN. Sub-agent automatically converted to independent master agent.`,
+                inventoryPreserved: true,
+                allocationsPreserved: true,
+                ticketsPreserved: true,
+                bookingsPreserved: true,
+                performedByUserId: adminUserId.toString(),
+                timestamp: new Date().toISOString(),
+              },
+            },
+          });
+        }
+      }
+
+      // 2. Preserve commercial orders by snapshotting agent metadata and detaching foreign key
+      if (agent.agentOrders && agent.agentOrders.length > 0) {
+        for (const order of agent.agentOrders) {
+          const existingMeta = (order.metadata as any) || {};
+          await tx.commercialOrder.update({
+            where: { id: order.id },
+            data: {
+              agentId: null,
+              metadata: {
+                ...existingMeta,
+                originalAgent: {
+                  id: agent.id.toString(),
+                  name: agent.name,
+                  email: agent.email,
+                  staffId: agent.staffId,
+                  role: agent.role,
+                },
+              },
+            },
+          });
+        }
+      }
+
+      // 3. Preserve allocations and allocation events
+      if (agent.allocations && agent.allocations.length > 0) {
+        const sysArchiveId = await this.getOrCreateSystemArchiveUser(tx);
+        for (const alloc of agent.allocations) {
+          if (alloc.events && alloc.events.length > 0) {
+            const existingSysAlloc = await tx.agentAllocation.findUnique({
+              where: {
+                agentId_passType: {
+                  agentId: sysArchiveId,
+                  passType: alloc.passType,
+                },
+              },
+            });
+            if (existingSysAlloc) {
+              await tx.allocationEvent.updateMany({
+                where: { allocationId: alloc.id },
+                data: { allocationId: existingSysAlloc.id },
+              });
+              await tx.agentAllocation.delete({ where: { id: alloc.id } });
+            } else {
+              await tx.agentAllocation.update({
+                where: { id: alloc.id },
+                data: { agentId: sysArchiveId },
+              });
+            }
+          } else {
+            await tx.agentAllocation.delete({ where: { id: alloc.id } });
+          }
+        }
+      }
+
       await tx.gateUser.deleteMany({ where: { userId: agentId } });
       await tx.auditLog.deleteMany({ where: { userId: agentId } });
       await tx.user.delete({ where: { id: agentId } });
@@ -1271,6 +1420,13 @@ export class CommercialAgentService {
     const totalSubAllocated = agent.allocations.reduce((sum, a) => sum + a.subAllocatedQuantity, 0);
     const totalAvailable = Math.max(0, totalAllocated - totalBooked - totalSubAllocated);
 
+    const checkedIn = await this.prisma.attendee.count({
+      where: {
+        order: { agentId },
+        dailyCheckins: { some: {} },
+      },
+    });
+
     const revenuePaise = agent.agentOrders
       .filter((o) => o.orderStatus === OrderStatus.PAID)
       .reduce((sum, o) => sum + o.amountPaise, 0);
@@ -1280,7 +1436,6 @@ export class CommercialAgentService {
       name: agent.name,
       email: agent.email,
       phone: agent.phone,
-      staffId: agent.staffId,
       role: agent.role,
       isActive: agent.isActive,
       parentAgent: agent.parentAgent
@@ -1289,7 +1444,6 @@ export class CommercialAgentService {
             name: agent.parentAgent.name,
             email: agent.parentAgent.email,
             phone: agent.parentAgent.phone,
-            staffId: agent.parentAgent.staffId,
           }
         : null,
       subAgents: agent.subAgents.map((sa) => {
@@ -1302,7 +1456,6 @@ export class CommercialAgentService {
           name: sa.name,
           email: sa.email,
           phone: sa.phone,
-          staffId: sa.staffId,
           isActive: sa.isActive,
           ordersCount: sa._count.agentOrders,
           availableQuantity: saAvail,
@@ -1328,6 +1481,10 @@ export class CommercialAgentService {
         totalAvailable,
         totalOrders: agent.agentOrders.length,
         totalSalesInr: revenuePaise / 100,
+        directSold: totalBooked,
+        subAllocated: totalSubAllocated,
+        availableToSell: totalAvailable,
+        checkedIn,
       },
       recentOrders: agent.agentOrders.map((o) => ({
         id: o.id.toString(),

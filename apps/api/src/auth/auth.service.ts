@@ -17,13 +17,10 @@ export class AuthService {
     const { identifier, password } = loginDto;
     const cleanIdentifier = identifier.trim();
 
-    // 1. Search database user by email or staffId
+    // 1. Search database user strictly by email (Staff ID login removed)
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { email: { equals: cleanIdentifier, mode: 'insensitive' } },
-          { staffId: { equals: cleanIdentifier, mode: 'insensitive' } },
-        ],
+        email: { equals: cleanIdentifier, mode: 'insensitive' },
       },
       include: {
         gateUsers: {

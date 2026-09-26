@@ -75,6 +75,7 @@ describe('CommercialAgentService', () => {
       },
       attendee: {
         create: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
       },
       allocationEvent: {
         create: jest.fn().mockResolvedValue({ id: BigInt(1) }),
@@ -354,7 +355,6 @@ describe('CommercialAgentService', () => {
         email: 'ramesh@subagent.com',
         phone: '9876543211',
         password: 'Password123!',
-        staffId: 'AGT-002',
       });
 
       expect(res.id).toBe('101');
@@ -561,7 +561,6 @@ describe('CommercialAgentService', () => {
         email: 'root1@agent.com',
         phone: '9811223344',
         password: 'AdminPassword123!',
-        staffId: 'AGT-ROOT-01',
       });
 
       expect(res.id).toBe('200');

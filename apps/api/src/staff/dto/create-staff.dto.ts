@@ -23,15 +23,6 @@ export class CreateStaffDto {
   @IsOptional()
   mobile?: string;
 
-  @ApiPropertyOptional({ example: 'STF-101' })
-  @IsString()
-  @IsOptional()
-  staffId?: string;
-
-  @ApiPropertyOptional({ example: 'STF-101' })
-  @IsString()
-  @IsOptional()
-  staff_id?: string;
 
   @ApiProperty({ enum: UserRole, default: UserRole.SCANNER_STAFF })
   @IsEnum(UserRole)
@@ -90,15 +81,6 @@ export class UpdateStaffDto {
   @IsOptional()
   mobile?: string;
 
-  @ApiPropertyOptional({ example: 'STF-101' })
-  @IsString()
-  @IsOptional()
-  staffId?: string;
-
-  @ApiPropertyOptional({ example: 'STF-101' })
-  @IsString()
-  @IsOptional()
-  staff_id?: string;
 
   @ApiPropertyOptional({ enum: UserRole })
   @IsEnum(UserRole)

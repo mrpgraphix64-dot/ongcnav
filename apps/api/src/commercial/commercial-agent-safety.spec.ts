@@ -28,6 +28,9 @@ describe('Commercial Agent Safety & Deletion Tests', () => {
       auditLog: {
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      attendee: {
+        count: jest.fn().mockResolvedValue(0),
+      },
       $transaction: jest.fn().mockImplementation(async (cb) => cb(prisma)),
     };
 

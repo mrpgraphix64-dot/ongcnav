@@ -211,6 +211,6 @@ export class CommercialAgentAdminController {
   @ApiOperation({ summary: 'Delete a commercial agent with strict dependency protections' })
   async deleteAgent(@Req() req: Request, @Param('id') id: string) {
     const user = (req as any).user;
-    return this.agentService.deleteAgentAdmin(user.id, BigInt(id));
+    return this.agentService.deleteAgentAdmin(user.id, BigInt(id), user.role);
   }
 }

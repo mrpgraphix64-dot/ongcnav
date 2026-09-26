@@ -30,10 +30,16 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import {
+  setStoredAuthUser,
+  clearStoredAuth,
+  subscribeToAuthSync,
+  isAgentRole,
+} from '@/lib/auth-session';
 
 interface AdminUser {
   id?: string;
-  staffId?: string;
+  staffId?: string | null;
   name?: string;
   email?: string;
   role?: string;
@@ -57,12 +63,21 @@ const ALL_NAV_ITEMS: NavItem[] = [
     icon: Gauge,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
   },
-  // 2. Dashboard (Super Admin, Event Admin, Gate Manager)
+  // 2. Dashboard (Super Admin, Event Admin, Gate Manager, Commercial Admin, Employee Admin)
   {
     label: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
+    roles: [
+      'SUPER_ADMIN',
+      'ADMIN',
+      'EVENT_ADMIN',
+      'GATE_MANAGER',
+      'COMMERCIAL_ADMIN',
+      'EMPLOYEE_ADMIN',
+      'HELP_DESK',
+      'REPORT_VIEWER',
+    ],
   },
   // 3. Gates (Super Admin, Event Admin, Gate Manager)
   {
@@ -349,43 +364,22 @@ export default function AdminLayout({
           const normRole = normalizeRole(res.user.role);
 
           // If an agent tries to access the admin shell, route them to their agent portal
-          if (normRole === 'COMMERCIAL_AGENT' || normRole === 'COMMERCIAL_SUB_AGENT') {
-            try {
-              localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
-            } catch {}
+          if (normRole === 'COMMERCIAL_AGENT' || normRole === 'COMMERCIAL_SUB_AGENT' || isAgentRole(normRole)) {
+            setStoredAuthUser(res.user);
             router.replace('/agent');
-            return;
-          }
-
-          // Enforce domain isolation for EMPLOYEE_ADMIN on /admin/commercial/*
-          if (normRole === 'EMPLOYEE_ADMIN' && pathname.startsWith('/admin/commercial')) {
-            router.replace('/admin');
-            return;
-          }
-
-          // Enforce domain isolation for COMMERCIAL_ADMIN on employee routes
-          if (
-            normRole === 'COMMERCIAL_ADMIN' &&
-            (pathname.startsWith('/admin/attendees') || pathname.startsWith('/admin/bulk-upload'))
-          ) {
-            router.replace('/admin/commercial/orders');
             return;
           }
 
           setUser(res.user);
           setAuthChecking(false);
-          try {
-            localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
-          } catch {}
+          setStoredAuthUser(res.user);
         } else {
           throw new Error('No user profile');
         }
       } catch {
         // If unauthenticated, redirect to /admin/login preserving redirect target
         if (isMounted) {
-          try {
-            localStorage.removeItem('ongc_admin_user');
-          } catch {}
+          clearStoredAuth();
           const redirectQuery = pathname && pathname !== '/admin' ? `?redirect=${encodeURIComponent(pathname)}` : '';
           router.replace(`/admin/login${redirectQuery}`);
         }
@@ -393,8 +387,42 @@ export default function AdminLayout({
     }
 
     loadUserProfile();
+
+    // Cross-tab real-time auth synchronization
+    const unsubscribe = subscribeToAuthSync((event) => {
+      if (!isMounted) return;
+
+      if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
+        setUser(null);
+        setAuthChecking(false);
+        router.replace('/admin/login');
+      } else if (event.type === 'LOGIN' && event.user) {
+        if (isAgentRole(event.user.role)) {
+          // If another tab logged in as an Agent, this tab must not stay in admin!
+          setUser(null);
+          router.replace('/agent');
+        } else {
+          // Another tab logged in as an admin account
+          setUser(event.user);
+          setAuthChecking(false);
+        }
+      }
+    });
+
+    // Re-verify session when tab becomes visible or gains focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadUserProfile();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
     return () => {
       isMounted = false;
+      unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, [pathname, router]);
 
@@ -432,9 +460,7 @@ export default function AdminLayout({
     try {
       await fetchApi('/auth/logout', { method: 'POST' });
     } catch {}
-    try {
-      localStorage.removeItem('ongc_admin_user');
-    } catch {}
+    clearStoredAuth();
     router.push('/admin/login');
   };
 
@@ -465,20 +491,37 @@ export default function AdminLayout({
     ? SCANNER_STAFF_NAV_ITEMS
     : ALL_NAV_ITEMS.filter((item) => item.roles.includes(normalizedRole));
 
-  // Role-based route authorization check
+  // Role-based route authorization check: match exact route first, then most specific sub-route prefix
   const isAuthorized = (() => {
     if (!user) return true; // allow initial paint while validating
     if (normalizedRole === 'SUPER_ADMIN') return true;
 
-    const matchedNav = ALL_NAV_ITEMS.find(
-      (item) => item.href === pathname || pathname.startsWith(`${item.href}/`),
-    );
-    if (!matchedNav) return true;
-    return matchedNav.roles.includes(normalizedRole);
+    // 1. Exact match first
+    const exactNav = ALL_NAV_ITEMS.find((item) => item.href === pathname);
+    if (exactNav) {
+      return exactNav.roles.includes(normalizedRole);
+    }
+
+    // 2. Specific sub-route prefix match (excluding '/admin' root so '/admin' doesn't swallow all subroutes)
+    const prefixNav = [...ALL_NAV_ITEMS]
+      .filter((item) => item.href !== '/admin' && pathname.startsWith(`${item.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0];
+
+    if (prefixNav) {
+      return prefixNav.roles.includes(normalizedRole);
+    }
+
+    // 3. Fallback for root /admin
+    if (pathname === '/admin' || pathname === '/admin/') {
+      const rootNav = ALL_NAV_ITEMS.find((item) => item.href === '/admin');
+      return rootNav ? rootNav.roles.includes(normalizedRole) : true;
+    }
+
+    return true;
   })();
 
   const pageMeta = getPageMeta(pathname);
-  const userInitials = (user?.name || user?.staffId || 'Admin')
+  const userInitials = (user?.name || user?.email || 'Admin')
     .slice(0, 2)
     .toUpperCase();
 
@@ -639,7 +682,7 @@ export default function AdminLayout({
                 </div>
                 <div className="min-w-0">
                   <div className="font-outfit font-bold text-xs text-ink truncate">
-                    {user?.name || user?.staffId || 'Portal Administrator'}
+                    {user?.name || 'Portal Administrator'}
                   </div>
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wide">
                     {roleBadgeLabel}
@@ -769,7 +812,7 @@ export default function AdminLayout({
                     </div>
                     <div className="hidden sm:block text-left min-w-0">
                       <div className="font-outfit font-bold text-xs text-ink truncate max-w-[130px]">
-                        {user?.name || user?.staffId || 'Administrator'}
+                        {user?.name || 'Administrator'}
                       </div>
                       <span className="inline-block text-[9px] font-extrabold px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded border border-amber-200 uppercase">
                         {roleBadgeLabel}
@@ -783,10 +826,10 @@ export default function AdminLayout({
                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-stone-200 shadow-xl z-50 py-2">
                       <div className="px-4 py-2 border-b border-stone-100">
                         <p className="font-outfit font-bold text-xs text-ink truncate">
-                          {user?.name || user?.staffId || 'Portal Administrator'}
+                          {user?.name || 'Portal Administrator'}
                         </p>
                         <p className="text-[11px] text-ink-soft truncate">
-                          {user?.email || user?.staffId || ''}
+                          {user?.email || ''}
                         </p>
                         <div className="mt-1.5">
                           <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">

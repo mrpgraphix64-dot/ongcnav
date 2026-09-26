@@ -87,11 +87,32 @@ export default function TicketPassPage() {
     ticket.category === 'Commercial Pass' ||
     ticket.relation === 'Commercial Pass' ||
     !ticket.employee;
-  const category = isCommercial
-    ? 'E-Pass'
-    : (ticket.relation || ticket.category || 'ONGC Attendee');
+
+  const passTypeLabel = (() => {
+    const t = (ticket.ticketType || ticket.category || ticket.passType || '').toUpperCase();
+    if (t.includes('SEASON')) return 'Season Pass';
+    if (t.includes('MANDLI')) return 'Mandli Pass';
+    if (t.includes('ANY_DAY')) return 'Any Day Pass';
+    if (t.includes('DAILY')) return 'Daily Pass';
+    if (isCommercial) return 'Daily Pass';
+    return ticket.relation || ticket.category || 'Attendee Pass';
+  })();
+
+  const eventDateLabel = (() => {
+    if (ticket.bookingDays && ticket.bookingDays.length > 0) {
+      if (ticket.bookingDays.length >= 9 || passTypeLabel === 'Season Pass') {
+        return '11–19 October 2026 (All 9 Days)';
+      }
+      return ticket.bookingDays.join(', ');
+    }
+    if (passTypeLabel === 'Season Pass') {
+      return '11–19 October 2026 (All 9 Days)';
+    }
+    return ticket.date || '11–19 October 2026';
+  })();
+
   const waMessage = encodeURIComponent(
-    `Hi ${attendeeName},\nHere is your official Entry Pass for ONGC Navratri 2026!\n\nTicket ID: ${ticketId}\nCategory: ${category}\nVenue: ONGC Ground, Chandkheda, Ahmedabad\nDate: 11-19 Oct 2026\n\nPlease show this QR ticket at the entry gate.`
+    `Hi ${attendeeName},\nHere is your official ONGC Navratri 2026 E-Pass!\n\nTicket Number: ${ticketId}\nPass Type: ${passTypeLabel}\nVenue: ONGC Ground, Chandkheda, Ahmedabad\nDate: ${eventDateLabel}\nEntry Timing: 7:00 PM onwards\n\nPlease show this QR ticket at the entry gate.`
   );
 
   return (
@@ -146,7 +167,7 @@ export default function TicketPassPage() {
                   Official Event Entry Pass
                 </div>
                 <h1 className="font-cinzel font-bold text-xl text-ink mt-0.5">
-                  ONGC Navratri 2026
+                  ONGC NAVRATRI 2026 E-PASS
                 </h1>
               </div>
             </div>
@@ -167,7 +188,7 @@ export default function TicketPassPage() {
             <div className="grid grid-cols-2 gap-3 bg-cream-soft p-4 rounded-2xl text-left border border-stone-200/80">
               <div>
                 <div className="text-[9px] font-bold uppercase tracking-widest text-ink-soft">
-                  Ticket ID
+                  Ticket Number
                 </div>
                 <div className="font-mono font-bold text-maroon text-sm mt-0.5">
                   {ticketId}
@@ -175,26 +196,26 @@ export default function TicketPassPage() {
               </div>
               <div>
                 <div className="text-[9px] font-bold uppercase tracking-widest text-ink-soft">
-                  Category
+                  Pass Type
                 </div>
                 <div className="font-outfit font-bold text-ink text-sm mt-0.5">
-                  {category}
+                  {passTypeLabel}
                 </div>
               </div>
               <div>
                 <div className="text-[9px] font-bold uppercase tracking-widest text-ink-soft">
                   Venue
                 </div>
-                <div className="font-semibold text-ink text-sm mt-0.5">
+                <div className="font-semibold text-ink text-xs mt-0.5">
                   ONGC Ground
                 </div>
               </div>
               <div>
                 <div className="text-[9px] font-bold uppercase tracking-widest text-ink-soft">
-                  Gate
+                  Entry Timing
                 </div>
-                <div className="font-semibold text-ink text-sm mt-0.5">
-                  Main Gate
+                <div className="font-semibold text-ink text-xs mt-0.5">
+                  7:00 PM onwards
                 </div>
               </div>
               <div className="col-span-2">
@@ -202,7 +223,7 @@ export default function TicketPassPage() {
                   Event Date
                 </div>
                 <div className="font-semibold text-maroon text-sm mt-0.5">
-                  11&ndash;19 October 2026
+                  {eventDateLabel}
                 </div>
               </div>
             </div>

@@ -570,6 +570,73 @@ export class GatesService {
     };
   }
 
+  async bulkRemove(ids: bigint[]) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('No gate IDs provided');
+    }
+
+    const gates = await this.prisma.gate.findMany({
+      where: { id: { in: ids } },
+      include: {
+        _count: {
+          select: {
+            dailyCheckins: true,
+            scanLogs: true,
+          },
+        },
+      },
+    });
+
+    const deletableIds: bigint[] = [];
+    const deactivatedGates: Array<{ id: string; name: string; reason: string }> = [];
+
+    for (const gate of gates) {
+      const hasHistory = gate._count.dailyCheckins > 0 || gate._count.scanLogs > 0;
+      if (hasHistory) {
+        await this.prisma.gate.update({
+          where: { id: gate.id },
+          data: { status: GateStatus.INACTIVE },
+        });
+        deactivatedGates.push({
+          id: gate.id.toString(),
+          name: gate.name,
+          reason: 'Historical entry/scan records exist; gate deactivated instead of deleted.',
+        });
+      } else {
+        deletableIds.push(gate.id);
+      }
+    }
+
+    if (deletableIds.length > 0) {
+      await this.prisma.$transaction([
+        this.prisma.gateUser.deleteMany({ where: { gateId: { in: deletableIds } } }),
+        this.prisma.gate.deleteMany({ where: { id: { in: deletableIds } } }),
+      ]);
+    }
+
+    const deletedCount = deletableIds.length;
+    const deactivatedCount = deactivatedGates.length;
+
+    let message = '';
+    if (deletedCount > 0 && deactivatedCount === 0) {
+      message = `Successfully deleted ${deletedCount} gate(s).`;
+    } else if (deletedCount > 0 && deactivatedCount > 0) {
+      message = `Deleted ${deletedCount} gate(s). ${deactivatedCount} gate(s) had historical records and were deactivated instead.`;
+    } else {
+      message = `All ${deactivatedCount} selected gate(s) have historical entry records and were deactivated instead.`;
+    }
+
+    return {
+      success: true,
+      totalSelected: ids.length,
+      deletedCount,
+      deactivatedCount,
+      deletedGateIds: deletableIds.map((id) => id.toString()),
+      deactivatedGates,
+      message,
+    };
+  }
+
   async toggleOpen(id: bigint, isOpen: boolean) {
     const gate = await this.prisma.gate.findUnique({ where: { id } });
     if (!gate) throw new NotFoundException(`Gate #${id} not found`);

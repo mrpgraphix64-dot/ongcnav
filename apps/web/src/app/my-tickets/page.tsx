@@ -43,6 +43,7 @@ function CommercialTicketsContent() {
 
   const [emailSending, setEmailSending] = useState(false);
   const [emailMessage, setEmailMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showAllPasses, setShowAllPasses] = useState(false);
 
   // Email recovery for verified commercial order
   const handleEmailTicket = async () => {
@@ -83,6 +84,7 @@ function CommercialTicketsContent() {
     setError(null);
     setResult(null);
     setEmailMessage(null);
+    setShowAllPasses(false);
 
     const validation = validateCommercialLookup(orderNumber, orderMobile);
     if (!validation.isValid) {
@@ -151,7 +153,7 @@ function CommercialTicketsContent() {
                 htmlFor="order_number"
                 className="block text-xs font-bold text-ink-soft uppercase tracking-wider mb-2"
               >
-                E-Pass Order Number
+                E-PASS ORDER / TICKET NUMBER
               </label>
               <div className="relative">
                 <Hash className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -162,10 +164,13 @@ function CommercialTicketsContent() {
                   onChange={(e) => setOrderNumber(e.target.value)}
                   required
                   autoFocus
-                  placeholder="e.g. ORD-COMM-20261011-ABC123"
+                  placeholder="Order No. or Ticket No."
                   className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-stone-50 border border-stone-200 text-ink font-mono font-bold text-base placeholder:font-sans placeholder:font-normal placeholder:text-stone-400 focus:bg-white focus:outline-none focus:border-maroon shadow-xs transition-colors uppercase"
                 />
               </div>
+              <p className="text-[11px] text-ink-soft mt-1.5">
+                Use the number from your E-Pass email.
+              </p>
             </div>
 
             <div>
@@ -226,6 +231,9 @@ function CommercialTicketsContent() {
               const passes = result.passes || [];
               const hasPasses = passes.length > 0;
               const formattedDates = formatPassDates(result.selectedDates, result.ticketType);
+              const isTicketSearch = result.searchedBy === 'TICKET';
+              const totalInOrder = result.totalPassesInOrder || passes.length;
+              const displayedPasses = isTicketSearch && !showAllPasses && passes.length > 0 ? [passes[0]] : passes;
 
               return (
                 <>
@@ -414,7 +422,10 @@ function CommercialTicketsContent() {
                         <div>
                           <h3 className="font-cinzel font-bold text-xl text-maroon flex items-center gap-2">
                             <Ticket className="w-5 h-5 text-gold" />
-                            <span>E-Passes ({passes.length})</span>
+                            <span>
+                              E-Passes ({displayedPasses.length}
+                              {isTicketSearch && totalInOrder > 1 && !showAllPasses ? ` of ${totalInOrder}` : ''})
+                            </span>
                           </h3>
                           <span className="text-xs text-stone-500">
                             Present individual QR codes at the entry gate
@@ -451,7 +462,33 @@ function CommercialTicketsContent() {
                         </div>
                       )}
 
-                      {passes.map((pass: any, index: number) => {
+                      {/* TICKET NUMBER LOOKUP TOGGLE BANNER */}
+                      {isTicketSearch && totalInOrder > 1 && (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+                          <div className="flex items-center gap-2.5">
+                            <Ticket className="w-5 h-5 text-amber-700 shrink-0" />
+                            <div>
+                              <div className="font-bold text-xs sm:text-sm">
+                                Booking contains {totalInOrder} E-Passes
+                              </div>
+                              <p className="text-[11px] text-amber-800">
+                                {showAllPasses
+                                  ? `Displaying all ${totalInOrder} passes in this booking.`
+                                  : `Showing pass #${result.searchedTicketNumber || passes[0]?.ticketNumber}.`}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowAllPasses(!showAllPasses)}
+                            className="px-4 py-2 rounded-xl bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-bold text-xs transition-colors cursor-pointer shrink-0"
+                          >
+                            {showAllPasses ? 'Show Only This Pass' : `View All ${totalInOrder} Passes`}
+                          </button>
+                        </div>
+                      )}
+
+                      {displayedPasses.map((pass: any, index: number) => {
                         const passDates = formatPassDates(pass.bookingDays || result.selectedDates, result.ticketType);
                         return (
                           <div
@@ -502,7 +539,7 @@ function CommercialTicketsContent() {
                                 <div className="space-y-4 text-center sm:text-left flex-1">
                                   <div>
                                     <div className="text-xs font-bold text-gold-light uppercase tracking-wider">
-                                      Pass Holder {passes.length > 1 ? `#${index + 1}` : ''}
+                                      Pass Holder {totalInOrder > 1 ? `#${index + 1}` : ''}
                                     </div>
                                     <h3 className="font-cinzel font-extrabold text-2xl sm:text-3xl text-white tracking-wide drop-shadow-md">
                                       {pass.name || result.customerName}

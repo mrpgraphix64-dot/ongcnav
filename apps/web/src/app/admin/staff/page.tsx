@@ -25,6 +25,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser, setStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 import PasswordInput from '@/components/PasswordInput';
 
 interface GateItem {
@@ -81,7 +82,6 @@ export default function AdminStaffPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: '',
-    staff_id: '',
     email: '',
     mobile: '',
     role: 'SCANNER_STAFF',
@@ -96,7 +96,6 @@ export default function AdminStaffPage() {
   const [editForm, setEditForm] = useState({
     id: '',
     name: '',
-    staff_id: '',
     email: '',
     mobile: '',
     role: 'SCANNER_STAFF',
@@ -110,9 +109,47 @@ export default function AdminStaffPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    const stored = getStoredAuthUser();
+    if (stored) {
+      setCurrentUser(stored as any);
+    }
+    fetchApi('/auth/me')
+      .then((res: any) => {
+        if (res?.user) {
+          setCurrentUser(res.user);
+        }
+      })
+      .catch(() => {});
+
+    const unsubscribe = subscribeToAuthSync((event) => {
+      if (event.type === 'LOGIN' && event.user) {
+        setCurrentUser(event.user as any);
+      } else if (event.type === 'LOGOUT') {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string; email: string } | null>(null);
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
   const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Bulk Selection and Delete State
+  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<{
+    totalSelected: number;
+    deletedCount: number;
+    protectedCount: number;
+    protectedStaff: Array<{ id: string; name: string; email: string; reason: string }>;
+    message: string;
+  } | null>(null);
 
   // Staff Delete Modal State
   const [staffToDelete, setStaffToDelete] = useState<StaffRecord | null>(null);
@@ -133,7 +170,9 @@ export default function AdminStaffPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (staffToDelete) {
+        if (showBulkDeleteModal) {
+          setShowBulkDeleteModal(false);
+        } else if (staffToDelete) {
           setStaffToDelete(null);
           setStaffDeleteError(null);
         } else if (staffToToggle) {
@@ -152,7 +191,7 @@ export default function AdminStaffPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [staffToDelete, staffToToggle, staffToResetPwd, showEditModal, showCreateModal]);
+  }, [showBulkDeleteModal, staffToDelete, staffToToggle, staffToResetPwd, showEditModal, showCreateModal]);
 
   const loadData = useCallback(async () => {
     try {
@@ -203,8 +242,7 @@ export default function AdminStaffPage() {
         const name = (staff.name || '').toLowerCase();
         const email = (staff.email || '').toLowerCase();
         const phone = (staff.mobile || staff.phone || '').toLowerCase();
-        const sId = (staff.staffId || staff.staff_id || '').toLowerCase();
-        if (!name.includes(q) && !email.includes(q) && !phone.includes(q) && !sId.includes(q)) {
+        if (!name.includes(q) && !email.includes(q) && !phone.includes(q)) {
           return false;
         }
       }
@@ -225,6 +263,56 @@ export default function AdminStaffPage() {
     return staffList.find((s) => s.role === 'EMPLOYEE_ADMIN') || null;
   }, [staffList]);
 
+  // Bulk selection calculations
+  const selectableStaff = useMemo(() => {
+    return filteredStaff.filter((s) => s.role !== 'SUPER_ADMIN');
+  }, [filteredStaff]);
+
+  const allSelected =
+    selectableStaff.length > 0 &&
+    selectableStaff.every((s) => selectedStaffIds.includes(s.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedStaffIds([]);
+    } else {
+      setSelectedStaffIds(selectableStaff.map((s) => s.id));
+    }
+  };
+
+  const toggleSelectStaff = (id: string) => {
+    setSelectedStaffIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedStaffIds.length === 0) return;
+    try {
+      setBulkDeleting(true);
+      const res = await fetchApi<{
+        totalSelected: number;
+        deletedCount: number;
+        protectedCount: number;
+        deletedStaff: string[];
+        protectedStaff: Array<{ id: string; name: string; email: string; reason: string }>;
+        message: string;
+      }>('/admin/staff/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedStaffIds }),
+      });
+
+      setBulkDeleteResult(res);
+      setSelectedStaffIds([]);
+      loadData();
+    } catch (err: any) {
+      setMsg({ text: err.message || 'Failed to delete selected staff accounts', type: 'error' });
+      setShowBulkDeleteModal(false);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   // Handle Create Staff
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,7 +330,6 @@ export default function AdminStaffPage() {
           name: createForm.name.trim(),
           email: createForm.email.trim(),
           mobile: createForm.mobile?.trim() || undefined,
-          staff_id: createForm.staff_id?.trim() || undefined,
           role: createForm.role,
           status: createForm.status,
           password: createForm.password,
@@ -254,7 +341,6 @@ export default function AdminStaffPage() {
       setCreateError(null);
       setCreateForm({
         name: '',
-        staff_id: '',
         email: '',
         mobile: '',
         role: 'SCANNER_STAFF',
@@ -278,7 +364,6 @@ export default function AdminStaffPage() {
     setEditForm({
       id: staff.id,
       name: staff.name,
-      staff_id: staff.staffId || staff.staff_id || '',
       email: staff.email,
       mobile: staff.mobile || staff.phone || '',
       role: staff.role,
@@ -293,7 +378,7 @@ export default function AdminStaffPage() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEditError(null);
-    if (!editForm.name?.trim() || !editForm.email?.trim() || !editForm.staff_id?.trim()) {
+    if (!editForm.name?.trim() || !editForm.email?.trim()) {
       setEditError('Please fill in required fields.');
       return;
     }
@@ -304,7 +389,6 @@ export default function AdminStaffPage() {
         method: 'PUT',
         body: JSON.stringify({
           name: editForm.name.trim(),
-          staff_id: editForm.staff_id.trim(),
           email: editForm.email.trim(),
           mobile: editForm.mobile?.trim() || undefined,
           role: editForm.role,
@@ -313,6 +397,17 @@ export default function AdminStaffPage() {
           gate_ids: editForm.gate_ids,
         }),
       });
+
+      // If the edited user is the currently logged-in user, refresh auth session immediately
+      if (currentUser && String(currentUser.id) === String(editForm.id)) {
+        try {
+          const meRes = await fetchApi('/auth/me');
+          if (meRes?.user) {
+            setStoredAuthUser(meRes.user);
+            setCurrentUser(meRes.user);
+          }
+        } catch {}
+      }
 
       setShowEditModal(false);
       setEditError(null);
@@ -572,7 +667,7 @@ export default function AdminStaffPage() {
                     </div>
                   )}
                   <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
-                    <span>Staff ID: <strong className="font-mono text-[#7A1113]">{ePassAdmin.staffId || '—'}</strong></span>
+                    <span>Domain: <strong className="text-stone-700">E-Pass</strong></span>
                     <span>Last active: {formatTimeAgo(ePassAdmin.last_activity_at)}</span>
                   </div>
                 </div>
@@ -678,7 +773,7 @@ export default function AdminStaffPage() {
                     </div>
                   )}
                   <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
-                    <span>Staff ID: <strong className="font-mono text-[#7A1113]">{employeeAdmin.staffId || '—'}</strong></span>
+                    <span>Domain: <strong className="text-stone-700">Employee</strong></span>
                     <span>Last active: {formatTimeAgo(employeeAdmin.last_activity_at)}</span>
                   </div>
                 </div>
@@ -747,7 +842,7 @@ export default function AdminStaffPage() {
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             type="text"
-            placeholder="Search staff by name, email, mobile, or staff ID..."
+            placeholder="Search staff by name, email, or mobile..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
@@ -782,14 +877,55 @@ export default function AdminStaffPage() {
         </div>
       </div>
 
+      {/* Bulk Selection Action Bar */}
+      {selectedStaffIds.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#7A1113]/5 border border-[#7A1113]/20 px-4 py-3 rounded-2xl text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-[#7A1113]">
+              {selectedStaffIds.length} staff member(s) selected
+            </span>
+            <span className="text-stone-400">•</span>
+            <span className="text-[11px] text-stone-500">
+              SUPER_ADMIN is protected and cannot be deleted
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedStaffIds([])}
+              className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 font-medium text-xs transition-colors"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={() => {
+                setBulkDeleteResult(null);
+                setShowBulkDeleteModal(true);
+              }}
+              className="px-3.5 py-1.5 rounded-lg bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 transition-colors flex items-center gap-1.5 shadow-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedStaffIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Staff Directory Table */}
       <div className="bg-white rounded-2xl border border-stone-200/70 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#FAF7F2] border-b border-stone-200/70 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
+                <th className="w-10 px-4 py-3.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    title="Select all deletable staff"
+                    className="rounded border-stone-300 text-[#7A1113] focus:ring-[#7A1113] cursor-pointer"
+                  />
+                </th>
                 <th className="px-5 py-3.5">Staff Member</th>
-                <th className="px-5 py-3.5">Staff ID</th>
                 <th className="px-5 py-3.5">Role</th>
                 <th className="px-5 py-3.5">Assigned Gates</th>
                 <th className="px-5 py-3.5">Status</th>
@@ -837,6 +973,25 @@ export default function AdminStaffPage() {
 
                   return (
                     <tr key={staff.id} className="hover:bg-[#FAF7F2]/40 transition-colors">
+                      {/* Selection Checkbox */}
+                      <td className="w-10 px-4 py-4 text-center">
+                        {staff.role === 'SUPER_ADMIN' ? (
+                          <input
+                            type="checkbox"
+                            disabled
+                            title="SUPER_ADMIN account is protected and cannot be deleted"
+                            className="rounded border-stone-200 text-stone-300 cursor-not-allowed opacity-40"
+                          />
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={selectedStaffIds.includes(staff.id)}
+                            onChange={() => toggleSelectStaff(staff.id)}
+                            className="rounded border-stone-300 text-[#7A1113] focus:ring-[#7A1113] cursor-pointer"
+                          />
+                        )}
+                      </td>
+
                       {/* Name & Contact */}
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
@@ -857,11 +1012,6 @@ export default function AdminStaffPage() {
                             )}
                           </div>
                         </div>
-                      </td>
-
-                      {/* Staff ID */}
-                      <td className="px-5 py-4 font-mono font-bold text-[#7A1113] whitespace-nowrap">
-                        {staff.staffId || staff.staff_id || '—'}
                       </td>
 
                       {/* Role Badge */}
@@ -950,35 +1100,39 @@ export default function AdminStaffPage() {
                           </button>
 
                           {/* Toggle Status (opens confirmation modal) */}
-                          <button
-                            onClick={() => setStaffToToggle(staff)}
-                            type="button"
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
-                            title={
-                              staff.isActive
-                                ? 'Deactivate Operator Account'
-                                : 'Activate Operator Account'
-                            }
-                          >
-                            {staff.isActive ? (
-                              <UserX className="w-4 h-4 text-stone-400 hover:text-amber-600 transition-colors" />
-                            ) : (
-                              <UserCheck className="w-4 h-4 text-emerald-600" />
-                            )}
-                          </button>
+                          {staff.role !== 'SUPER_ADMIN' && (
+                            <button
+                              onClick={() => setStaffToToggle(staff)}
+                              type="button"
+                              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
+                              title={
+                                staff.isActive
+                                  ? 'Deactivate Operator Account'
+                                  : 'Activate Operator Account'
+                              }
+                            >
+                              {staff.isActive ? (
+                                <UserX className="w-4 h-4 text-stone-400 hover:text-amber-600 transition-colors" />
+                              ) : (
+                                <UserCheck className="w-4 h-4 text-emerald-600" />
+                              )}
+                            </button>
+                          )}
 
                           {/* Delete Staff (opens confirmation modal) */}
-                          <button
-                            onClick={() => {
-                              setStaffToDelete(staff);
-                              setStaffDeleteError(null);
-                            }}
-                            type="button"
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Delete Staff Account"
-                          >
-                            <Trash2 className="w-4 h-4 text-stone-400 hover:text-rose-600" />
-                          </button>
+                          {staff.role !== 'SUPER_ADMIN' && (
+                            <button
+                              onClick={() => {
+                                setStaffToDelete(staff);
+                                setStaffDeleteError(null);
+                              }}
+                              type="button"
+                              className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Delete Staff Account"
+                            >
+                              <Trash2 className="w-4 h-4 text-stone-400 hover:text-rose-600" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1027,35 +1181,19 @@ export default function AdminStaffPage() {
             )}
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoComplete="name"
-                    placeholder="e.g. Rahul Sharma"
-                    value={createForm.name}
-                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
-                    Staff ID (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    placeholder="e.g. STF-101 (Auto if blank)"
-                    value={createForm.staff_id}
-                    onChange={(e) => setCreateForm({ ...createForm, staff_id: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm uppercase focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoComplete="name"
+                  placeholder="e.g. Rahul Sharma"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1257,34 +1395,18 @@ export default function AdminStaffPage() {
             )}
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoComplete="name"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
-                    Staff ID *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoComplete="off"
-                    value={editForm.staff_id}
-                    onChange={(e) => setEditForm({ ...editForm, staff_id: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm uppercase focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoComplete="name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1323,8 +1445,9 @@ export default function AdminStaffPage() {
                   </label>
                   <select
                     value={editForm.role}
+                    disabled={editForm.role === 'SUPER_ADMIN'}
                     onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
                   >
                     {Object.entries(ROLES_MAP).map(([val, label]) => {
                       const isEPassDisabled =
@@ -1346,6 +1469,11 @@ export default function AdminStaffPage() {
                       );
                     })}
                   </select>
+                  {editForm.role === 'SUPER_ADMIN' && (
+                    <p className="text-[11px] text-amber-700 mt-1 font-medium">
+                      SUPER_ADMIN role cannot be changed.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1354,12 +1482,18 @@ export default function AdminStaffPage() {
                   </label>
                   <select
                     value={editForm.status}
+                    disabled={editForm.role === 'SUPER_ADMIN'}
                     onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] disabled:bg-stone-100 disabled:text-stone-500 disabled:cursor-not-allowed"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                  {editForm.role === 'SUPER_ADMIN' && (
+                    <p className="text-[11px] text-amber-700 mt-1 font-medium">
+                      SUPER_ADMIN must remain active.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1478,12 +1612,6 @@ export default function AdminStaffPage() {
                 <span className="font-bold text-stone-900">{staffToDelete.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-stone-500">Staff ID:</span>
-                <span className="font-mono font-bold text-[#7A1113]">
-                  {staffToDelete.staffId || staffToDelete.staff_id || '—'}
-                </span>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-stone-500">Email:</span>
                 <span className="font-semibold text-stone-700">{staffToDelete.email}</span>
               </div>
@@ -1506,7 +1634,31 @@ export default function AdminStaffPage() {
             </div>
 
             {/* Error / Audit Safety Notice */}
-            {staffDeleteError ? (
+            {isSuperAdmin ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-2">
+                  <div className="flex items-start gap-2 text-amber-900">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                    <span className="font-medium leading-relaxed">
+                      This account has linked operational records. SUPER_ADMIN permission allows the account to be permanently removed, while historical operational records will be preserved.
+                    </span>
+                  </div>
+                </div>
+                {staffToDelete.role === 'COMMERCIAL_AGENT' && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs flex items-start gap-2">
+                    <Shield className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <span>
+                      Any linked sub-agents will be automatically converted into independent master agents (retaining all existing inventory, tickets, and bookings).
+                    </span>
+                  </div>
+                )}
+                {staffDeleteError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium">
+                    {staffDeleteError}
+                  </div>
+                )}
+              </div>
+            ) : staffDeleteError ? (
               <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-3">
                 <div className="flex items-start gap-2 text-rose-800">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
@@ -1552,7 +1704,7 @@ export default function AdminStaffPage() {
                 onClick={handleConfirmDeleteStaff}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
               >
-                {deletingStaff ? 'Checking & Deleting...' : 'Confirm Delete'}
+                {deletingStaff ? 'Checking & Deleting...' : isSuperAdmin ? 'Delete Account' : 'Confirm Delete'}
               </button>
             </div>
           </div>
@@ -1603,12 +1755,6 @@ export default function AdminStaffPage() {
               <div>
                 <span className="text-stone-500">Staff Member: </span>
                 <span className="font-bold text-stone-900">{staffToToggle.name}</span>
-              </div>
-              <div>
-                <span className="text-stone-500">Staff ID: </span>
-                <span className="font-mono font-bold text-[#7A1113]">
-                  {staffToToggle.staffId || staffToToggle.staff_id || '—'}
-                </span>
               </div>
               <div>
                 <span className="text-stone-500">Role: </span>
@@ -1737,6 +1883,144 @@ export default function AdminStaffPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* BULK DELETE CONFIRMATION MODAL */}
+      {mounted && showBulkDeleteModal && createPortal(
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !bulkDeleting) {
+              setShowBulkDeleteModal(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 border border-stone-200 shadow-2xl my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-outfit font-bold text-lg text-stone-900">
+                  Bulk Delete Staff Accounts
+                </h3>
+                <p className="text-xs text-stone-500">
+                  {bulkDeleteResult ? 'Bulk operation completed' : `Review ${selectedStaffIds.length} selected accounts`}
+                </p>
+              </div>
+            </div>
+
+            {bulkDeleteResult ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs space-y-2">
+                  <div className="flex justify-between font-medium">
+                    <span className="text-stone-600">Total Selected:</span>
+                    <span className="font-bold text-stone-900">{bulkDeleteResult.totalSelected}</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span className="text-emerald-700">Successfully Deleted:</span>
+                    <span className="font-bold text-emerald-800">{bulkDeleteResult.deletedCount}</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span className="text-amber-700">Protected Accounts:</span>
+                    <span className="font-bold text-amber-800">{bulkDeleteResult.protectedCount}</span>
+                  </div>
+                </div>
+
+                {bulkDeleteResult.protectedStaff.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 border border-amber-200 bg-amber-50/50 p-2.5 rounded-xl text-xs">
+                    <div className="font-bold text-amber-900 mb-1">
+                      Protected from Deletion ({bulkDeleteResult.protectedCount}):
+                    </div>
+                    {bulkDeleteResult.protectedStaff.map((p) => (
+                      <div key={p.id} className="p-2 bg-white rounded-lg border border-amber-200/80 text-[11px] space-y-0.5">
+                        <div className="font-bold text-stone-900">{p.name} ({p.email})</div>
+                        <div className="text-amber-800">{p.reason}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkDeleteModal(false)}
+                    className="px-4 py-2 rounded-xl bg-stone-800 text-white font-bold text-xs hover:bg-stone-900"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {isSuperAdmin ? (
+                  <>
+                    {(() => {
+                      const hasSelf = selectedStaffIds.some((id) => id === currentUser?.id || staffList.find((s) => s.id === id)?.role === 'SUPER_ADMIN');
+                      const toDeleteCount = selectedStaffIds.length - (hasSelf ? 1 : 0);
+                      return (
+                        <>
+                          <p className="text-xs text-stone-600 leading-relaxed">
+                            <strong className="text-stone-900">{toDeleteCount}</strong> accounts will be deleted. Your current SUPER_ADMIN account will be protected.
+                          </p>
+                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <span>
+                              SUPER_ADMIN permission allows permanently removing selected accounts while preserving all historical operational records.
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-stone-600 leading-relaxed">
+                      You are about to delete <strong className="text-stone-900">{selectedStaffIds.length}</strong> staff account(s). Accounts with linked operational logs (scans, check-ins, pass allocations, or incidents) and single domain administrators are permanently protected from deletion.
+                    </p>
+
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>SUPER_ADMIN Protection:</strong> The SUPER_ADMIN account cannot be selected or deleted. Any accounts with active history will be safely preserved.
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkDeleteModal(false)}
+                    disabled={bulkDeleting}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                    className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {bulkDeleting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Confirm Bulk Delete</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>,
         document.body

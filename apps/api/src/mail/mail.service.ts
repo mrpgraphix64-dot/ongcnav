@@ -309,10 +309,10 @@ export class MailService {
             <tr>
               <td style="padding: 22px 18px; text-align: center;">
                 <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #F5E6B3; font-weight: bold; margin-bottom: 4px;">
-                  ONGC NAVRATRI 2026 &bull; OFFICIAL ENTRY PASS
+                  ONGC NAVRATRI 2026 &bull; OFFICIAL E-PASS
                 </div>
                 <div style="font-size: 12px; font-weight: 700; color: #D4AF37; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
-                  ${passTypeLabel.toUpperCase()} ${data.passes.length > 1 ? `&bull; PASS #${idx + 1}` : ''}
+                  ${passTypeLabel.toUpperCase()} &bull; E-PASS TICKET #${idx + 1}
                 </div>
                 <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin: 4px 0 2px 0;">
                   ${this.escapeHtml(pass.attendeeName || data.customerName)}
@@ -337,16 +337,16 @@ export class MailService {
                 </table>
 
                 <div style="font-size: 13px; font-family: 'Courier New', Courier, monospace; color: #FDE047; font-weight: bold; margin-bottom: 4px;">
-                  Ticket ID: ${pass.ticketNumber}
+                  Ticket Number: ${pass.ticketNumber}
                 </div>
                 <div style="font-size: 12px; color: #F5E6B3; margin-bottom: 14px;">
                   Event Date: ${formattedDates}
                 </div>
 
-                <!-- VIEW MY TICKET SECURE BUTTON -->
+                <!-- VIEW MY E-PASS SECURE BUTTON -->
                 <div>
                   <a href="${passUrl}" style="display: inline-block; background-color: #D4AF37; color: #5A0F21; font-weight: 800; font-size: 13px; padding: 12px 24px; text-decoration: none; border-radius: 8px; letter-spacing: 0.5px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
-                    VIEW MY TICKET &rarr;
+                    VIEW MY E-PASS &rarr;
                   </a>
                 </div>
               </td>
@@ -399,10 +399,10 @@ export class MailService {
                 </tr>
               </table>
 
-              <!-- 3. YOUR DIGITAL PASS(ES) — FIRST MAJOR VISUAL CONTENT -->
+              <!-- 3. YOUR E-PASS — FIRST MAJOR VISUAL CONTENT -->
               <div style="text-align: center; margin-bottom: 14px;">
                 <h2 style="font-size: 20px; font-weight: 800; color: #7A1930; margin: 0 0 4px 0; letter-spacing: 0.5px;">
-                  YOUR DIGITAL PASS${data.passes.length > 1 ? 'ES' : ''}
+                  YOUR E-PASS${data.passes.length > 1 ? 'ES' : ''}
                 </h2>
                 <p style="font-size: 13px; color: #5A4A3E; margin: 0;">
                   Present the QR code below at the entry gate for instant verification.
@@ -420,12 +420,12 @@ export class MailService {
                 </tr>
               </table>
 
-              <!-- 5. BOOKING DETAILS -->
+              <!-- 5. E-PASS BOOKING DETAILS -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FDF9F3; border: 1px solid #E5D5BA; border-radius: 12px; margin-bottom: 24px;">
                 <tr>
                   <td style="padding: 18px;">
                     <div style="font-size: 13px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; border-bottom: 1px solid #E5D5BA; pb-2;">
-                      BOOKING DETAILS
+                      E-PASS BOOKING DETAILS
                     </div>
                     <table width="100%" cellpadding="4" cellspacing="0" border="0" style="font-size: 13px;">
                       <tr>
@@ -641,7 +641,7 @@ This is an automated ticket confirmation. Please do not reply to this email.
 
     return this.sendEmail({
       to: data.customerEmail,
-      subject: `Your ONGC Navratri 2026 Passes - Order #${data.orderNumber}`,
+      subject: `Your ONGC Navratri 2026 E-Pass is Ready 🎉 - Order #${data.orderNumber}`,
       html: htmlContent,
       text: textContent,
       displayName: 'ONGC Navratri 2026',

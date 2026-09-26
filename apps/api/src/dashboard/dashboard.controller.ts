@@ -23,6 +23,8 @@ export class DashboardController {
     UserRole.HELP_DESK,
     UserRole.REGISTRATION_STAFF,
     UserRole.REPORT_VIEWER,
+    UserRole.COMMERCIAL_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
   )
   @ApiOperation({ summary: 'Get real-time operational dashboard stats & live metrics' })
   @ApiResponse({ status: 200, description: 'Live operational stats returned successfully' })

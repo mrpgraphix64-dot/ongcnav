@@ -34,6 +34,7 @@ describe('CommercialService', () => {
         create: jest.fn(),
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       employee: {
         create: jest.fn(),
@@ -753,18 +754,19 @@ describe('CommercialService', () => {
       ],
     };
 
-    it('masks PII and hides QR passes when looked up without mobile verification', async () => {
-      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockPaidOrder);
-
-      const res = await service.getOrder('ORD-COMM-20261011-LOOKUP1');
-
-      expect(res.customerName).toBe('Su***');
-      expect(res.customerMobile).toBe('******3210');
-      expect(res.customerEmail).toBe('***@***');
-      expect(res.passes).toHaveLength(0); // QR passes hidden from unverified lookups
+    it('rejects lookup when order number alone is provided without mobile number', async () => {
+      await expect(service.getOrder('ORD-COMM-20261011-LOOKUP1')).rejects.toThrow(
+        new NotFoundException('Registered mobile number is required.'),
+      );
     });
 
-    it('returns full passes and customer info when verified with matching mobile number', async () => {
+    it('rejects lookup when ticket number alone is provided without mobile number', async () => {
+      await expect(service.getOrder('TK-COMM-10')).rejects.toThrow(
+        new NotFoundException('Registered mobile number is required.'),
+      );
+    });
+
+    it('returns full passes when verified with valid Order Number + matching mobile', async () => {
       prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockPaidOrder);
 
       const res = await service.getOrder('ORD-COMM-20261011-LOOKUP1', '9876543210');
@@ -773,13 +775,64 @@ describe('CommercialService', () => {
       expect(res.customerMobile).toBe('9876543210');
       expect(res.customerEmail).toBe('suresh@example.com');
       expect(res.passes).toHaveLength(1);
+      expect(res.searchedBy).toBe('ORDER');
     });
 
-    it('throws NotFoundException when order number does not exist', async () => {
+    it('returns full passes when verified with valid Ticket Number + matching mobile', async () => {
       prisma.commercialOrder.findUnique.mockResolvedValueOnce(null);
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(10),
+        ticketNumber: 'TK-COMM-10',
+        registrationType: RegistrationType.COMMERCIAL,
+        order: mockPaidOrder,
+      });
 
-      await expect(service.getOrder('ORD-COMM-NONEXISTENT')).rejects.toThrow(
+      const res = await service.getOrder('TK-COMM-10', '9876543210');
+
+      expect(res.customerName).toBe('Suresh Trivedi');
+      expect(res.customerMobile).toBe('9876543210');
+      expect(res.passes).toHaveLength(1);
+      expect(res.searchedBy).toBe('TICKET');
+      expect(res.searchedTicketNumber).toBe('TK-COMM-10');
+    });
+
+    it('rejects retrieval with wrong mobile + valid order', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockPaidOrder);
+
+      await expect(service.getOrder('ORD-COMM-20261011-LOOKUP1', '9999999999')).rejects.toThrow(
+        new NotFoundException('Verification failed: Invalid mobile number for this E-Pass.'),
+      );
+    });
+
+    it('rejects retrieval with wrong mobile + valid ticket', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(null);
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(10),
+        ticketNumber: 'TK-COMM-10',
+        registrationType: RegistrationType.COMMERCIAL,
+        order: mockPaidOrder,
+      });
+
+      await expect(service.getOrder('TK-COMM-10', '9999999999')).rejects.toThrow(
+        new NotFoundException('Verification failed: Invalid mobile number for this E-Pass.'),
+      );
+    });
+
+    it('strictly isolates and rejects employee ticket lookup through commercial retrieval', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(null);
+      prisma.attendee.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.getOrder('TK-EMP-001', '9876543210')).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it('throws generic not-found response when nonexistent identifier is queried', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(null);
+      prisma.attendee.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.getOrder('ORD-NONEXISTENT', '9876543210')).rejects.toThrow(
+        new NotFoundException("E-Pass record 'ORD-NONEXISTENT' not found."),
       );
     });
 

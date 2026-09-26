@@ -135,7 +135,7 @@ describe('StaffService Parity & Functional Tests', () => {
   });
 
   describe('create', () => {
-    it('auto-generates STF-xxx ID if not provided and hashes password', async () => {
+    it('creates staff user and hashes password', async () => {
       const res = await service.create({
         name: 'New Operator',
         email: 'newop@ongc.co.in',
@@ -146,7 +146,7 @@ describe('StaffService Parity & Functional Tests', () => {
 
       expect(prisma.user.create).toHaveBeenCalled();
       const callData = prisma.user.create.mock.calls[0][0].data;
-      expect(callData.staffId).toBe('STF-006');
+      expect(callData.staffId).toBeNull();
       expect(callData.password).not.toBe('ValidPassword123!');
       expect(await bcrypt.compare('ValidPassword123!', callData.password)).toBe(true);
       expect((res as any).password).toBeUndefined();
@@ -157,18 +157,6 @@ describe('StaffService Parity & Functional Tests', () => {
         service.create({
           name: 'Duplicate',
           email: 'duplicate@ongc.co.in',
-          role: UserRole.SCANNER_STAFF,
-        }),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('rejects duplicate staffId with ConflictException', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
-      await expect(
-        service.create({
-          name: 'Duplicate Staff ID',
-          email: 'new@ongc.co.in',
-          staffId: 'STF-EXISTS',
           role: UserRole.SCANNER_STAFF,
         }),
       ).rejects.toThrow(ConflictException);

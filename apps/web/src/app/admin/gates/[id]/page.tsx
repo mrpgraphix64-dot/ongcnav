@@ -303,7 +303,7 @@ export default function AdminGateDetailPage() {
                     {operator.name}
                   </div>
                   <div className="text-[10px] text-ink-soft truncate">
-                    {operator.staff_id || operator.staffId || operator.email}
+                    {operator.email || ''}
                   </div>
                   <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-stone-200 text-stone-700">
                     {operator.role}

@@ -168,8 +168,8 @@ export default function StaffActivityPage() {
               <h2 className="font-outfit font-extrabold text-xl text-stone-900">
                 {user?.name || (loading ? 'Loading Operator...' : 'Staff Member')}
               </h2>
-              <span className="px-2 py-0.5 rounded-md bg-stone-100 text-[#7A1113] text-xs font-mono font-bold">
-                {user?.staffId || user?.staff_id || `STF-${staffId}`}
+              <span className="px-2.5 py-0.5 rounded-md bg-stone-100 text-[#7A1113] text-xs font-bold uppercase tracking-wide">
+                {user?.role ? user.role.replace(/_/g, ' ') : 'Staff'}
               </span>
               {user?.isActive || user?.status === 'active' ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">

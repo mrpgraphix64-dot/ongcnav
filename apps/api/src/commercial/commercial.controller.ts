@@ -107,14 +107,16 @@ export class CommercialAdminController {
   @Post('orders/bulk-delete')
   @Roles(UserRole.SUPER_ADMIN, UserRole.COMMERCIAL_ADMIN)
   @ApiOperation({ summary: 'Bulk delete commercial orders with strict dependency and financial protections' })
-  async bulkDeleteOrders(@Body() body: { orderIds: string[] }) {
-    return this.commercialService.bulkDeleteOrdersAdmin(body?.orderIds || []);
+  async bulkDeleteOrders(@Body() body: { orderIds: string[] }, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return this.commercialService.bulkDeleteOrdersAdmin(body?.orderIds || [], user?.role);
   }
 
   @Delete('orders/:id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.COMMERCIAL_ADMIN)
   @ApiOperation({ summary: 'Delete a single commercial order with strict financial protections' })
-  async deleteOrder(@Param('id') id: string) {
-    return this.commercialService.deleteOrderAdmin(BigInt(id));
+  async deleteOrder(@Param('id') id: string, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return this.commercialService.deleteOrderAdmin(BigInt(id), user?.role);
   }
 }

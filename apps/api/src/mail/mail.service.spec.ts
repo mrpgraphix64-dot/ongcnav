@@ -110,14 +110,14 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.to).toEqual(['aarav@example.com']);
       expect(body.subject).toContain('ORD-COMM-20261011-TEST1');
       expect(body.html).toContain('ONGC NAVRATRI 2026');
-      expect(body.html).toContain('YOUR DIGITAL PASS');
+      expect(body.html).toContain('YOUR E-PASS');
       expect(body.html).toContain('Aarav Patel');
       expect(body.html).toContain('TK-COMM-TEST1-1-A1B2');
       expect(body.html).toContain('SCAN AT ENTRY');
-      expect(body.html).toContain('VIEW MY TICKET');
+      expect(body.html).toContain('VIEW MY E-PASS');
       expect(body.html).toContain('/ticket/secret_token_1234567890abcdef');
       expect(body.html).toContain('This QR code is unique to this pass. Please do not share or forward it.');
-      expect(body.html).toContain('BOOKING DETAILS');
+      expect(body.html).toContain('E-PASS BOOKING DETAILS');
       expect(body.html).toContain('EVENT INFORMATION');
       expect(body.html).toContain('8:00 PM – 4:00 AM');
       expect(body.html).toContain('non-refundable and non-transferable');
@@ -129,8 +129,8 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).toContain('ONGC Navratri 2026 Organizing Committee');
 
       // Verify pass is positioned BEFORE booking details (Pass-first visual hierarchy)
-      const passIndex = body.html.indexOf('YOUR DIGITAL PASS');
-      const bookingDetailsIndex = body.html.indexOf('BOOKING DETAILS');
+      const passIndex = body.html.indexOf('YOUR E-PASS');
+      const bookingDetailsIndex = body.html.indexOf('E-PASS BOOKING DETAILS');
       expect(passIndex).toBeGreaterThan(-1);
       expect(bookingDetailsIndex).toBeGreaterThan(-1);
       expect(passIndex).toBeLessThan(bookingDetailsIndex);
@@ -290,7 +290,7 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).toContain('Mehul Desai');
       expect(body.html).toContain('Rina Desai');
       expect(body.html).toContain('SCAN AT ENTRY');
-      expect(body.html).toContain('VIEW MY TICKET');
+      expect(body.html).toContain('VIEW MY E-PASS');
       expect(body.attachments).toHaveLength(2);
       expect(body.attachments[0].filename).toBe('QR-TK-COMM-SEAS-1-A1.png');
       expect(body.attachments[1].filename).toBe('QR-TK-COMM-SEAS-2-B2.png');

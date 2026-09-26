@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { StaffService } from './staff.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@ongc/shared-types';
@@ -12,6 +12,7 @@ describe('Admin Account Limits & RBAC Safety Tests', () => {
     prisma = {
       user: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn().mockImplementation((args) => {
           if (args?.where?.id) {
             return Promise.resolve({
@@ -46,6 +47,10 @@ describe('Admin Account Limits & RBAC Safety Tests', () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      auditLog: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       gateUser: {
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -420,6 +425,161 @@ describe('Admin Account Limits & RBAC Safety Tests', () => {
       const res: any = await service.findOne(BigInt(10));
       expect(res.password).toBeUndefined();
       expect(res.passwordHash).toBeUndefined();
+    });
+  });
+
+  describe('5. SUPER_ADMIN Single Protected Account Rules', () => {
+    it('rejects creating a second SUPER_ADMIN when one exists', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({
+        id: BigInt(1),
+        name: 'Existing Super Admin',
+        role: UserRole.SUPER_ADMIN,
+        isActive: true,
+      });
+
+      const dto = {
+        name: 'New Super Admin',
+        email: 'super2@ongc.co.in',
+        role: UserRole.SUPER_ADMIN,
+        password: 'Password123!',
+      };
+
+      const caller = { id: BigInt(1), role: UserRole.SUPER_ADMIN };
+      await expect(service.create(dto as any, caller)).rejects.toThrow(
+        new ConflictException('A SUPER_ADMIN account already exists. Only one SUPER_ADMIN is permitted.'),
+      );
+    });
+
+    it('rejects promoting an existing staff to SUPER_ADMIN when one already exists', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: BigInt(5),
+        name: 'Regular Staff',
+        email: 'staff@ongc.co.in',
+        role: UserRole.SCANNER_STAFF,
+        isActive: true,
+      });
+
+      prisma.user.findFirst.mockResolvedValueOnce({
+        id: BigInt(1),
+        name: 'Existing Super Admin',
+        role: UserRole.SUPER_ADMIN,
+        isActive: true,
+      });
+
+      const caller = { id: BigInt(1), role: UserRole.SUPER_ADMIN };
+      await expect(
+        service.update(BigInt(5), { role: UserRole.SUPER_ADMIN } as any, caller),
+      ).rejects.toThrow(
+        new ConflictException('A SUPER_ADMIN account already exists. Only one SUPER_ADMIN is permitted.'),
+      );
+    });
+
+    it('rejects changing/demoting the role of existing SUPER_ADMIN', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: BigInt(1),
+        name: 'Existing Super Admin',
+        email: 'super@ongc.co.in',
+        role: UserRole.SUPER_ADMIN,
+        isActive: true,
+      });
+
+      const caller = { id: BigInt(1), role: UserRole.SUPER_ADMIN };
+      await expect(
+        service.update(BigInt(1), { role: UserRole.EVENT_ADMIN } as any, caller),
+      ).rejects.toThrow(
+        new ForbiddenException('The SUPER_ADMIN role cannot be changed or demoted.'),
+      );
+    });
+
+    it('rejects deactivating the SUPER_ADMIN account via update', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: BigInt(1),
+        name: 'Existing Super Admin',
+        email: 'super@ongc.co.in',
+        role: UserRole.SUPER_ADMIN,
+        isActive: true,
+      });
+
+      const caller = { id: BigInt(1), role: UserRole.SUPER_ADMIN };
+      await expect(
+        service.update(BigInt(1), { isActive: false } as any, caller),
+      ).rejects.toThrow(
+        new ForbiddenException('You cannot deactivate your own SUPER_ADMIN account.'),
+      );
+    });
+
+    it('rejects deactivating the SUPER_ADMIN account via toggleStatus', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: BigInt(1),
+        name: 'Existing Super Admin',
+        email: 'super@ongc.co.in',
+        role: UserRole.SUPER_ADMIN,
+        isActive: true,
+      });
+
+      await expect(service.toggleStatus(BigInt(1))).rejects.toThrow(
+        new ForbiddenException('The SUPER_ADMIN account cannot be deactivated.'),
+      );
+    });
+
+    it('rejects deleting the SUPER_ADMIN account', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: BigInt(1),
+        name: 'Existing Super Admin',
+        email: 'super@ongc.co.in',
+        role: UserRole.SUPER_ADMIN,
+        isActive: true,
+      });
+
+      const caller = { id: BigInt(99), role: UserRole.SUPER_ADMIN };
+      await expect(service.deleteStaff(BigInt(1), caller)).rejects.toThrow(
+        new BadRequestException('The SUPER_ADMIN account cannot be deleted.'),
+      );
+    });
+
+    it('bulk delete protects SUPER_ADMIN and reports clear message', async () => {
+      prisma.user.findMany.mockResolvedValueOnce([
+        {
+          id: BigInt(1),
+          name: 'Super Admin User',
+          email: 'super@ongc.co.in',
+          role: UserRole.SUPER_ADMIN,
+          isActive: true,
+          gateUsers: [],
+          subAgents: [],
+          allocations: [],
+          givenAllocations: [],
+          agentOrders: [],
+          scannedCheckins: [],
+          scannedLogs: [],
+          reportedIncidents: [],
+          resolvedIncidents: [],
+        },
+        {
+          id: BigInt(20),
+          name: 'Temporary Staff',
+          email: 'temp@ongc.co.in',
+          role: UserRole.SCANNER_STAFF,
+          isActive: true,
+          gateUsers: [],
+          subAgents: [],
+          allocations: [],
+          givenAllocations: [],
+          agentOrders: [],
+          scannedCheckins: [],
+          scannedLogs: [],
+          reportedIncidents: [],
+          resolvedIncidents: [],
+        },
+      ]);
+
+      const caller = { id: BigInt(99), role: UserRole.SUPER_ADMIN };
+      const result = await service.bulkDeleteStaff([BigInt(1), BigInt(20)], caller);
+
+      expect(result.deletedCount).toBe(1);
+      expect(result.protectedCount).toBe(1);
+      expect(result.deletedStaff).toEqual(['20']);
+      expect(result.protectedStaff[0].reason).toBe('SUPER_ADMIN cannot be deleted.');
     });
   });
 });

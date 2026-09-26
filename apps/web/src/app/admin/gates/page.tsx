@@ -17,6 +17,8 @@ import {
   RefreshCw,
   Search,
   Calendar,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 
@@ -94,6 +96,11 @@ export default function AdminGatesPage() {
 
   // Safe Delete Confirmation Modal
   const [gateToDelete, setGateToDelete] = useState<GateRecord | null>(null);
+
+  // Bulk Selection & Delete
+  const [selectedGateIds, setSelectedGateIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -298,6 +305,63 @@ export default function AdminGatesPage() {
     }
   };
 
+  // Bulk Selection Handlers
+  const handleToggleSelectGate = (id: string) => {
+    setSelectedGateIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllGates = () => {
+    if (selectedGateIds.size === filteredGates.length && filteredGates.length > 0) {
+      setSelectedGateIds(new Set());
+    } else {
+      setSelectedGateIds(new Set(filteredGates.map((g) => g.id)));
+    }
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedGateIds.size === 0) return;
+    try {
+      setBulkDeleteLoading(true);
+      const res = await fetchApi('/admin/gates/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids: Array.from(selectedGateIds) }),
+      });
+      setShowBulkDeleteModal(false);
+      setSelectedGateIds(new Set());
+      await loadData();
+
+      const deactivatedCount = res?.deactivatedCount ?? res?.deactivatedGates?.length ?? 0;
+      const deletedCount = res?.deletedCount ?? 0;
+
+      if (deactivatedCount > 0) {
+        setMsg({
+          text: res?.message || `${deletedCount} gate(s) deleted. ${deactivatedCount} gate(s) had historical entry records and were deactivated instead.`,
+          type: 'warning',
+        });
+      } else {
+        setMsg({
+          text: res?.message || `Successfully deleted ${deletedCount} gate(s).`,
+          type: 'success',
+        });
+      }
+    } catch (e: any) {
+      setMsg({
+        text: e.message || 'Failed to delete selected gates',
+        type: 'error',
+      });
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
   // Multi-select helper
   const toggleStaffSelection = (
     staffId: string,
@@ -414,25 +478,57 @@ export default function AdminGatesPage() {
         </div>
       </div>
 
-      {/* Search / Filter Bar */}
+      {/* Search / Filter & Bulk Actions Bar */}
       {gates.length > 0 && (
-        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-stone-200/70 max-w-md shadow-sm">
-          <Search className="w-4 h-4 text-stone-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search gate name, code, type, or landmark..."
-            className="w-full text-xs bg-transparent focus:outline-none text-ink placeholder:text-stone-400"
-          />
-          {searchQuery && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-stone-200/70 max-w-md w-full shadow-sm">
+            <Search className="w-4 h-4 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search gate name, code, type, or landmark..."
+              className="w-full text-xs bg-transparent focus:outline-none text-ink placeholder:text-stone-400"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setSearchQuery('')}
-              className="text-stone-400 hover:text-stone-600"
+              type="button"
+              onClick={handleSelectAllGates}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-semibold text-ink-soft hover:text-ink hover:bg-stone-50 transition-colors shadow-xs"
             >
-              <X className="w-3.5 h-3.5" />
+              {selectedGateIds.size > 0 && selectedGateIds.size === filteredGates.length ? (
+                <CheckSquare className="w-4 h-4 text-maroon" />
+              ) : (
+                <Square className="w-4 h-4 text-stone-400" />
+              )}
+              <span>
+                {selectedGateIds.size > 0 && selectedGateIds.size === filteredGates.length
+                  ? 'Deselect All'
+                  : 'Select All'}
+              </span>
             </button>
-          )}
+
+            {selectedGateIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Selected ({selectedGateIds.size})</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -444,27 +540,46 @@ export default function AdminGatesPage() {
           const checkinCount =
             gate.today_checkins_count ?? gate.todayCheckinCount ?? 0;
           const assignedCount = gate.users?.length ?? 0;
+          const isSelected = selectedGateIds.has(gate.id);
 
           return (
             <div
               key={gate.id}
-              className="bg-white rounded-2xl border border-stone-200/70 shadow-sm p-5 flex flex-col justify-between hover:border-gold/50 transition-all group"
+              className={`bg-white rounded-2xl border ${
+                isSelected
+                  ? 'border-maroon ring-2 ring-maroon/20'
+                  : 'border-stone-200/70 hover:border-gold/50'
+              } shadow-sm p-5 flex flex-col justify-between transition-all group`}
             >
               <div className="space-y-3.5">
-                {/* Header: Name, Code & Status */}
+                {/* Header: Checkbox, Name, Code & Status */}
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-md bg-maroon text-gold-light text-xs font-black font-outfit uppercase tracking-wider">
-                        {gate.code || gate.gateNumber || `G${gate.id}`}
-                      </span>
-                      <h3 className="font-outfit font-bold text-lg text-ink group-hover:text-maroon transition-colors">
-                        {gate.name}
-                      </h3>
-                    </div>
-                    <div className="text-xs text-ink-soft mt-1 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-gold shrink-0" />
-                      <span>{gate.location || 'Location not specified'}</span>
+                  <div className="flex items-start gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSelectGate(gate.id)}
+                      className="mt-0.5 text-stone-400 hover:text-maroon transition-colors"
+                      title={isSelected ? 'Deselect' : 'Select'}
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-maroon" />
+                      ) : (
+                        <Square className="w-4 h-4 text-stone-300" />
+                      )}
+                    </button>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-maroon text-gold-light text-xs font-black font-outfit uppercase tracking-wider">
+                          {gate.code || gate.gateNumber || `G${gate.id}`}
+                        </span>
+                        <h3 className="font-outfit font-bold text-lg text-ink group-hover:text-maroon transition-colors">
+                          {gate.name}
+                        </h3>
+                      </div>
+                      <div className="text-xs text-ink-soft mt-1 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-gold shrink-0" />
+                        <span>{gate.location || 'Location not specified'}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -742,7 +857,7 @@ export default function AdminGatesPage() {
                       />
                       <span className="font-semibold">{staff.name}</span>
                       <span className="text-ink-soft">
-                        ({staff.staff_id || staff.staffId || staff.role})
+                        ({staff.role || 'Staff'})
                       </span>
                     </label>
                   ))}
@@ -915,7 +1030,7 @@ export default function AdminGatesPage() {
                       />
                       <span className="font-semibold">{staff.name}</span>
                       <span className="text-ink-soft">
-                        ({staff.staff_id || staff.staffId || staff.role})
+                        ({staff.role || 'Staff'})
                       </span>
                     </label>
                   ))}
@@ -988,6 +1103,53 @@ export default function AdminGatesPage() {
                 {actionLoading === `delete-${gateToDelete.id}`
                   ? 'Processing...'
                   : 'Confirm Removal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK DELETE CONFIRMATION MODAL */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-outfit font-bold text-lg text-ink">
+                  Bulk Delete Gates
+                </h3>
+                <span className="text-xs text-ink-soft">
+                  {selectedGateIds.size} gate{selectedGateIds.size > 1 ? 's' : ''} selected
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-ink-soft leading-relaxed">
+              Are you sure you want to remove the {selectedGateIds.size} selected gate{selectedGateIds.size > 1 ? 's' : ''}?
+            </p>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-normal">
+              <strong>Historical Data Protection:</strong> Any selected gates that have historical scan or check-in records will <em>not</em> be deleted. They will be safely deactivated to preserve complete audit and telemetry reporting.
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={bulkDeleteLoading}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                disabled={bulkDeleteLoading}
+                className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50"
+              >
+                {bulkDeleteLoading ? 'Processing...' : `Confirm Delete (${selectedGateIds.size})`}
               </button>
             </div>
           </div>

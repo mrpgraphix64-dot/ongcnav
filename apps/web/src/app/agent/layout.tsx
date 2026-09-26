@@ -3,6 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
+import {
+  setStoredAuthUser,
+  clearStoredAuth,
+  subscribeToAuthSync,
+  isAgentRole,
+  getPortalForRole,
+} from '@/lib/auth-session';
 
 export default function AgentLayout({
   children,
@@ -33,32 +40,29 @@ export default function AgentLayout({
 
         if (res?.user) {
           const role = String(res.user.role || '').toUpperCase();
-          const allowedRoles = [
-            'COMMERCIAL_AGENT',
-            'COMMERCIAL_SUB_AGENT',
-            'SUPER_ADMIN',
-            'COMMERCIAL_ADMIN',
-          ];
 
-          if (allowedRoles.includes(role)) {
+          if (isAgentRole(role)) {
             setAuthorized(true);
             setAuthChecking(false);
-            try {
-              localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
-            } catch {}
+            setStoredAuthUser(res.user);
             return;
           }
+
+          // User is authenticated but NOT an agent (e.g. SUPER_ADMIN, COMMERCIAL_ADMIN, SCANNER_STAFF)
+          // Administrative sessions must not operate inside the Agent portal
+          const targetPortal = getPortalForRole(role);
+          router.replace(targetPortal);
+          return;
         }
 
-        // If user is authenticated but not an allowed agent/admin role, redirect
+        // No user returned -> redirect to agent login
+        clearStoredAuth();
         const redirectQuery = pathname && pathname !== '/agent' ? `?redirect=${encodeURIComponent(pathname)}` : '';
         router.replace(`/agent/login${redirectQuery}`);
       } catch {
         // Unauthenticated -> redirect to /agent/login
         if (isMounted) {
-          try {
-            localStorage.removeItem('ongc_admin_user');
-          } catch {}
+          clearStoredAuth();
           const redirectQuery = pathname && pathname !== '/agent' ? `?redirect=${encodeURIComponent(pathname)}` : '';
           router.replace(`/agent/login${redirectQuery}`);
         }
@@ -67,8 +71,41 @@ export default function AgentLayout({
 
     checkAgentAuth();
 
+    // Cross-tab real-time auth synchronization
+    const unsubscribe = subscribeToAuthSync((event) => {
+      if (!isMounted) return;
+
+      if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
+        setAuthorized(false);
+        setAuthChecking(false);
+        router.replace('/agent/login');
+      } else if (event.type === 'LOGIN' && event.user) {
+        if (isAgentRole(event.user.role)) {
+          setAuthorized(true);
+          setAuthChecking(false);
+        } else {
+          // Another tab logged in as non-agent (e.g. SUPER_ADMIN)
+          setAuthorized(false);
+          const targetPortal = getPortalForRole(event.user.role);
+          router.replace(targetPortal);
+        }
+      }
+    });
+
+    // Re-verify session when tab becomes visible or gains focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !isLoginPage) {
+        checkAgentAuth();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
     return () => {
       isMounted = false;
+      unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, [pathname, isLoginPage, router]);
 

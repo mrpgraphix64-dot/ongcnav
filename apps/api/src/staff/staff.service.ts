@@ -16,7 +16,9 @@ export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(role?: string, status?: string, search?: string) {
-    const where: any = {};
+    const where: any = {
+      email: { not: 'system-archive@ongc.internal' },
+    };
 
     if (role && role !== 'ALL') {
       where.role = role as any;
@@ -31,7 +33,6 @@ export class StaffService {
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
-        { staffId: { contains: q, mode: 'insensitive' } },
         { phone: { contains: q, mode: 'insensitive' } },
       ];
     }
@@ -97,6 +98,16 @@ export class StaffService {
       throw new ForbiddenException('Only a Super Admin can create domain administrator accounts.');
     }
 
+    // Hard rule: Exactly ONE active SUPER_ADMIN
+    if (dto.role === UserRole.SUPER_ADMIN) {
+      const existingSuper = await this.prisma.user.findFirst({
+        where: { role: UserRole.SUPER_ADMIN },
+      });
+      if (existingSuper) {
+        throw new ConflictException('A SUPER_ADMIN account already exists. Only one SUPER_ADMIN is permitted.');
+      }
+    }
+
     const email = dto.email.trim().toLowerCase();
     const existingEmail = await this.prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -105,22 +116,7 @@ export class StaffService {
       throw new ConflictException('A staff account with this email address already exists.');
     }
 
-    let staffId = (dto.staff_id || dto.staffId)?.trim().toUpperCase() || null;
-    if (staffId) {
-      const existingStaffId = await this.prisma.user.findUnique({
-        where: { staffId },
-      });
-      if (existingStaffId) {
-        throw new ConflictException('This Staff ID is already assigned to another staff member.');
-      }
-    } else {
-      let count = (await this.prisma.user.count()) + 1;
-      staffId = `STF-${String(count).padStart(3, '0')}`;
-      while (await this.prisma.user.findUnique({ where: { staffId } })) {
-        count++;
-        staffId = `STF-${String(count).padStart(3, '0')}`;
-      }
-    }
+    let staffId = null;
 
     const rawPassword = dto.password || 'OngcPass@2026';
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
@@ -132,7 +128,6 @@ export class StaffService {
         ? dto.status === 'active'
         : true;
 
-    // Hard rule: Maximum 1 active COMMERCIAL_ADMIN and 1 active EMPLOYEE_ADMIN
     if (isActive) {
       if (dto.role === UserRole.COMMERCIAL_ADMIN) {
         const existingAdmin = await this.prisma.user.findFirst({
@@ -158,7 +153,19 @@ export class StaffService {
 
     try {
       const created = await this.prisma.$transaction(async (tx) => {
-        // Concurrency lock: postgres advisory lock per domain role
+        // Concurrency lock: postgres advisory lock per domain / super role
+        if (dto.role === UserRole.SUPER_ADMIN) {
+          if (typeof tx.$executeRaw === 'function') {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('unique_super_admin_account'))`;
+          }
+          const concurrentSuper = await tx.user.findFirst({
+            where: { role: UserRole.SUPER_ADMIN },
+          });
+          if (concurrentSuper) {
+            throw new ConflictException('A SUPER_ADMIN account already exists. Only one SUPER_ADMIN is permitted.');
+          }
+        }
+
         if (isActive && (dto.role === UserRole.COMMERCIAL_ADMIN || dto.role === UserRole.EMPLOYEE_ADMIN)) {
           if (typeof tx.$executeRaw === 'function') {
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`unique_active_admin_${dto.role}`}))`;
@@ -177,7 +184,7 @@ export class StaffService {
             name: dto.name.trim(),
             email,
             phone: (dto.mobile || dto.phone)?.trim() || null,
-            staffId,
+            staffId: null,
             role: dto.role as any,
             isActive,
             password: hashedPassword,
@@ -278,19 +285,29 @@ export class StaffService {
       updateData.phone = phoneVal || null;
     }
 
-    if (dto.staff_id !== undefined || dto.staffId !== undefined) {
-      const sId = (dto.staff_id ?? dto.staffId)?.trim().toUpperCase();
-      if (sId) {
-        const duplicate = await this.prisma.user.findFirst({
-          where: {
-            staffId: sId,
-            id: { not: id },
-          },
-        });
-        if (duplicate) {
-          throw new ConflictException('This Staff ID is already assigned to another staff member.');
+    // SUPER_ADMIN protections
+    if (existing.role === UserRole.SUPER_ADMIN) {
+      if (dto.role !== undefined && dto.role !== UserRole.SUPER_ADMIN) {
+        throw new ForbiddenException('The SUPER_ADMIN role cannot be changed or demoted.');
+      }
+      if (dto.isActive === false || dto.status === 'inactive') {
+        if (
+          currentUser &&
+          currentUser.role === UserRole.SUPER_ADMIN &&
+          (currentUser.id === id || String(currentUser.id) === String(id))
+        ) {
+          throw new ForbiddenException('You cannot deactivate your own SUPER_ADMIN account.');
         }
-        updateData.staffId = sId;
+        throw new ForbiddenException('The SUPER_ADMIN account cannot be deactivated.');
+      }
+    }
+
+    if (dto.role === UserRole.SUPER_ADMIN && existing.role !== UserRole.SUPER_ADMIN) {
+      const existingSuper = await this.prisma.user.findFirst({
+        where: { role: UserRole.SUPER_ADMIN },
+      });
+      if (existingSuper) {
+        throw new ConflictException('A SUPER_ADMIN account already exists. Only one SUPER_ADMIN is permitted.');
       }
     }
 
@@ -378,12 +395,23 @@ export class StaffService {
     }
   }
 
-  async toggleStatus(id: bigint) {
+  async toggleStatus(id: bigint, currentUser?: { id: bigint | string; role: string }) {
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
     if (!user) {
       throw new NotFoundException(`Staff user with ID ${id} not found`);
+    }
+
+    if (user.role === UserRole.SUPER_ADMIN) {
+      if (
+        currentUser &&
+        currentUser.role === UserRole.SUPER_ADMIN &&
+        (currentUser.id === id || String(currentUser.id) === String(id))
+      ) {
+        throw new ForbiddenException('You cannot deactivate your own SUPER_ADMIN account.');
+      }
+      throw new ForbiddenException('The SUPER_ADMIN account cannot be deactivated.');
     }
 
     // If activating an inactive domain admin, enforce maximum 1 active admin rule
@@ -543,9 +571,34 @@ export class StaffService {
     return { message: 'Gate unassigned successfully' };
   }
 
+  async getOrCreateSystemArchiveUser(tx?: any): Promise<bigint> {
+    const client = tx || this.prisma;
+    const existing = await client.user.findFirst({
+      where: { email: 'system-archive@ongc.internal' },
+    });
+    if (existing) {
+      return existing.id;
+    }
+    const created = await client.user.create({
+      data: {
+        name: 'Archived System Actor',
+        email: 'system-archive@ongc.internal',
+        phone: '0000000000',
+        staffId: 'SYS-ARCHIVE',
+        password: 'N/A',
+        role: UserRole.GATE_OPERATOR,
+        isActive: false,
+      },
+    });
+    return created.id;
+  }
+
   async deleteStaff(id: bigint, currentUser: { id: bigint | string; role: string }) {
     const currentUserId = typeof currentUser.id === 'string' ? BigInt(currentUser.id) : currentUser.id;
     if (currentUserId === id) {
+      if (currentUser.role === UserRole.SUPER_ADMIN) {
+        throw new ForbiddenException('You cannot delete your own SUPER_ADMIN account.');
+      }
       throw new BadRequestException('You cannot delete your own logged-in account.');
     }
 
@@ -553,10 +606,10 @@ export class StaffService {
       where: { id },
       include: {
         gateUsers: true,
-        subAgents: { select: { id: true } },
-        allocations: { select: { id: true } },
+        subAgents: { select: { id: true, name: true, email: true, staffId: true, role: true } },
+        allocations: { include: { events: true } },
         givenAllocations: { select: { id: true } },
-        agentOrders: { select: { id: true } },
+        agentOrders: true,
         scannedCheckins: { select: { id: true } },
         scannedLogs: { select: { id: true } },
         reportedIncidents: { select: { id: true } },
@@ -568,98 +621,490 @@ export class StaffService {
       throw new NotFoundException(`Staff user with ID ${id} not found`);
     }
 
-    // RBAC & Domain isolation
+    if (user.role === UserRole.SUPER_ADMIN) {
+      throw new BadRequestException('The SUPER_ADMIN account cannot be deleted.');
+    }
+
+    const isSuperAdmin = currentUser.role === UserRole.SUPER_ADMIN;
     const currentRole = currentUser.role;
     const targetRole = user.role as string;
 
-    // Only SUPER_ADMIN can manage SUPER_ADMIN accounts
-    if (targetRole === UserRole.SUPER_ADMIN) {
-      if (currentRole !== UserRole.SUPER_ADMIN) {
-        throw new ForbiddenException('Only a Super Admin can manage Super Admin accounts.');
+    // RBAC & Domain isolation for non-SUPER_ADMIN callers
+    if (!isSuperAdmin) {
+      const allowedAdminRoles = [
+        UserRole.SUPER_ADMIN,
+        UserRole.EVENT_ADMIN,
+        UserRole.COMMERCIAL_ADMIN,
+        UserRole.EMPLOYEE_ADMIN,
+      ];
+      if (!allowedAdminRoles.includes(currentRole as UserRole)) {
+        throw new ForbiddenException('You do not have permission to delete staff members.');
       }
-      const superAdminCount = await this.prisma.user.count({
-        where: { role: UserRole.SUPER_ADMIN, isActive: true },
-      });
-      if (superAdminCount <= 1) {
-        throw new BadRequestException('Cannot delete the last remaining active Super Admin account.');
-      }
-    }
 
-    // Commercial Admin cannot delete Employee Admin, Super Admin, or Event Admin
-    if (currentRole === UserRole.COMMERCIAL_ADMIN) {
+      // Commercial Admin cannot delete Employee Admin, Super Admin, or Event Admin
+      if (currentRole === UserRole.COMMERCIAL_ADMIN) {
+        if (
+          targetRole === UserRole.EMPLOYEE_ADMIN ||
+          targetRole === UserRole.SUPER_ADMIN ||
+          targetRole === UserRole.EVENT_ADMIN
+        ) {
+          throw new ForbiddenException('Commercial Admin cannot delete administrators outside their domain.');
+        }
+      }
+
+      // Employee Admin cannot delete Commercial Admin, Agents, Super Admin, or Event Admin
+      if (currentRole === UserRole.EMPLOYEE_ADMIN) {
+        if (
+          targetRole === UserRole.COMMERCIAL_ADMIN ||
+          targetRole === UserRole.COMMERCIAL_AGENT ||
+          targetRole === UserRole.COMMERCIAL_SUB_AGENT ||
+          targetRole === UserRole.SUPER_ADMIN ||
+          targetRole === UserRole.EVENT_ADMIN
+        ) {
+          throw new ForbiddenException('Employee Admin cannot delete administrators or agents outside their domain.');
+        }
+      }
+
+      // Prevent non-admins from deleting admins
       if (
-        targetRole === UserRole.EMPLOYEE_ADMIN ||
-        targetRole === UserRole.SUPER_ADMIN ||
-        targetRole === UserRole.EVENT_ADMIN
+        currentRole !== UserRole.EVENT_ADMIN &&
+        (targetRole === UserRole.SUPER_ADMIN || targetRole === UserRole.EVENT_ADMIN)
       ) {
-        throw new ForbiddenException('Commercial Admin cannot delete administrators outside their domain.');
+        throw new ForbiddenException('Insufficient permissions to delete administrator accounts.');
+      }
+
+      // Last required domain administrator protections
+      if (targetRole === UserRole.COMMERCIAL_ADMIN) {
+        const count = await this.prisma.user.count({
+          where: { role: UserRole.COMMERCIAL_ADMIN, isActive: true },
+        });
+        if (count <= 1) {
+          throw new BadRequestException('Cannot delete the last remaining active E-Pass Admin account.');
+        }
+      }
+      if (targetRole === UserRole.EMPLOYEE_ADMIN) {
+        const count = await this.prisma.user.count({
+          where: { role: UserRole.EMPLOYEE_ADMIN, isActive: true },
+        });
+        if (count <= 1) {
+          throw new BadRequestException('Cannot delete the last remaining active Employee Admin account.');
+        }
+      }
+
+      // Check for linked operational records
+      const hasOperationalRecords =
+        user.scannedCheckins.length > 0 ||
+        user.scannedLogs.length > 0 ||
+        user.agentOrders.length > 0 ||
+        (user.allocations && user.allocations.length > 0) ||
+        user.givenAllocations.length > 0 ||
+        user.subAgents.length > 0 ||
+        user.reportedIncidents.length > 0 ||
+        user.resolvedIncidents.length > 0;
+
+      if (hasOperationalRecords) {
+        throw new BadRequestException(
+          'This staff account has linked operational records and cannot be permanently deleted. Deactivate the account instead.'
+        );
       }
     }
 
-    // Employee Admin cannot delete Commercial Admin, Agents, Super Admin, or Event Admin
-    if (currentRole === UserRole.EMPLOYEE_ADMIN) {
-      if (
-        targetRole === UserRole.COMMERCIAL_ADMIN ||
-        targetRole === UserRole.COMMERCIAL_AGENT ||
-        targetRole === UserRole.COMMERCIAL_SUB_AGENT ||
-        targetRole === UserRole.SUPER_ADMIN ||
-        targetRole === UserRole.EVENT_ADMIN
-      ) {
-        throw new ForbiddenException('Employee Admin cannot delete administrators or agents outside their domain.');
-      }
-    }
-
-    // Prevent non-admins from deleting admins
-    if (
-      currentRole !== UserRole.SUPER_ADMIN &&
-      currentRole !== UserRole.EVENT_ADMIN &&
-      (targetRole === UserRole.SUPER_ADMIN || targetRole === UserRole.EVENT_ADMIN)
-    ) {
-      throw new ForbiddenException('Insufficient permissions to delete administrator accounts.');
-    }
-
-    // Last required domain administrator protections
-    if (targetRole === UserRole.COMMERCIAL_ADMIN) {
-      const count = await this.prisma.user.count({
-        where: { role: UserRole.COMMERCIAL_ADMIN, isActive: true },
-      });
-      if (count <= 1) {
-        throw new BadRequestException('Cannot delete the last remaining active E-Pass Admin account.');
-      }
-    }
-    if (targetRole === UserRole.EMPLOYEE_ADMIN) {
-      const count = await this.prisma.user.count({
-        where: { role: UserRole.EMPLOYEE_ADMIN, isActive: true },
-      });
-      if (count <= 1) {
-        throw new BadRequestException('Cannot delete the last remaining active Employee Admin account.');
-      }
-    }
-
-    // Check for linked operational records
-    const hasOperationalRecords =
-      user.scannedCheckins.length > 0 ||
-      user.scannedLogs.length > 0 ||
-      user.agentOrders.length > 0 ||
-      user.allocations.length > 0 ||
-      user.givenAllocations.length > 0 ||
-      user.subAgents.length > 0 ||
-      user.reportedIncidents.length > 0 ||
-      user.resolvedIncidents.length > 0;
-
-    if (hasOperationalRecords) {
-      throw new BadRequestException(
-        'This staff account has linked operational records and cannot be permanently deleted. Deactivate the account instead.'
-      );
-    }
-
+    // Execution with safe historical operational record preservation
     await this.prisma.$transaction(async (tx) => {
+      // 1. Automatically convert sub-agents into independent master agents and record hierarchy change in audit history
+      if (user.subAgents && user.subAgents.length > 0) {
+        await tx.user.updateMany({
+          where: { parentAgentId: id },
+          data: {
+            role: UserRole.COMMERCIAL_AGENT,
+            parentAgentId: null,
+          },
+        });
+
+        for (const sub of user.subAgents) {
+          await tx.auditLog.create({
+            data: {
+              userId: sub.id,
+              action: 'SUB_AGENT_CONVERTED_TO_MASTER',
+              details: {
+                subAgentId: sub.id.toString(),
+                subAgentName: sub.name,
+                subAgentEmail: (sub as any).email || null,
+                subAgentStaffId: (sub as any).staffId || null,
+                previousRole: (sub as any).role || UserRole.COMMERCIAL_SUB_AGENT,
+                newRole: UserRole.COMMERCIAL_AGENT,
+                previousParentAgentId: user.id.toString(),
+                previousParentAgentName: user.name,
+                previousParentAgentEmail: user.email,
+                previousParentAgentStaffId: user.staffId || null,
+                changeReason: `Master agent '${user.name}' was administratively deleted by SUPER_ADMIN. Sub-agent automatically converted to independent master agent.`,
+                inventoryPreserved: true,
+                allocationsPreserved: true,
+                ticketsPreserved: true,
+                bookingsPreserved: true,
+                performedByUserId: currentUserId.toString(),
+                timestamp: new Date().toISOString(),
+              },
+            },
+          });
+        }
+      }
+
+      // 2. Preserve orders by snapshotting original agent metadata and detaching foreign key
+      if (user.agentOrders && user.agentOrders.length > 0) {
+        for (const order of user.agentOrders) {
+          const existingMeta = (order.metadata as any) || {};
+          await tx.commercialOrder.update({
+            where: { id: order.id },
+            data: {
+              agentId: null,
+              metadata: {
+                ...existingMeta,
+                originalAgent: {
+                  id: user.id.toString(),
+                  name: user.name,
+                  email: user.email,
+                  staffId: user.staffId,
+                  role: user.role,
+                },
+              },
+            },
+          });
+        }
+      }
+
+      // 3. Preserve allocations and allocation audit events
+      if (user.allocations && user.allocations.length > 0) {
+        const sysArchiveId = await this.getOrCreateSystemArchiveUser(tx);
+        for (const alloc of user.allocations) {
+          if (alloc.events && alloc.events.length > 0) {
+            const existingSysAlloc = await tx.agentAllocation.findUnique({
+              where: {
+                agentId_passType: {
+                  agentId: sysArchiveId,
+                  passType: alloc.passType,
+                },
+              },
+            });
+            if (existingSysAlloc) {
+              await tx.allocationEvent.updateMany({
+                where: { allocationId: alloc.id },
+                data: { allocationId: existingSysAlloc.id },
+              });
+              await tx.agentAllocation.delete({ where: { id: alloc.id } });
+            } else {
+              await tx.agentAllocation.update({
+                where: { id: alloc.id },
+                data: { agentId: sysArchiveId },
+              });
+            }
+          } else {
+            await tx.agentAllocation.delete({ where: { id: alloc.id } });
+          }
+        }
+      }
+
+      // 4. Preserve reported incidents by reassigning to archive actor
+      if (user.reportedIncidents && user.reportedIncidents.length > 0) {
+        const sysArchiveId = await this.getOrCreateSystemArchiveUser(tx);
+        const incidents = await tx.incident.findMany({ where: { reportedById: id } });
+        for (const inc of incidents) {
+          await tx.incident.update({
+            where: { id: inc.id },
+            data: {
+              reportedById: sysArchiveId,
+              description: `${inc.description || ''}\n[Original Reporter: ${user.name} (${user.email})]`.trim(),
+            },
+          });
+        }
+      }
+
+      // 5. Junction & audit tables
       await tx.gateUser.deleteMany({ where: { userId: id } });
       await tx.auditLog.deleteMany({ where: { userId: id } });
+
+      // 6. Delete user account
       await tx.user.delete({ where: { id } });
     });
 
     return { message: `Staff member '${user.name}' deleted successfully.` };
+  }
+
+  async bulkDeleteStaff(ids: bigint[], currentUser: { id: bigint | string; role: string }) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('No staff IDs provided');
+    }
+
+    const currentUserId = typeof currentUser.id === 'string' ? BigInt(currentUser.id) : currentUser.id;
+    const isSuperAdmin = currentUser.role === UserRole.SUPER_ADMIN;
+    const currentRole = currentUser.role;
+
+    const staffList = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      include: {
+        gateUsers: true,
+        subAgents: { select: { id: true, name: true, email: true, staffId: true, role: true } },
+        allocations: { include: { events: true } },
+        givenAllocations: { select: { id: true } },
+        agentOrders: true,
+        scannedCheckins: { select: { id: true } },
+        scannedLogs: { select: { id: true } },
+        reportedIncidents: { select: { id: true } },
+        resolvedIncidents: { select: { id: true } },
+      },
+    });
+
+    const deletableStaff: typeof staffList = [];
+    const protectedStaff: Array<{ id: string; name: string; email: string; reason: string }> = [];
+
+    const activeCommercialCount = await this.prisma.user.count({
+      where: { role: UserRole.COMMERCIAL_ADMIN, isActive: true },
+    });
+    const activeEmployeeCount = await this.prisma.user.count({
+      where: { role: UserRole.EMPLOYEE_ADMIN, isActive: true },
+    });
+
+    for (const user of staffList) {
+      if (user.id === currentUserId) {
+        protectedStaff.push({
+          id: user.id.toString(),
+          name: user.name,
+          email: user.email,
+          reason: isSuperAdmin
+            ? 'Your current SUPER_ADMIN account is protected from deletion.'
+            : 'You cannot delete your own logged-in account.',
+        });
+        continue;
+      }
+
+      if (user.role === UserRole.SUPER_ADMIN) {
+        protectedStaff.push({
+          id: user.id.toString(),
+          name: user.name,
+          email: user.email,
+          reason: 'SUPER_ADMIN cannot be deleted.',
+        });
+        continue;
+      }
+
+      if (!isSuperAdmin) {
+        if (currentRole === UserRole.COMMERCIAL_ADMIN) {
+          if (
+            user.role === UserRole.EMPLOYEE_ADMIN ||
+            user.role === UserRole.EVENT_ADMIN
+          ) {
+            protectedStaff.push({
+              id: user.id.toString(),
+              name: user.name,
+              email: user.email,
+              reason: 'Commercial Admin cannot delete administrators outside their domain.',
+            });
+            continue;
+          }
+        }
+
+        if (currentRole === UserRole.EMPLOYEE_ADMIN) {
+          if (
+            user.role === UserRole.COMMERCIAL_ADMIN ||
+            user.role === UserRole.COMMERCIAL_AGENT ||
+            user.role === UserRole.COMMERCIAL_SUB_AGENT ||
+            user.role === UserRole.EVENT_ADMIN
+          ) {
+            protectedStaff.push({
+              id: user.id.toString(),
+              name: user.name,
+              email: user.email,
+              reason: 'Employee Admin cannot delete administrators or agents outside their domain.',
+            });
+            continue;
+          }
+        }
+
+        if (user.role === UserRole.COMMERCIAL_ADMIN && user.isActive && activeCommercialCount <= 1) {
+          protectedStaff.push({
+            id: user.id.toString(),
+            name: user.name,
+            email: user.email,
+            reason: 'Cannot delete the last remaining active E-Pass Admin account.',
+          });
+          continue;
+        }
+
+        if (user.role === UserRole.EMPLOYEE_ADMIN && user.isActive && activeEmployeeCount <= 1) {
+          protectedStaff.push({
+            id: user.id.toString(),
+            name: user.name,
+            email: user.email,
+            reason: 'Cannot delete the last remaining active Employee Admin account.',
+          });
+          continue;
+        }
+
+        const hasOperationalRecords =
+          user.scannedCheckins.length > 0 ||
+          user.scannedLogs.length > 0 ||
+          user.agentOrders.length > 0 ||
+          (user.allocations && user.allocations.length > 0) ||
+          user.givenAllocations.length > 0 ||
+          user.subAgents.length > 0 ||
+          user.reportedIncidents.length > 0 ||
+          user.resolvedIncidents.length > 0;
+
+        if (hasOperationalRecords) {
+          protectedStaff.push({
+            id: user.id.toString(),
+            name: user.name,
+            email: user.email,
+            reason: 'Account has linked operational records. Deactivate instead.',
+          });
+          continue;
+        }
+      }
+
+      deletableStaff.push(user);
+    }
+
+    const deletableIds = deletableStaff.map((u) => u.id);
+
+    if (deletableStaff.length > 0) {
+      await this.prisma.$transaction(async (tx) => {
+        for (const user of deletableStaff) {
+          // 1. Automatically convert sub-agents into independent master agents and record hierarchy change in audit history
+          if (user.subAgents && user.subAgents.length > 0) {
+            await tx.user.updateMany({
+              where: { parentAgentId: user.id },
+              data: {
+                role: UserRole.COMMERCIAL_AGENT,
+                parentAgentId: null,
+              },
+            });
+
+            for (const sub of user.subAgents) {
+              await tx.auditLog.create({
+                data: {
+                  userId: sub.id,
+                  action: 'SUB_AGENT_CONVERTED_TO_MASTER',
+                  details: {
+                    subAgentId: sub.id.toString(),
+                    subAgentName: sub.name,
+                    subAgentEmail: (sub as any).email || null,
+                    subAgentStaffId: (sub as any).staffId || null,
+                    previousRole: (sub as any).role || UserRole.COMMERCIAL_SUB_AGENT,
+                    newRole: UserRole.COMMERCIAL_AGENT,
+                    previousParentAgentId: user.id.toString(),
+                    previousParentAgentName: user.name,
+                    previousParentAgentEmail: user.email,
+                    previousParentAgentStaffId: user.staffId || null,
+                    changeReason: `Master agent '${user.name}' was administratively bulk-deleted by SUPER_ADMIN. Sub-agent automatically converted to independent master agent.`,
+                    inventoryPreserved: true,
+                    allocationsPreserved: true,
+                    ticketsPreserved: true,
+                    bookingsPreserved: true,
+                    performedByUserId: currentUserId.toString(),
+                    timestamp: new Date().toISOString(),
+                  },
+                },
+              });
+            }
+          }
+
+          if (user.agentOrders && user.agentOrders.length > 0) {
+            for (const order of user.agentOrders) {
+              const existingMeta = (order.metadata as any) || {};
+              await tx.commercialOrder.update({
+                where: { id: order.id },
+                data: {
+                  agentId: null,
+                  metadata: {
+                    ...existingMeta,
+                    originalAgent: {
+                      id: user.id.toString(),
+                      name: user.name,
+                      email: user.email,
+                      staffId: user.staffId,
+                      role: user.role,
+                    },
+                  },
+                },
+              });
+            }
+          }
+
+          if (user.allocations && user.allocations.length > 0) {
+            const sysArchiveId = await this.getOrCreateSystemArchiveUser(tx);
+            for (const alloc of user.allocations) {
+              if (alloc.events && alloc.events.length > 0) {
+                const existingSysAlloc = await tx.agentAllocation.findUnique({
+                  where: {
+                    agentId_passType: {
+                      agentId: sysArchiveId,
+                      passType: alloc.passType,
+                    },
+                  },
+                });
+                if (existingSysAlloc) {
+                  await tx.allocationEvent.updateMany({
+                    where: { allocationId: alloc.id },
+                    data: { allocationId: existingSysAlloc.id },
+                  });
+                  await tx.agentAllocation.delete({ where: { id: alloc.id } });
+                } else {
+                  await tx.agentAllocation.update({
+                    where: { id: alloc.id },
+                    data: { agentId: sysArchiveId },
+                  });
+                }
+              } else {
+                await tx.agentAllocation.delete({ where: { id: alloc.id } });
+              }
+            }
+          }
+
+          if (user.reportedIncidents && user.reportedIncidents.length > 0) {
+            const sysArchiveId = await this.getOrCreateSystemArchiveUser(tx);
+            const incidents = await tx.incident.findMany({ where: { reportedById: user.id } });
+            for (const inc of incidents) {
+              await tx.incident.update({
+                where: { id: inc.id },
+                data: {
+                  reportedById: sysArchiveId,
+                  description: `${inc.description || ''}\n[Original Reporter: ${user.name} (${user.email})]`.trim(),
+                },
+              });
+            }
+          }
+        }
+
+        await tx.gateUser.deleteMany({ where: { userId: { in: deletableIds } } });
+        await tx.auditLog.deleteMany({ where: { userId: { in: deletableIds } } });
+        await tx.user.deleteMany({ where: { id: { in: deletableIds } } });
+      });
+    }
+
+    const deletedCount = deletableIds.length;
+    const protectedCount = protectedStaff.length;
+
+    let message = '';
+    if (deletedCount > 0 && protectedCount === 0) {
+      message = `Successfully deleted ${deletedCount} staff member(s).`;
+    } else if (deletedCount > 0 && protectedCount > 0) {
+      if (isSuperAdmin) {
+        message = `${deletedCount} account(s) deleted. Your current SUPER_ADMIN account was protected.`;
+      } else {
+        message = `Deleted ${deletedCount} staff member(s). ${protectedCount} account(s) were protected from deletion.`;
+      }
+    } else {
+      message = `None of the selected accounts could be deleted. All ${protectedCount} account(s) are protected.`;
+    }
+
+    return {
+      totalSelected: ids.length,
+      deletedCount,
+      protectedCount,
+      deletedStaff: deletableIds.map((id) => id.toString()),
+      protectedStaff,
+      message,
+    };
   }
 
   async resetPassword(id: bigint, currentUser: { id: bigint | string; role: string }, newPassword?: string) {

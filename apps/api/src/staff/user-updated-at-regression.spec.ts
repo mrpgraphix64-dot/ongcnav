@@ -157,7 +157,6 @@ describe('User updatedAt Schema Mismatch Regression Tests', () => {
       name: 'Priya Mehta',
       email: 'priya.mehta@ongc.co.in',
       mobile: '9876543211',
-      staffId: 'STF-NEW-01',
       role: UserRole.GATE_OPERATOR,
       password: 'SecurePassword123!',
       gate_ids: [2],

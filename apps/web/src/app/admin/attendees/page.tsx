@@ -14,6 +14,7 @@ import {
   ChevronRight,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   X,
   RefreshCw,
   Trash2,
@@ -121,6 +122,9 @@ export default function AdminAttendeesPage() {
   const [qrModalAttendee, setQrModalAttendee] = useState<AttendeeItem | null>(null);
   const [employeeModal, setEmployeeModal] = useState<EmployeeData | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [attendeeToDelete, setAttendeeToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [addForm, setAddForm] = useState({
     name: '',
     mobile: '',
@@ -323,14 +327,22 @@ export default function AdminAttendeesPage() {
     }
   };
 
-  const handleDeleteAttendee = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete attendee '${name}'?`)) return;
+  const openDeleteModal = (id: string, name: string) => {
+    setAttendeeToDelete({ id, name });
+  };
+
+  const confirmDeleteAttendee = async () => {
+    if (!attendeeToDelete) return;
     try {
-      await fetchApi(`/admin/attendees/${id}`, { method: 'DELETE' });
-      setMsg({ text: `Attendee '${name}' deleted successfully.`, type: 'success' });
+      setDeleteLoading(true);
+      await fetchApi(`/admin/attendees/${attendeeToDelete.id}`, { method: 'DELETE' });
+      setMsg({ text: `Attendee '${attendeeToDelete.name}' deleted successfully.`, type: 'success' });
+      setAttendeeToDelete(null);
       loadData();
     } catch (e: any) {
       setMsg({ text: e.message || 'Failed to delete attendee', type: 'error' });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -353,9 +365,13 @@ export default function AdminAttendeesPage() {
     }
   };
 
-  const handleBulkDelete = async () => {
+  const openBulkDeleteModal = () => {
     if (selectedIds.length === 0 || bulkBusy) return;
-    if (!confirm(`Delete ${selectedIds.length} attendee(s)? This cannot be undone.`)) return;
+    setShowBulkDeleteModal(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0 || bulkBusy) return;
     try {
       setBulkBusy(true);
       const res = await fetchApi<any>('/admin/attendees/bulk', {
@@ -364,6 +380,7 @@ export default function AdminAttendeesPage() {
       });
       setMsg({ text: res.message || 'Attendees deleted.', type: 'success' });
       setSelectedIds([]);
+      setShowBulkDeleteModal(false);
       loadData();
     } catch (e: any) {
       setMsg({ text: e.message || 'Bulk delete failed', type: 'error' });
@@ -579,7 +596,7 @@ export default function AdminAttendeesPage() {
                 </button>
                 <span>&bull;</span>
                 <button
-                  onClick={handleBulkDelete}
+                  onClick={openBulkDeleteModal}
                   disabled={bulkBusy}
                   className="hover:underline text-rose-600"
                 >
@@ -871,7 +888,7 @@ export default function AdminAttendeesPage() {
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteAttendee(primary.id, primary.name)}
+                              onClick={() => openDeleteModal(primary.id, primary.name)}
                               title="Delete Attendee"
                               className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50"
                             >
@@ -983,7 +1000,7 @@ export default function AdminAttendeesPage() {
                                     <RefreshCw className="w-3 h-3" />
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteAttendee(pass.id, pass.name || pass.ticketNumber)}
+                                    onClick={() => openDeleteModal(pass.id, pass.name || pass.ticketNumber)}
                                     title="Delete Pass"
                                     className="p-1 rounded text-stone-400 hover:text-rose-600"
                                   >
@@ -1090,7 +1107,7 @@ export default function AdminAttendeesPage() {
                                     <RefreshCw className="w-3 h-3" />
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteAttendee(fam.id, fam.name)}
+                                    onClick={() => openDeleteModal(fam.id, fam.name)}
                                     title="Delete"
                                     className="p-1 rounded text-stone-400 hover:text-rose-600"
                                   >
@@ -1374,6 +1391,94 @@ export default function AdminAttendeesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM SINGLE ATTENDEE DELETE CONFIRMATION MODAL */}
+      {attendeeToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-outfit font-bold text-lg text-stone-900">
+                  Delete Attendee?
+                </h3>
+                <span className="text-xs text-stone-500">
+                  {attendeeToDelete.name}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Are you sure you want to delete attendee <strong>&ldquo;{attendeeToDelete.name}&rdquo;</strong>? This action will revoke their QR ticket and entry passes. This cannot be undone.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setAttendeeToDelete(null)}
+                disabled={deleteLoading}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteAttendee}
+                disabled={deleteLoading}
+                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+              >
+                {deleteLoading ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM BULK ATTENDEE DELETE CONFIRMATION MODAL */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-outfit font-bold text-lg text-stone-900">
+                  Delete {selectedIds.length} Attendee(s)?
+                </h3>
+                <span className="text-xs text-stone-500">
+                  Irreversible bulk deletion
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Are you sure you want to permanently delete the <strong>{selectedIds.length}</strong> selected attendee(s)? This will revoke all their issued entry passes. This cannot be undone.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={bulkBusy}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmBulkDelete}
+                disabled={bulkBusy}
+                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+              >
+                {bulkBusy ? 'Deleting...' : `Delete ${selectedIds.length} Attendee(s)`}
+              </button>
+            </div>
           </div>
         </div>
       )}

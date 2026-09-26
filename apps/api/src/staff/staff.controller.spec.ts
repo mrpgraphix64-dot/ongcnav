@@ -123,7 +123,7 @@ describe('StaffController & Strict RBAC Tests', () => {
       await controller.toggle('4');
       await controller.toggleStatus('4');
       expect(service.toggleStatus).toHaveBeenCalledTimes(2);
-      expect(service.toggleStatus).toHaveBeenCalledWith(BigInt(4));
+      expect(service.toggleStatus).toHaveBeenCalledWith(BigInt(4), undefined);
     });
 
     it('getActivity delegates to service.getActivity with pagination', async () => {

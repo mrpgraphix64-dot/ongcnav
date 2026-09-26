@@ -48,6 +48,8 @@ export class EventControlController {
     UserRole.REGISTRATION_STAFF,
     UserRole.HELP_DESK,
     UserRole.REPORT_VIEWER,
+    UserRole.COMMERCIAL_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
   )
   @ApiOperation({ summary: 'Get current event status, scanning state, and operational date' })
   async getStatus() {

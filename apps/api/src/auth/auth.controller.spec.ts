@@ -54,16 +54,22 @@ describe('AuthController', () => {
 
     expect(result.accessToken).toBe('tok');
     expect(res.cookie).toHaveBeenCalledWith(
+      'ongc_auth_session',
+      'tok',
+      expect.objectContaining({ httpOnly: true, sameSite: 'lax' }),
+    );
+    expect(res.cookie).toHaveBeenCalledWith(
       'admin_token',
       'tok',
       expect.objectContaining({ httpOnly: true, sameSite: 'lax' }),
     );
   });
 
-  it('logout clears the admin_token cookie', async () => {
+  it('logout clears the auth session and admin_token cookies', async () => {
     const res = { clearCookie: jest.fn() } as any;
     const result = await controller.logout(res);
 
+    expect(res.clearCookie).toHaveBeenCalledWith('ongc_auth_session');
     expect(res.clearCookie).toHaveBeenCalledWith('admin_token');
     expect(result.success).toBe(true);
   });

@@ -25,9 +25,4 @@ export class CreateAgentDto {
   @IsString()
   @MinLength(6, { message: 'Password must be at least 6 characters.' })
   password: string;
-
-  @ApiPropertyOptional({ example: 'AGT-001', description: 'Agent Staff/Agent ID' })
-  @IsOptional()
-  @IsString()
-  staffId?: string;
 }

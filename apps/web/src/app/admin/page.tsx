@@ -20,8 +20,11 @@ import {
   X,
   Loader2,
   Check,
+  CalendarCheck,
+  Shield,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 
 interface GateActivity {
   id: string;
@@ -89,19 +92,36 @@ export default function OperationsDashboardPage() {
   // Read authenticated user role for Event Control button display
   const [userRole, setUserRole] = useState<string>('SUPER_ADMIN');
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem('ongc_admin_user');
-      if (cached) {
-        const u = JSON.parse(cached);
-        if (u?.role) setUserRole(String(u.role).toUpperCase());
+    const cached = getStoredAuthUser();
+    if (cached?.role) {
+      setUserRole(String(cached.role).toUpperCase());
+    }
+
+    const unsubscribe = subscribeToAuthSync((event) => {
+      if (event.type === 'LOGIN' && event.user?.role) {
+        setUserRole(String(event.user.role).toUpperCase());
       }
-    } catch {}
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const isSuperOrEventAdmin =
     userRole === 'SUPER_ADMIN' ||
     userRole === 'EVENT_ADMIN' ||
     userRole === 'ADMIN';
+
+  const isCommercialAdmin = userRole === 'COMMERCIAL_ADMIN';
+  const canManageEmployee =
+    userRole === 'SUPER_ADMIN' ||
+    userRole === 'EMPLOYEE_ADMIN' ||
+    userRole === 'REGISTRATION_STAFF' ||
+    userRole === 'ADMIN';
+  const canManageCommercial =
+    userRole === 'SUPER_ADMIN' ||
+    userRole === 'COMMERCIAL_ADMIN';
 
   // Fetch real live stats from NestJS
   const fetchStats = useCallback(async () => {
@@ -204,26 +224,49 @@ export default function OperationsDashboardPage() {
               </Link>
             )}
 
-            <button
-              onClick={() => {
-                setFormError(null);
-                setFormSuccess(null);
-                setAddModalOpen(true);
-              }}
-              type="button"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4 text-maroon" />
-              <span>Add Attendee</span>
-            </button>
+            {canManageCommercial && !isSuperOrEventAdmin && (
+              <>
+                <Link
+                  href="/admin/commercial/orders"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
+                >
+                  <CalendarCheck className="w-4 h-4 text-maroon" />
+                  <span>E-Pass Orders</span>
+                </Link>
+                <Link
+                  href="/admin/commercial/agents"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
+                >
+                  <Shield className="w-4 h-4 text-maroon" />
+                  <span>Agents Network</span>
+                </Link>
+              </>
+            )}
 
-            <Link
-              href="/admin/bulk-upload"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
-            >
-              <UploadCloud className="w-4 h-4 text-maroon" />
-              <span>Upload CSV</span>
-            </Link>
+            {canManageEmployee && (
+              <>
+                <button
+                  onClick={() => {
+                    setFormError(null);
+                    setFormSuccess(null);
+                    setAddModalOpen(true);
+                  }}
+                  type="button"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4 text-maroon" />
+                  <span>Add Attendee</span>
+                </button>
+
+                <Link
+                  href="/admin/bulk-upload"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs sm:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
+                >
+                  <UploadCloud className="w-4 h-4 text-maroon" />
+                  <span>Upload CSV</span>
+                </Link>
+              </>
+            )}
 
             {/* PRIMARY ACTION: Live Scanner (Distinct Highlight) */}
             <Link
@@ -256,16 +299,16 @@ export default function OperationsDashboardPage() {
                 {stats.totalAttendees.toLocaleString()}
               </div>
               <p className="text-xs text-ink-soft mt-1.5 font-medium">
-                Employees + Family Members
+                {isCommercialAdmin ? 'Event Passes & Registrations' : 'Employees + Family Members'}
               </p>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-stone-100">
             <Link
-              href="/admin/attendees"
+              href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees'}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-maroon hover:text-maroon-dark group"
             >
-              <span>View Attendees</span>
+              <span>{isCommercialAdmin ? 'View E-Pass Orders' : 'View Attendees'}</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
@@ -296,10 +339,10 @@ export default function OperationsDashboardPage() {
           </div>
           <div className="mt-4 pt-3 border-t border-stone-100">
             <Link
-              href="/admin/attendees?status=checked_in"
+              href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=checked_in'}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 group"
             >
-              <span>View Check-ins</span>
+              <span>{isCommercialAdmin ? 'View Order Records' : 'View Check-ins'}</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
@@ -327,10 +370,10 @@ export default function OperationsDashboardPage() {
           </div>
           <div className="mt-4 pt-3 border-t border-stone-100">
             <Link
-              href="/admin/attendees?status=pending"
+              href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=pending'}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-800 group"
             >
-              <span>View Pending</span>
+              <span>{isCommercialAdmin ? 'View Commercial Orders' : 'View Pending'}</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
@@ -538,13 +581,23 @@ export default function OperationsDashboardPage() {
 
           {/* Quick Action Links inside Live Capacity Card */}
           <div className="pt-4 border-t border-stone-100 flex items-center justify-between flex-wrap gap-2.5">
-            <Link
-              href="/admin/attendees"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cream-soft hover:bg-stone-200/60 text-ink text-xs font-bold transition-colors font-outfit"
-            >
-              <Users className="w-3.5 h-3.5 text-maroon" />
-              <span>VIEW ALL ATTENDEES</span>
-            </Link>
+            {canManageEmployee ? (
+              <Link
+                href="/admin/attendees"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cream-soft hover:bg-stone-200/60 text-ink text-xs font-bold transition-colors font-outfit"
+              >
+                <Users className="w-3.5 h-3.5 text-maroon" />
+                <span>VIEW ALL ATTENDEES</span>
+              </Link>
+            ) : (
+              <Link
+                href="/admin/commercial/orders"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cream-soft hover:bg-stone-200/60 text-ink text-xs font-bold transition-colors font-outfit"
+              >
+                <CalendarCheck className="w-3.5 h-3.5 text-maroon" />
+                <span>VIEW E-PASS ORDERS</span>
+              </Link>
+            )}
             <Link
               href="/scanner"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-colors border border-gold/40 shadow-xs font-outfit"
@@ -564,7 +617,7 @@ export default function OperationsDashboardPage() {
                 <p className="text-xs text-ink-soft mt-0.5">Latest scanned admissions</p>
               </div>
               <Link
-                href="/admin/attendees?status=checked_in"
+                href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=checked_in'}
                 className="text-xs text-maroon font-bold hover:underline flex items-center gap-1"
               >
                 <span>View All</span>
@@ -626,10 +679,10 @@ export default function OperationsDashboardPage() {
 
           <div className="pt-3 border-t border-stone-100 text-center">
             <Link
-              href="/admin/attendees?status=checked_in"
+              href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=checked_in'}
               className="text-xs font-bold text-maroon hover:underline inline-flex items-center gap-1 font-outfit"
             >
-              <span>View All Checked In Attendees</span>
+              <span>{isCommercialAdmin ? 'View Commercial Orders' : 'View All Checked In Attendees'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>

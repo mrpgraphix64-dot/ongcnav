@@ -646,9 +646,21 @@ export class CommercialService {
     return { success: true };
   }
 
-  async getOrder(orderNumber: string, mobileQuery?: string) {
-    const order = await this.prisma.commercialOrder.findUnique({
-      where: { orderNumber },
+  async getOrder(orderOrTicketNumber: string, mobileQuery?: string) {
+    const rawIdentifier = (orderOrTicketNumber || '').trim();
+    if (!rawIdentifier) {
+      throw new NotFoundException('Order number or ticket number is required.');
+    }
+
+    const cleanIdentifier = rawIdentifier.toUpperCase();
+    const cleanMobile = (mobileQuery || '').trim().replace(/\D/g, '');
+    if (!cleanMobile) {
+      throw new NotFoundException('Registered mobile number is required.');
+    }
+
+    // 1. Try finding by orderNumber
+    let order = await this.prisma.commercialOrder.findUnique({
+      where: { orderNumber: cleanIdentifier },
       include: {
         attendees: {
           where: { registrationType: RegistrationType.COMMERCIAL },
@@ -656,19 +668,64 @@ export class CommercialService {
       },
     });
 
-    if (!order || order.registrationType !== RegistrationType.COMMERCIAL) {
-      throw new NotFoundException(`Order ${orderNumber} not found.`);
+    let searchedTicketNumber: string | null = null;
+
+    // 2. If not found by orderNumber, try finding by ticketNumber
+    if (!order) {
+      const attendee = await this.prisma.attendee.findFirst({
+        where: {
+          ticketNumber: { equals: cleanIdentifier, mode: 'insensitive' },
+          registrationType: RegistrationType.COMMERCIAL,
+        },
+        include: {
+          order: {
+            include: {
+              attendees: {
+                where: { registrationType: RegistrationType.COMMERCIAL },
+              },
+            },
+          },
+        },
+      });
+
+      // Strictly verify commercial attendee and linked commercial order
+      if (attendee && attendee.order && attendee.order.registrationType === RegistrationType.COMMERCIAL) {
+        order = attendee.order;
+        searchedTicketNumber = attendee.ticketNumber;
+      }
     }
 
-    // IDOR protection: only return QR passes and full PII if verified by matching mobile / last 4 digits
+    if (!order || order.registrationType !== RegistrationType.COMMERCIAL) {
+      throw new NotFoundException(`E-Pass record '${cleanIdentifier}' not found.`);
+    }
+
+    // Security: Require mobile number and verify against order.customerMobile
+    const orderMobileDigits = (order.customerMobile || '').replace(/\D/g, '');
     const isVerified =
-      !!mobileQuery &&
-      (mobileQuery.trim() === order.customerMobile ||
-        order.customerMobile.endsWith(mobileQuery.trim()));
+      cleanMobile.length >= 4 &&
+      (cleanMobile === orderMobileDigits ||
+        orderMobileDigits.endsWith(cleanMobile) ||
+        cleanMobile.endsWith(orderMobileDigits));
+
+    if (!isVerified) {
+      throw new NotFoundException(`Verification failed: Invalid mobile number for this E-Pass.`);
+    }
+
+    // If searching by ticket number, reorder attendees so the searched ticket is first
+    let attendeesList = order.attendees;
+    if (searchedTicketNumber) {
+      const target = attendeesList.filter(
+        (a) => a.ticketNumber.toUpperCase() === searchedTicketNumber!.toUpperCase(),
+      );
+      const others = attendeesList.filter(
+        (a) => a.ticketNumber.toUpperCase() !== searchedTicketNumber!.toUpperCase(),
+      );
+      attendeesList = [...target, ...others];
+    }
 
     const passesWithSvg =
       isVerified || order.orderStatus !== OrderStatus.PAID
-        ? await this.formatPasses(order.attendees)
+        ? await this.formatPasses(attendeesList)
         : [];
 
     const isTestPayment = (order.metadata as any)?.isTestPayment === true;
@@ -694,6 +751,9 @@ export class CommercialService {
       paidAt: order.paidAt,
       failureReason: order.failureReason,
       passes: passesWithSvg,
+      searchedBy: searchedTicketNumber ? 'TICKET' : 'ORDER',
+      searchedTicketNumber,
+      totalPassesInOrder: order.quantity,
     };
   }
 
@@ -942,6 +1002,7 @@ export class CommercialService {
               staffId: ag.staffId,
               role: ag.role,
               isSubAgent: !!ag.parentAgentId,
+              parentAgentId: ag.parentAgentId ? ag.parentAgentId.toString() : null,
               parentAgent: ag.parentAgent
                 ? { id: ag.parentAgent.id.toString(), name: ag.parentAgent.name }
                 : null,
@@ -1128,7 +1189,7 @@ export class CommercialService {
     }
 
     // 2. Fetch order with commercial attendee passes
-    const order = await this.prisma.commercialOrder.findUnique({
+    let order = await this.prisma.commercialOrder.findUnique({
       where: { orderNumber: cleanOrderNumber },
       include: {
         attendees: {
@@ -1136,6 +1197,27 @@ export class CommercialService {
         },
       },
     });
+
+    if (!order) {
+      const attendee = await this.prisma.attendee.findFirst({
+        where: {
+          ticketNumber: { equals: cleanOrderNumber, mode: 'insensitive' },
+          registrationType: RegistrationType.COMMERCIAL,
+        },
+        include: {
+          order: {
+            include: {
+              attendees: {
+                where: { registrationType: RegistrationType.COMMERCIAL },
+              },
+            },
+          },
+        },
+      });
+      if (attendee && attendee.order && attendee.order.registrationType === RegistrationType.COMMERCIAL) {
+        order = attendee.order;
+      }
+    }
 
     if (!order || order.registrationType !== RegistrationType.COMMERCIAL) {
       throw new NotFoundException(`Order ${cleanOrderNumber} not found.`);
@@ -1235,7 +1317,7 @@ export class CommercialService {
   /**
    * Delete a single commercial order with strict financial, payment, and ticket protections
    */
-  async deleteOrderAdmin(orderId: bigint) {
+  async deleteOrderAdmin(orderId: bigint, userRole?: string) {
     const order = await this.prisma.commercialOrder.findUnique({
       where: { id: orderId },
       include: {
@@ -1254,8 +1336,28 @@ export class CommercialService {
       throw new NotFoundException(`Order with ID ${orderId} not found.`);
     }
 
+    const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
     const protectionReason = this.getOrderProtectionReason(order);
     if (protectionReason) {
+      if (isSuperAdmin) {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.commercialOrder.update({
+            where: { id: order.id },
+            data: { orderStatus: OrderStatus.CANCELLED },
+          });
+          await tx.attendee.updateMany({
+            where: { orderId: order.id },
+            data: { status: AttendeeStatus.REVOKED },
+          });
+        });
+        return {
+          success: true,
+          action: 'cancelled',
+          message: `Order ${order.orderNumber} has financial or ticket records and was cancelled to preserve audit integrity.`,
+          orderNumber: order.orderNumber,
+        };
+      }
+
       throw new ConflictException(
         `Order ${order.orderNumber} cannot be deleted because ${protectionReason}.`,
       );
@@ -1273,6 +1375,7 @@ export class CommercialService {
 
     return {
       success: true,
+      action: 'deleted',
       message: `Order ${order.orderNumber} deleted successfully.`,
       orderNumber: order.orderNumber,
     };
@@ -1281,10 +1384,12 @@ export class CommercialService {
   /**
    * Bulk delete commercial orders with strict dependency and financial audit protections
    */
-  async bulkDeleteOrdersAdmin(rawOrderIds: string[]) {
+  async bulkDeleteOrdersAdmin(rawOrderIds: string[], userRole?: string) {
     if (!Array.isArray(rawOrderIds) || rawOrderIds.length === 0) {
       throw new BadRequestException('Please select at least one order to delete.');
     }
+
+    const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
 
     const orderIds = rawOrderIds
       .map((id) => {
@@ -1330,17 +1435,29 @@ export class CommercialService {
       }
     }
 
-    if (deletableOrders.length > 0) {
-      const deletableIds = deletableOrders.map((o) => o.id);
-      await this.prisma.$transaction(async (tx) => {
+    const protectedIds = protectedOrders.map((p) => BigInt(p.id));
+
+    await this.prisma.$transaction(async (tx) => {
+      if (deletableOrders.length > 0) {
+        const deletableIds = deletableOrders.map((o) => o.id);
         await tx.attendee.deleteMany({
           where: { orderId: { in: deletableIds } },
         });
         await tx.commercialOrder.deleteMany({
           where: { id: { in: deletableIds } },
         });
-      });
-    }
+      }
+      if (isSuperAdmin && protectedIds.length > 0) {
+        await tx.commercialOrder.updateMany({
+          where: { id: { in: protectedIds } },
+          data: { orderStatus: OrderStatus.CANCELLED },
+        });
+        await tx.attendee.updateMany({
+          where: { orderId: { in: protectedIds } },
+          data: { status: AttendeeStatus.REVOKED },
+        });
+      }
+    });
 
     const deletedCount = deletableOrders.length;
     const protectedCount = protectedOrders.length;
@@ -1349,17 +1466,30 @@ export class CommercialService {
     if (deletedCount > 0 && protectedCount === 0) {
       message = `Successfully deleted ${deletedCount} order(s).`;
     } else if (deletedCount > 0 && protectedCount > 0) {
-      message = `Deleted ${deletedCount} order(s). ${protectedCount} order(s) could not be deleted because they contain financial or ticket records.`;
+      if (isSuperAdmin) {
+        message = `Deleted ${deletedCount} order(s). ${protectedCount} order(s) with financial history were cancelled to preserve audit records.`;
+      } else {
+        message = `Deleted ${deletedCount} order(s). ${protectedCount} order(s) could not be deleted because they contain financial or ticket records.`;
+      }
     } else {
-      message = `None of the selected orders could be deleted. All ${protectedCount} order(s) contain financial, payment, or ticket records.`;
+      if (isSuperAdmin) {
+        message = `All ${protectedCount} selected order(s) have financial or ticket records and were cancelled to preserve audit records.`;
+      } else {
+        message = `None of the selected orders could be deleted. All ${protectedCount} order(s) contain financial, payment, or ticket records.`;
+      }
     }
 
     return {
       totalSelected: rawOrderIds.length,
-      deletedCount,
-      protectedCount,
-      deletedOrders: deletableOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber })),
-      protectedOrders,
+      deletedCount: isSuperAdmin ? deletedCount + protectedCount : deletedCount,
+      protectedCount: isSuperAdmin ? 0 : protectedCount,
+      deletedOrders: isSuperAdmin
+        ? [
+            ...deletableOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber })),
+            ...protectedOrders.map((o) => ({ id: o.id, orderNumber: o.orderNumber })),
+          ]
+        : deletableOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber })),
+      protectedOrders: isSuperAdmin ? [] : protectedOrders,
       message,
     };
   }

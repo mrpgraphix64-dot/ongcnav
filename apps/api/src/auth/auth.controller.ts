@@ -26,21 +26,24 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(loginDto);
 
-    // Set secure HTTP-only cookie for web browsers
-    res.cookie('admin_token', result.accessToken, {
+    // Set secure HTTP-only cookies for web browsers (unified application auth session)
+    const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'lax' as const,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    };
+    res.cookie('ongc_auth_session', result.accessToken, cookieOptions);
+    res.cookie('admin_token', result.accessToken, cookieOptions);
 
     return result;
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Log out current user' })
+  @ApiOperation({ summary: 'Log out current user and clear all auth cookies' })
   async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('ongc_auth_session');
     res.clearCookie('admin_token');
     return { success: true, message: 'Logged out successfully.' };
   }

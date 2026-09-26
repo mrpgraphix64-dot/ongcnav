@@ -29,6 +29,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 import PasswordInput from '@/components/PasswordInput';
 
 const PASS_TYPES = [
@@ -48,6 +49,35 @@ export default function CommercialAgentsPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string; email: string } | null>(null);
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    const stored = getStoredAuthUser();
+    if (stored) {
+      setCurrentUser(stored as any);
+    }
+    fetchApi('/auth/me')
+      .then((res: any) => {
+        if (res?.user) {
+          setCurrentUser(res.user);
+        }
+      })
+      .catch(() => {});
+
+    const unsubscribe = subscribeToAuthSync((event) => {
+      if (event.type === 'LOGIN' && event.user) {
+        setCurrentUser(event.user as any);
+      } else if (event.type === 'LOGOUT') {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   // Expanded Master Agents Set
   const [expandedMasterIds, setExpandedMasterIds] = useState<Set<string>>(new Set());
 
@@ -61,7 +91,6 @@ export default function CommercialAgentsPage() {
     email: '',
     phone: '',
     password: '',
-    staffId: '',
   });
   const [registering, setRegistering] = useState(false);
 
@@ -105,8 +134,20 @@ export default function CommercialAgentsPage() {
         if (selectedAgentForReclaim) setSelectedAgentForReclaim(null);
       }
     };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-action-menu="true"]')) {
+        setOpenMenuId(null);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('click', handleClickOutside);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('click', handleClickOutside);
+    };
   }, [detailsAgentId, agentToDelete, agentToToggle, showRegisterModal, selectedAgentForAlloc, selectedAgentForReclaim]);
 
   // Load all agents from backend
@@ -142,14 +183,14 @@ export default function CommercialAgentsPage() {
       const q = search.trim().toLowerCase();
       const newExpanded = new Set(expandedMasterIds);
       agents.forEach((ag) => {
-        if (ag.parentAgent) {
+        const parentId = ag.parentAgent?.id || (ag.parentAgentId ? String(ag.parentAgentId) : null);
+        if (parentId) {
           const matchSub =
             ag.name.toLowerCase().includes(q) ||
             ag.email.toLowerCase().includes(q) ||
-            (ag.phone && ag.phone.toLowerCase().includes(q)) ||
-            (ag.staffId && ag.staffId.toLowerCase().includes(q));
+            (ag.phone && ag.phone.toLowerCase().includes(q));
           if (matchSub) {
-            newExpanded.add(ag.parentAgent.id);
+            newExpanded.add(parentId);
           }
         }
       });
@@ -196,11 +237,11 @@ export default function CommercialAgentsPage() {
         body: JSON.stringify(registerForm),
       });
       setShowRegisterModal(false);
-      setRegisterForm({ name: '', email: '', phone: '', password: '', staffId: '' });
+      setRegisterForm({ name: '', email: '', phone: '', password: '' });
       setActionSuccessMsg('Agent registered successfully.');
       loadAgents();
     } catch (err: any) {
-      alert(err.message || 'Failed to register agent.');
+      setErrorMsg(err.message || 'Failed to register agent.');
     } finally {
       setRegistering(false);
     }
@@ -304,12 +345,16 @@ export default function CommercialAgentsPage() {
     () => agents.reduce((sum, a) => sum + (a.summary?.totalAvailable || 0), 0),
     [agents],
   );
+  const totalCheckedInAll = useMemo(
+    () => agents.reduce((sum, a) => sum + (a.summary?.checkedIn || a.checkedIn || 0), 0),
+    [agents],
+  );
   const masterAgentsCount = useMemo(
-    () => agents.filter((a) => !a.parentAgent).length,
+    () => agents.filter((a) => !a.parentAgent && !a.parentAgentId && a.role !== 'COMMERCIAL_SUB_AGENT').length,
     [agents],
   );
   const subAgentsCount = useMemo(
-    () => agents.filter((a) => !!a.parentAgent).length,
+    () => agents.filter((a) => !!a.parentAgent || !!a.parentAgentId || a.role === 'COMMERCIAL_SUB_AGENT').length,
     [agents],
   );
 
@@ -328,10 +373,13 @@ export default function CommercialAgentsPage() {
     const orphanSubAgents: any[] = [];
 
     agentMap.forEach((ag) => {
-      if (ag.parentAgent && agentMap.has(ag.parentAgent.id)) {
-        agentMap.get(ag.parentAgent.id).subAgentsList.push(ag);
-      } else if (ag.parentAgent) {
-        orphanSubAgents.push(ag);
+      const parentId = ag.parentAgent?.id || (ag.parentAgentId ? String(ag.parentAgentId) : null);
+      const isSub = !!parentId || ag.role === 'COMMERCIAL_SUB_AGENT';
+
+      if (isSub && parentId && agentMap.has(parentId)) {
+        agentMap.get(parentId).subAgentsList.push(ag);
+      } else if (isSub) {
+        orphanSubAgents.push({ ...ag, isOrphanSubAgent: true });
       } else {
         topLevelMasters.push(ag);
       }
@@ -343,8 +391,7 @@ export default function CommercialAgentsPage() {
         q === '' ||
         master.name.toLowerCase().includes(q) ||
         master.email.toLowerCase().includes(q) ||
-        (master.phone && master.phone.toLowerCase().includes(q)) ||
-        (master.staffId && master.staffId.toLowerCase().includes(q));
+        (master.phone && master.phone.toLowerCase().includes(q));
 
       // Filter sub-agents matching search
       const matchingSubAgents = master.subAgentsList.filter((sub: any) => {
@@ -352,8 +399,7 @@ export default function CommercialAgentsPage() {
         return (
           sub.name.toLowerCase().includes(q) ||
           sub.email.toLowerCase().includes(q) ||
-          (sub.phone && sub.phone.toLowerCase().includes(q)) ||
-          (sub.staffId && sub.staffId.toLowerCase().includes(q))
+          (sub.phone && sub.phone.toLowerCase().includes(q))
         );
       });
 
@@ -428,11 +474,6 @@ export default function CommercialAgentsPage() {
       {/* Top Banner / Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Total Agents</div>
-          <div className="text-2xl font-outfit font-black text-ink mt-1">{agents.length}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
           <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Master Agents</div>
           <div className="text-2xl font-outfit font-black text-blue-900 mt-1">{masterAgentsCount}</div>
         </div>
@@ -448,13 +489,18 @@ export default function CommercialAgentsPage() {
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Direct Sales</div>
+          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Direct Sold</div>
           <div className="text-2xl font-outfit font-black text-emerald-700 mt-1">{totalBookedAll}</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Total Available</div>
+          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Available to Sell</div>
           <div className="text-2xl font-outfit font-black text-amber-700 mt-1">{totalAvailableAll}</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
+          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Checked In</div>
+          <div className="text-2xl font-outfit font-black text-indigo-700 mt-1">{totalCheckedInAll}</div>
         </div>
       </div>
 
@@ -467,7 +513,7 @@ export default function CommercialAgentsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by agent name, email, mobile, staff ID, parent..."
+              placeholder="Search by agent name, email, mobile, parent..."
               className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon"
             />
           </div>
@@ -557,7 +603,7 @@ export default function CommercialAgentsPage() {
             return (
               <div
                 key={master.id}
-                className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden transition-all"
+                className="bg-white rounded-2xl border border-stone-200 shadow-xs transition-all"
               >
                 {/* Master Agent Header Card */}
                 <div
@@ -610,11 +656,6 @@ export default function CommercialAgentsPage() {
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500 mt-1">
                         <span className="font-mono text-stone-600">{master.email}</span>
                         {master.phone && <span>• {master.phone}</span>}
-                        {master.staffId && (
-                          <span className="font-mono text-maroon font-semibold">
-                            • Staff ID: {master.staffId}
-                          </span>
-                        )}
                       </div>
 
                       {hasSubAgents && (
@@ -643,16 +684,23 @@ export default function CommercialAgentsPage() {
                     </div>
 
                     <div className="text-right">
-                      <div className="text-[10px] uppercase font-bold text-stone-400">Direct Sales</div>
+                      <div className="text-[10px] uppercase font-bold text-stone-400">Direct Sold</div>
                       <div className="text-sm font-outfit font-extrabold text-emerald-700 mt-0.5">
-                        {master.ordersCount || 0} Orders
+                        {master.ordersCount || 0} Tickets
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <div className="text-[10px] uppercase font-bold text-stone-400">Available Quota</div>
+                      <div className="text-[10px] uppercase font-bold text-stone-400">Available to Sell</div>
                       <div className="text-sm font-outfit font-black text-maroon mt-0.5">
-                        {master.summary?.totalAvailable || 0} Passes
+                        {master.summary?.totalAvailable || 0} Tickets
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-[10px] uppercase font-bold text-stone-400">Checked In</div>
+                      <div className="text-sm font-outfit font-extrabold text-indigo-700 mt-0.5">
+                        {master.summary?.checkedIn || master.checkedIn || 0} Tickets
                       </div>
                     </div>
                   </div>
@@ -676,7 +724,7 @@ export default function CommercialAgentsPage() {
                     </button>
 
                     {/* Overflow Button */}
-                    <div className="relative">
+                    <div className="relative" data-action-menu="true">
                       <button
                         onClick={() => setOpenMenuId(openMenuId === master.id ? null : master.id)}
                         className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-600 transition-colors cursor-pointer"
@@ -689,7 +737,7 @@ export default function CommercialAgentsPage() {
                       {/* Dropdown Menu */}
                       {openMenuId === master.id && (
                         <div
-                          className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-stone-200 py-1.5 z-30 animate-in fade-in"
+                          className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-stone-200 py-1.5 z-50 animate-in fade-in"
                           role="menu"
                         >
                           <button
@@ -783,7 +831,6 @@ export default function CommercialAgentsPage() {
                               <div className="text-[11px] text-stone-500 mt-0.5 flex flex-wrap gap-x-2">
                                 <span>{sub.email}</span>
                                 {sub.phone && <span>• {sub.phone}</span>}
-                                {sub.staffId && <span>• Staff ID: {sub.staffId}</span>}
                               </div>
                             </div>
                           </div>
@@ -801,12 +848,12 @@ export default function CommercialAgentsPage() {
                               ))}
                             </div>
 
-                            <div className="font-semibold text-stone-700">
-                              {sub.ordersCount || 0} Orders Sold
+                            <div className="font-semibold text-emerald-700">
+                              {sub.ordersCount || 0} Tickets Sold
                             </div>
 
                             <div className="font-outfit font-black text-maroon">
-                              {sub.summary?.totalAvailable || 0} Passes Available
+                              {sub.summary?.totalAvailable || 0} Tickets Available
                             </div>
                           </div>
 
@@ -835,7 +882,7 @@ export default function CommercialAgentsPage() {
                             </button>
 
                             {/* Sub-Agent Overflow Button */}
-                            <div className="relative">
+                            <div className="relative" data-action-menu="true">
                               <button
                                 onClick={() => setOpenMenuId(openMenuId === sub.id ? null : sub.id)}
                                 className="p-1 rounded-lg hover:bg-stone-100 text-stone-500"
@@ -847,7 +894,7 @@ export default function CommercialAgentsPage() {
 
                               {openMenuId === sub.id && (
                                 <div
-                                  className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-stone-200 py-1.5 z-30 animate-in fade-in"
+                                  className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-stone-200 py-1.5 z-50 animate-in fade-in"
                                   role="menu"
                                 >
                                   <Link
@@ -942,8 +989,8 @@ export default function CommercialAgentsPage() {
                     <span className="font-bold text-ink text-sm">{agentDetails.name}</span>
                   </div>
                   <div>
-                    <span className="text-stone-400 block text-[10px] uppercase font-bold">Staff ID</span>
-                    <span className="font-mono font-bold text-maroon">{agentDetails.staffId || '—'}</span>
+                    <span className="text-stone-400 block text-[10px] uppercase font-bold">Email</span>
+                    <span className="font-semibold text-stone-700 truncate block">{agentDetails.email}</span>
                   </div>
                   <div>
                     <span className="text-stone-400 block text-[10px] uppercase font-bold">Role</span>
@@ -1108,10 +1155,6 @@ export default function CommercialAgentsPage() {
                 <span className="font-mono text-stone-700">{agentToDelete.email}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-stone-500">Staff ID:</span>
-                <span className="font-mono text-maroon font-semibold">{agentToDelete.staffId || '—'}</span>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-stone-500">Agent Type:</span>
                 <span className="font-semibold text-stone-800">
                   {agentToDelete.parentAgent ? `Sub-Agent (under ${agentToDelete.parentAgent.name})` : 'Master Agent'}
@@ -1128,9 +1171,26 @@ export default function CommercialAgentsPage() {
             </div>
 
             {/* Dependency Warning if agent has orders or sub-agents */}
-            {(agentToDelete.ordersCount > 0 ||
+            {isSuperAdmin ? (
+              <div className="space-y-2">
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    This account has linked operational records. SUPER_ADMIN permission allows the account to be permanently removed, while historical operational records will be preserved.
+                  </div>
+                </div>
+                {agentToDelete.subAgentsCount > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs flex items-start gap-2.5">
+                    <Shield className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <div className="leading-relaxed">
+                      This master agent has {agentToDelete.subAgentsCount} sub-agent(s) which will be automatically converted into independent master agents (retaining all existing inventory, tickets, and bookings).
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (agentToDelete.ordersCount > 0 ||
               agentToDelete.subAgentsCount > 0 ||
-              (agentToDelete.summary?.totalAllocated || 0) > 0) && (
+              (agentToDelete.summary?.totalAllocated || 0) > 0) ? (
               <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
@@ -1139,7 +1199,7 @@ export default function CommercialAgentsPage() {
                   account instead.
                 </div>
               </div>
-            )}
+            ) : null}
 
             {deleteError && (
               <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2">
@@ -1157,7 +1217,16 @@ export default function CommercialAgentsPage() {
                 Cancel
               </button>
 
-              {agentToDelete.ordersCount > 0 || agentToDelete.subAgentsCount > 0 ? (
+              {isSuperAdmin ? (
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={handleConfirmDeleteAgent}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Agent'}
+                </button>
+              ) : agentToDelete.ordersCount > 0 || agentToDelete.subAgentsCount > 0 ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -1289,31 +1358,16 @@ export default function CommercialAgentsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1 uppercase tracking-wider text-[10px]">
-                    Staff ID (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={registerForm.staffId}
-                    onChange={(e) => setRegisterForm({ ...registerForm, staffId: e.target.value })}
-                    placeholder="AGT-001"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon uppercase"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1 uppercase tracking-wider text-[10px]">
-                    Initial Password
-                  </label>
-                  <PasswordInput
-                    value={registerForm.password}
-                    onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
-                    placeholder="Default: OngcPass@2026"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon text-xs"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-stone-700 mb-1 uppercase tracking-wider text-[10px]">
+                  Initial Password
+                </label>
+                <PasswordInput
+                  value={registerForm.password}
+                  onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                  placeholder="Default: OngcPass@2026"
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon text-xs"
+                />
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-3 border-t border-stone-100">
