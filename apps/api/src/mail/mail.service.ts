@@ -270,7 +270,7 @@ export class MailService {
     const portalUrl = `${this.webUrl}/my-tickets?orderNumber=${encodeURIComponent(data.orderNumber)}`;
     const attachments: EmailAttachment[] = [];
 
-    // Generate individual pass cards with real, scannable QR codes
+    // Generate individual pass cards with real, scannable QR codes (FIRST CONTENT)
     const passesHtmlParts = await Promise.all(
       data.passes.map(async (pass, idx) => {
         const passUrl = `${this.webUrl}/ticket/${encodeURIComponent(pass.token)}`;
@@ -304,38 +304,54 @@ export class MailService {
         const qrImgSrc = base64Png ? `cid:${cid}` : '';
 
         return `
-          <div style="background: linear-gradient(145deg, #5A0F21 0%, #7A1930 60%, #3D0714 100%); border: 2px solid #D4AF37; border-radius: 16px; padding: 22px 18px; margin-bottom: 22px; text-align: center; color: #FFFFFF; box-shadow: 0 4px 15px rgba(90, 15, 33, 0.3);">
-            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #F5E6B3; font-weight: bold; margin-bottom: 4px;">
-              Pass Holder ${data.passes.length > 1 ? `#${idx + 1}` : ''} &bull; ${pass.category || 'Commercial Pass'}
-            </div>
-            <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin: 4px 0 2px 0;">
-              ${this.escapeHtml(pass.attendeeName || data.customerName)}
-            </div>
-            <div style="font-size: 13px; font-family: 'Courier New', Courier, monospace; color: #FDE047; font-weight: bold; margin-bottom: 14px;">
-              Ticket ID: ${pass.ticketNumber}
-            </div>
-
-            <!-- REAL SCANNABLE QR CODE CONTAINER -->
-            <div style="background-color: #FFFFFF; border-radius: 14px; padding: 14px; display: inline-block; margin: 6px auto 14px auto; box-shadow: 0 3px 12px rgba(0,0,0,0.25);">
-              ${base64Png ? `
-                <img src="${qrImgSrc}" alt="Entry QR Pass" width="200" height="200" style="display: block; width: 200px; height: 200px; margin: 0 auto; border: 0;" />
-              ` : `
-                <div style="width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; color: #7A1930; font-size: 12px; font-weight: bold;">
-                  QR code available via link below
+          <!-- PASS CARD ${idx + 1} -->
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: linear-gradient(145deg, #5A0F21 0%, #7A1930 60%, #3D0714 100%); border: 2px solid #D4AF37; border-radius: 16px; margin-bottom: 20px; text-align: center; color: #FFFFFF; box-shadow: 0 4px 15px rgba(90, 15, 33, 0.3);">
+            <tr>
+              <td style="padding: 22px 18px; text-align: center;">
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #F5E6B3; font-weight: bold; margin-bottom: 4px;">
+                  ONGC NAVRATRI 2026 &bull; OFFICIAL ENTRY PASS
                 </div>
-              `}
-              <div style="font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #7A1930; text-transform: uppercase; margin-top: 8px;">
-                SCAN AT ENTRY
-              </div>
-            </div>
+                <div style="font-size: 12px; font-weight: 700; color: #D4AF37; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
+                  ${passTypeLabel.toUpperCase()} ${data.passes.length > 1 ? `&bull; PASS #${idx + 1}` : ''}
+                </div>
+                <div style="font-size: 20px; font-weight: 800; color: #FFFFFF; margin: 4px 0 2px 0;">
+                  ${this.escapeHtml(pass.attendeeName || data.customerName)}
+                </div>
 
-            <!-- VIEW MY TICKET SECURE BUTTON -->
-            <div style="margin-top: 6px;">
-              <a href="${passUrl}" style="display: inline-block; background-color: #D4AF37; color: #5A0F21; font-weight: 800; font-size: 13px; padding: 11px 24px; text-decoration: none; border-radius: 8px; letter-spacing: 0.5px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
-                VIEW MY TICKET &rarr;
-              </a>
-            </div>
-          </div>
+                <!-- REAL SCANNABLE QR CODE CONTAINER -->
+                <table cellpadding="0" cellspacing="0" border="0" align="center" style="background-color: #FFFFFF; border-radius: 14px; margin: 12px auto 14px auto; box-shadow: 0 3px 12px rgba(0,0,0,0.25);">
+                  <tr>
+                    <td align="center" style="padding: 14px; background-color: #FFFFFF; border-radius: 14px;">
+                      ${base64Png ? `
+                        <img src="${qrImgSrc}" alt="Entry QR Pass - ${pass.ticketNumber}" width="200" height="200" style="display: block; width: 200px; height: 200px; margin: 0 auto; border: 0;" />
+                      ` : `
+                        <div style="width: 200px; height: 200px; line-height: 200px; text-align: center; color: #7A1930; font-size: 12px; font-weight: bold;">
+                          QR code available via link below
+                        </div>
+                      `}
+                      <div style="font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #7A1930; text-transform: uppercase; margin-top: 8px;">
+                        SCAN AT ENTRY
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+
+                <div style="font-size: 13px; font-family: 'Courier New', Courier, monospace; color: #FDE047; font-weight: bold; margin-bottom: 4px;">
+                  Ticket ID: ${pass.ticketNumber}
+                </div>
+                <div style="font-size: 12px; color: #F5E6B3; margin-bottom: 14px;">
+                  Event Date: ${formattedDates}
+                </div>
+
+                <!-- VIEW MY TICKET SECURE BUTTON -->
+                <div>
+                  <a href="${passUrl}" style="display: inline-block; background-color: #D4AF37; color: #5A0F21; font-weight: 800; font-size: 13px; padding: 12px 24px; text-decoration: none; border-radius: 8px; letter-spacing: 0.5px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+                    VIEW MY TICKET &rarr;
+                  </a>
+                </div>
+              </td>
+            </tr>
+          </table>
         `;
       }),
     );
@@ -353,51 +369,67 @@ export class MailService {
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FAF6EF; padding: 24px 12px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
-          <!-- HEADER -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
+          <!-- 1. ONGC NAVRATRI HEADER -->
           <tr>
-            <td style="background: linear-gradient(135deg, #7A1930 0%, #5A0F21 100%); padding: 32px 24px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
+            <td style="background: linear-gradient(135deg, #7A1930 0%, #5A0F21 100%); padding: 28px 24px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
               <div style="font-size: 12px; font-weight: bold; letter-spacing: 2px; color: #F5E6B3; text-transform: uppercase;">
                 Oil and Natural Gas Corporation Ltd.
               </div>
-              <h1 style="margin: 8px 0 4px 0; font-size: 26px; font-weight: 800; color: #FFFFFF;">
-                ONGC Navratri 2026
+              <h1 style="margin: 8px 0 4px 0; font-size: 26px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.5px;">
+                ONGC NAVRATRI 2026
               </h1>
               <p style="margin: 0; font-size: 14px; color: #F5E6B3;">
-                Ahmedabad &bull; Official Commercial Entry Passes
+                Ahmedabad &bull; Official Digital Entry Pass
               </p>
             </td>
           </tr>
 
-          <!-- BODY -->
+          <!-- MAIN CONTENT BODY -->
           <tr>
-            <td style="padding: 28px 24px;">
-              <h2 style="font-size: 20px; font-weight: 800; color: #7A1930; margin: 0 0 12px 0;">
-                Your ONGC Navratri 2026 QR Pass is Ready 🎉
-              </h2>
-              <p style="font-size: 15px; margin: 0 0 12px 0; color: #2A1810;">
-                Dear <strong>${this.escapeHtml(data.customerName)}</strong>,
-              </p>
-              <p style="font-size: 14px; line-height: 1.6; color: #4A3B32; margin: 0 0 16px 0;">
-                Your digital QR pass is attached to this email and is also available through your secure ticket link.
-              </p>
+            <td style="padding: 24px 20px;">
+              <!-- 2. SUCCESS CONFIRMATION BADGE -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 18px; text-align: center;">
+                <tr>
+                  <td align="center">
+                    <span style="display: inline-block; background-color: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; font-size: 12px; font-weight: 800; padding: 6px 14px; rounded: 20px; border-radius: 20px; letter-spacing: 0.5px;">
+                      ✓ PAYMENT / BOOKING CONFIRMED &bull; PASS READY
+                    </span>
+                  </td>
+                </tr>
+              </table>
 
-              <!-- IMPORTANT NOTICE -->
-              <div style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 10px; padding: 12px 16px; margin: 0 0 20px 0; font-size: 13px; color: #92400E; font-weight: 600; line-height: 1.5;">
-                ⚠️ <strong>Important Notice:</strong> Please do not share your QR code. It is unique to your booking and will be validated at the entry gate.
+              <!-- 3. YOUR DIGITAL PASS(ES) — FIRST MAJOR VISUAL CONTENT -->
+              <div style="text-align: center; margin-bottom: 14px;">
+                <h2 style="font-size: 20px; font-weight: 800; color: #7A1930; margin: 0 0 4px 0; letter-spacing: 0.5px;">
+                  YOUR DIGITAL PASS${data.passes.length > 1 ? 'ES' : ''}
+                </h2>
+                <p style="font-size: 13px; color: #5A4A3E; margin: 0;">
+                  Present the QR code below at the entry gate for instant verification.
+                </p>
               </div>
 
-              <!-- ORDER SUMMARY CARD -->
+              ${passesHtml}
+
+              <!-- 4. QR WARNING -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 10px; margin: 0 0 24px 0;">
+                <tr>
+                  <td style="padding: 12px 16px; font-size: 12px; color: #92400E; font-weight: 600; line-height: 1.5; text-align: center;">
+                    ⚠️ <strong>Important:</strong> This QR code is unique to this pass. Please do not share or forward it.
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 5. BOOKING DETAILS -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FDF9F3; border: 1px solid #E5D5BA; border-radius: 12px; margin-bottom: 24px;">
                 <tr>
-                  <td style="padding: 16px;">
+                  <td style="padding: 18px;">
+                    <div style="font-size: 13px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; border-bottom: 1px solid #E5D5BA; pb-2;">
+                      BOOKING DETAILS
+                    </div>
                     <table width="100%" cellpadding="4" cellspacing="0" border="0" style="font-size: 13px;">
                       <tr>
-                        <td style="color: #7A6557; width: 40%;">Customer Name:</td>
-                        <td style="font-weight: bold; color: #2A1810;">${this.escapeHtml(data.customerName)}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #7A6557;">Order Reference:</td>
+                        <td style="color: #7A6557; width: 42%;">Order Reference:</td>
                         <td style="font-weight: bold; font-family: monospace; color: #7A1930;">${data.orderNumber}</td>
                       </tr>
                       <tr>
@@ -405,81 +437,136 @@ export class MailService {
                         <td style="font-weight: bold; color: #2A1810;">${passTypeLabel}</td>
                       </tr>
                       <tr>
-                        <td style="color: #7A6557;">Booking Date:</td>
+                        <td style="color: #7A6557;">Event Date:</td>
                         <td style="font-weight: bold; color: #2A1810;">${formattedDates}</td>
                       </tr>
                       <tr>
-                        <td style="color: #7A6557;">Pass Timing:</td>
-                        <td style="font-weight: bold; color: #7A1930;">${passTiming}</td>
-                      </tr>
-                      <tr>
-                        <td style="color: #7A6557;">Passes Count:</td>
+                        <td style="color: #7A6557;">Pass Quantity:</td>
                         <td style="font-weight: bold; color: #2A1810;">${data.quantity} Pass${data.quantity > 1 ? 'es' : ''}</td>
                       </tr>
                       <tr>
-                        <td style="color: #7A6557;">Total Amount Paid:</td>
+                        <td style="color: #7A6557;">Amount Paid:</td>
                         <td style="font-weight: bold; color: #166534;">₹${data.amountInr.toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #7A6557;">Booking Status:</td>
+                        <td style="font-weight: bold; color: #047857;">CONFIRMED</td>
                       </tr>
                     </table>
                   </td>
                 </tr>
               </table>
 
-              <!-- PASSES LIST -->
-              <h3 style="font-size: 16px; color: #7A1930; margin: 0 0 12px 0;">
-                Your Digital Passes (${data.passes.length})
-              </h3>
-              ${passesHtml}
+              <!-- 6. EVENT INFORMATION -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FDF9F3; border: 1px solid #E5D5BA; border-radius: 12px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 18px;">
+                    <div style="font-size: 13px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; border-bottom: 1px solid #E5D5BA; pb-2;">
+                      EVENT INFORMATION
+                    </div>
+                    <table width="100%" cellpadding="4" cellspacing="0" border="0" style="font-size: 13px;">
+                      <tr>
+                        <td style="color: #7A6557; width: 42%;">Venue:</td>
+                        <td style="font-weight: bold; color: #2A1810;">ONGC Ground, Chandkheda, Ahmedabad</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #7A6557;">Event:</td>
+                        <td style="font-weight: bold; color: #2A1810;">ONGC Navratri 2026</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #7A6557;">Event Dates:</td>
+                        <td style="font-weight: bold; color: #2A1810;">11–19 October 2026</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #7A6557;">Gates Open:</td>
+                        <td style="font-weight: bold; color: #2A1810;">From 7:00 PM</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #7A6557;">Pass Timing:</td>
+                        <td style="font-weight: bold; color: #7A1930;">${passTiming}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
 
-              <!-- RECOVERY / PORTAL LINK -->
-              <div style="background-color: #F5EFEB; border-radius: 12px; padding: 16px; margin: 24px 0; text-align: center;">
+              <!-- 7. RECOVERY / MY TICKETS PORTAL LINK -->
+              <div style="background-color: #F5EFEB; border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: center;">
                 <p style="font-size: 13px; color: #5A4A3E; margin: 0 0 10px 0;">
-                  You can also view, print, or download your passes anytime online by entering your <strong>Order Number</strong> and <strong>Mobile Number</strong>:
+                  Access your passes anytime online by entering your <strong>Order Number</strong> and <strong>Mobile Number</strong>:
                 </p>
                 <a href="${portalUrl}" style="display: inline-block; background-color: #7A1930; color: #FFFFFF; font-weight: bold; font-size: 13px; padding: 10px 20px; text-decoration: none; border-radius: 8px;">
                   Access My Tickets Portal &rarr;
                 </a>
               </div>
 
-              <!-- TICKET GUIDELINES -->
-              <div style="background-color: #FAF5F0; border: 1px solid #D4AF37; border-radius: 12px; padding: 18px 20px; margin: 24px 0;">
-                <h4 style="font-size: 14px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0;">
-                  Ticket Guidelines
+              <!-- 8. ENTRY GUIDELINES -->
+              <div style="background-color: #FAF5F0; border: 1px solid #D4AF37; border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;">
+                <h4 style="font-size: 13px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0;">
+                  ENTRY GUIDELINES
                 </h4>
                 <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #4A3B32; line-height: 1.7;">
-                  <li>Tickets are non-refundable and non-transferable.</li>
-                  <li>This QR pass is valid only for the selected date and applicable pass timing.</li>
-                  <li>Please keep the QR pass available on your phone at the entry gate.</li>
-                  <li>Do not share or forward your QR code with unauthorized persons.</li>
-                  <li>Entry is subject to event security and venue rules.</li>
-                  <li>Please retain your booking confirmation until the end of your visit.</li>
+                  <li>Keep your digital pass ready at the entry gate.</li>
+                  <li>Show the QR code to scanning staff.</li>
+                  <li>Each QR is unique to its pass.</li>
+                  <li>Do not share or forward the QR code.</li>
+                  <li>Follow venue security and entry instructions.</li>
+                  <li>Pass validity follows the selected pass type, booking date, and timing (${passTiming}).</li>
+                  <li>Tickets are strictly non-refundable and non-transferable under any circumstances.</li>
                 </ul>
               </div>
 
-              <!-- VENUE GUIDELINES -->
-              <div style="border-top: 1px solid #E5D5BA; padding-top: 20px; font-size: 12px; color: #6E5C50; line-height: 1.6;">
-                <strong style="color: #7A1930; font-size: 13px;">Important Entry Guidelines:</strong>
-                <ul style="margin: 8px 0 0 0; padding-left: 20px;">
-                  <li>Entry gates open daily at <strong>7:00 PM</strong> at <strong>ONGC Ground, Chandkheda, Ahmedabad</strong>.</li>
-                  <li>Present your unique digital QR pass at the express turnstiles for fast entry.</li>
-                  <li>Each QR pass is valid for one person per night.</li>
-                  <li>Please keep your digital QR pass ready on your phone at the entry gate.</li>
-                </ul>
+              <!-- 9. OUR PARTNERS / SPONSORS -->
+              <div style="border-top: 1px solid #E5D5BA; padding: 20px 0 16px 0; text-align: center;">
+                <div style="font-size: 11px; font-weight: 800; letter-spacing: 2px; color: #7A1930; text-transform: uppercase; margin-bottom: 12px;">
+                  OUR PARTNERS
+                </div>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" style="font-size: 12px; color: #4A3B32; padding-bottom: 8px;">
+                      <div style="font-size: 10px; font-weight: bold; color: #8A7264; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">
+                        TITLE SPONSORS
+                      </div>
+                      <strong style="color: #2A1810; font-size: 13px;">Zaira Diamond</strong> &bull; <strong style="color: #2A1810; font-size: 13px;">Om Sanctuary Palace</strong>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="font-size: 12px; color: #4A3B32; padding-top: 4px;">
+                      <div style="font-size: 10px; font-weight: bold; color: #8A7264; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">
+                        MEDIA SPONSOR
+                      </div>
+                      <strong style="color: #2A1810; font-size: 13px;">Lalkaar News</strong>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- 10. EVENT ORGANISER -->
+              <div style="border-top: 1px solid #E5D5BA; padding: 18px 0 6px 0; text-align: center;">
+                <div style="font-size: 10px; font-weight: 800; letter-spacing: 2px; color: #8A7264; text-transform: uppercase; margin-bottom: 6px;">
+                  EVENT ORGANISER
+                </div>
+                <div style="font-size: 13px; font-weight: 800; color: #7A1930;">
+                  ONGC Navratri 2026 Organizing Committee
+                </div>
+                <div style="font-size: 11px; color: #6E5C50; margin-top: 2px;">
+                  Oil and Natural Gas Corporation Ltd. - Ahmedabad
+                </div>
               </div>
             </td>
           </tr>
 
-          <!-- FOOTER -->
+          <!-- 11. FOOTER -->
           <tr>
             <td style="background-color: #2A1810; padding: 24px; text-align: center; color: #E5D5BA; font-size: 12px; line-height: 1.5;">
               <p style="margin: 0 0 6px 0; font-weight: bold; color: #FFFFFF;">
-                ONGC Navratri 2026 Organizing Committee
+                Need assistance?
               </p>
               <p style="margin: 0 0 8px 0;">
-                For support and inquiries: <a href="mailto:${this.mailbox}" style="color: #D4AF37; text-decoration: none;">${this.mailbox}</a>
+                Support: <a href="mailto:${this.mailbox}" style="color: #D4AF37; text-decoration: none;">${this.mailbox}</a>
               </p>
               <p style="margin: 0; font-size: 11px; color: #A69080;">
-                This is an automated transactional message regarding your official ticket booking. Please do not reply directly to this email.
+                This is an automated ticket confirmation. Please do not reply directly to this email.
               </p>
             </td>
           </tr>
@@ -492,33 +579,64 @@ export class MailService {
     `;
 
     const textContent = `
-ONGC NAVRATRI 2026 - TICKET CONFIRMATION
+ONGC NAVRATRI 2026 - OFFICIAL ENTRY PASS
 Oil and Natural Gas Corporation Ltd. - Ahmedabad
+Ahmedabad • Official Digital Entry Pass
 
-Dear ${data.customerName},
+YOUR DIGITAL PASS${data.passes.length > 1 ? 'ES' : ''}:
+${data.passes
+  .map(
+    (p, i) => `
+Pass #${i + 1} (${p.category || 'Commercial Pass'})
+Attendee: ${p.attendeeName || data.customerName}
+Ticket ID: ${p.ticketNumber}
+Event Date: ${formattedDates}
+Pass Timing: ${passTiming}
+View My Ticket: ${this.webUrl}/ticket/${encodeURIComponent(p.token)}
+`,
+  )
+  .join('\n')}
 
-Thank you for booking your passes for the ONGC Navratri Festival 2026. Your payment has been confirmed and your digital passes are ready.
+IMPORTANT:
+This QR code is unique to this pass. Please do not share or forward it.
 
-ORDER DETAILS:
-Order Number: ${data.orderNumber}
+BOOKING DETAILS:
+Order Reference: ${data.orderNumber}
 Pass Type: ${passTypeLabel}
-Event Dates: ${formattedDates}
-Passes Count: ${data.quantity} Pass${data.quantity > 1 ? 'es' : ''}
-Total Amount Paid: ₹${data.amountInr.toLocaleString('en-IN')}
+Event Date: ${formattedDates}
+Pass Quantity: ${data.quantity} Pass${data.quantity > 1 ? 'es' : ''}
+Amount Paid: ₹${data.amountInr.toLocaleString('en-IN')}
+Booking Status: CONFIRMED
 
-YOUR PASSES:
-${data.passes.map((p, i) => `Pass #${i + 1} (${p.category || 'Commercial Pass'}): Ticket ID: ${p.ticketNumber} | View Pass: ${this.webUrl}/ticket/${p.token}`).join('\n')}
+EVENT INFORMATION:
+Venue: ONGC Ground, Chandkheda, Ahmedabad
+Event: ONGC Navratri 2026
+Event Dates: 11–19 October 2026
+Gates Open: From 7:00 PM
+Pass Timing: ${passTiming}
 
 ONLINE PORTAL:
 Access your passes anytime online: ${portalUrl}
 
 ENTRY GUIDELINES:
-- Venue: ONGC Ground, Chandkheda, Ahmedabad
-- Gates open daily at 7:00 PM
-- Present individual digital QR passes at the gate
-- Please keep your QR pass ready on your phone at the entry gate
+- Keep your digital pass ready at the entry gate.
+- Show the QR code to scanning staff.
+- Each QR is unique to its pass.
+- Do not share or forward the QR code.
+- Follow venue security and entry instructions.
+- Pass validity follows the selected pass type, booking date, and timing.
+- Tickets are strictly non-refundable and non-transferable under any circumstances.
+
+OUR PARTNERS:
+Title Sponsors: Zaira Diamond, Om Sanctuary Palace
+Media Sponsor: Lalkaar News
+
+EVENT ORGANISER:
+ONGC Navratri 2026 Organizing Committee
+Oil and Natural Gas Corporation Ltd. - Ahmedabad
 
 Need assistance? Contact us at: ${this.mailbox}
+This is an automated ticket confirmation. Please do not reply to this email.
     `.trim();
 
     return this.sendEmail({

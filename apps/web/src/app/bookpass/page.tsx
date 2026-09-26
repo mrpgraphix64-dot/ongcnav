@@ -20,8 +20,10 @@ import {
   Clock,
   ChevronDown,
   Check,
+  Download,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { generateDownloadablePassSvg } from './bookpass-order.util';
 
 const EVENT_DATES = [
   '2026-10-11',
@@ -127,6 +129,52 @@ interface GeneratedPass {
   mobile: string;
   category: string;
   bookingDays: string[];
+}
+
+interface ConfirmedOrderSummary {
+  orderNumber: string;
+  ticketType: TicketTypeCode;
+  selectedDates: string[];
+  quantity: number;
+  amountInr: number;
+  customerEmail: string;
+  customerName: string;
+}
+
+function getPassTiming(ticketType: TicketTypeCode): string {
+  if (ticketType === 'COMMERCIAL_MANDLI') {
+    return '12:00 AM – 4:00 AM';
+  }
+  return '8:00 PM – 4:00 AM';
+}
+
+function getPassTypeLabel(ticketType: TicketTypeCode): string {
+  switch (ticketType) {
+    case 'COMMERCIAL_SEASON':
+      return 'Season Pass (All 9 Nights)';
+    case 'COMMERCIAL_MANDLI':
+      return 'Mandli Pass';
+    case 'COMMERCIAL_ANY_DAY':
+      return 'Any Day Pass';
+    case 'COMMERCIAL_DAILY':
+    default:
+      return 'Daily Entry Pass';
+  }
+}
+
+function formatConfirmedDates(dates: string[] | undefined, ticketType: TicketTypeCode): string {
+  if (ticketType === 'COMMERCIAL_SEASON') {
+    return '11–19 October 2026 (All 9 Nights)';
+  }
+  if (!dates || dates.length === 0) {
+    return '11–19 October 2026';
+  }
+  return dates
+    .map((d) => {
+      const dt = new Date(d + 'T00:00:00');
+      return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    })
+    .join(', ');
 }
 
 interface CustomQuantityDropdownProps {
@@ -270,6 +318,30 @@ export default function BookPassPage() {
   const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
   const [confirmedPasses, setConfirmedPasses] = useState<GeneratedPass[]>([]);
   const [isTestOrder, setIsTestOrder] = useState(false);
+  const [confirmedOrderSummary, setConfirmedOrderSummary] = useState<ConfirmedOrderSummary | null>(null);
+
+  const handleDownloadPass = (pass: GeneratedPass, passLabel: string, formattedDates: string) => {
+    if (pass.qrSvg) {
+      const passSvg = generateDownloadablePassSvg({
+        ticketNumber: pass.ticketNumber,
+        name: pass.name,
+        passTypeLabel: passLabel,
+        formattedDates,
+        qrSvg: pass.qrSvg,
+      });
+      const blob = new Blob([passSvg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ONGC-Pass-${pass.ticketNumber}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      window.open(`/ticket/${pass.qrCodeToken}`, '_blank');
+    }
+  };
 
   // Server-synced pricing config
   const [serverPricing, setServerPricing] = useState<Record<string, any> | null>(null);
@@ -385,6 +457,15 @@ export default function BookPassPage() {
         setIsTestOrder(true);
         setConfirmedOrderNumber(orderData.orderNumber);
         setConfirmedPasses(res.passes);
+        setConfirmedOrderSummary({
+          orderNumber: orderData.orderNumber,
+          ticketType: (orderData.ticketType as TicketTypeCode) || ticketType,
+          selectedDates: (orderData.selectedDates as string[]) || (ticketType === 'COMMERCIAL_SEASON' ? EVENT_DATES : [selectedDate]),
+          quantity: orderData.quantity || quantity,
+          amountInr: orderData.amountInr ?? (orderData.amountPaise ? orderData.amountPaise / 100 : estimatedTotal),
+          customerEmail: orderData.customer?.email || email.trim().toLowerCase(),
+          customerName: orderData.customer?.name || name.trim(),
+        });
         setSubmitting(false);
         return;
       }
@@ -482,6 +563,15 @@ export default function BookPassPage() {
       if (res.success && res.passes) {
         setConfirmedOrderNumber(res.orderNumber);
         setConfirmedPasses(res.passes);
+        setConfirmedOrderSummary({
+          orderNumber: res.orderNumber,
+          ticketType: (res.ticketType as TicketTypeCode) || pendingOrder?.ticketType || ticketType,
+          selectedDates: (res.selectedDates as string[]) || pendingOrder?.selectedDates || (ticketType === 'COMMERCIAL_SEASON' ? EVENT_DATES : [selectedDate]),
+          quantity: res.quantity || pendingOrder?.quantity || quantity,
+          amountInr: res.amountInr ?? (pendingOrder?.amountInr || (pendingOrder?.amountPaise ? pendingOrder.amountPaise / 100 : estimatedTotal)),
+          customerEmail: res.customerEmail || pendingOrder?.customer?.email || email.trim().toLowerCase(),
+          customerName: pendingOrder?.customer?.name || name.trim(),
+        });
         setPendingOrder(null);
       } else {
         throw new Error(res.message || 'Payment signature verification failed.');
@@ -509,6 +599,7 @@ export default function BookPassPage() {
     setPendingOrder(null);
     setConfirmedOrderNumber(null);
     setConfirmedPasses([]);
+    setConfirmedOrderSummary(null);
     setIsTestOrder(false);
     setTermsAccepted(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -520,169 +611,403 @@ export default function BookPassPage() {
       <PublicHeader />
 
       <main className="flex-1">
-        {/* CONTAINER */}
-        <div className="max-w-4xl mx-auto pt-6 sm:pt-8 pb-12 px-4 sm:px-6">
-          {/* COMPACT CHECKOUT HEADER (Replaces large marketing hero) */}
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
-            <div>
-              <h1 className="font-outfit font-black text-2xl sm:text-3xl text-ink tracking-tight">
-                Buy Your Commercial Pass
-              </h1>
-              <p className="text-xs sm:text-sm text-ink-soft">
-                Official Digital Entry Passes &bull; ONGC Navratri 2026, Ahmedabad
-              </p>
+        {confirmedPasses.length > 0 ? (
+          /* REDESIGNED DIGITAL TICKET CONFIRMATION EXPERIENCE */
+          <div className="max-w-3xl mx-auto pt-6 sm:pt-10 pb-16 px-4 sm:px-6 space-y-8">
+            {/* 1. ONGC NAVRATRI HEADER */}
+            <div className="text-center space-y-3 pb-3 border-b border-stone-200/80">
+              <img
+                src="/images/logo-web.png"
+                alt="ONGC Logo"
+                className="h-14 sm:h-16 w-auto max-w-[220px] object-contain mx-auto"
+              />
+              <div>
+                <h1 className="font-cinzel font-black text-2xl sm:text-3xl text-maroon tracking-wide uppercase">
+                  ONGC NAVRATRI 2026
+                </h1>
+                <p className="text-xs sm:text-sm font-semibold text-ink-soft tracking-wider uppercase mt-1">
+                  Ahmedabad &bull; Official Digital Entry Pass
+                </p>
+              </div>
             </div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold w-fit">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Official Ticketing Portal</span>
-            </div>
-          </div>
 
-          {verifying ? (
-            /* VERIFICATION IN PROGRESS */
-            <div className="bg-white rounded-3xl p-12 border border-gold/40 shadow-xl text-center space-y-4">
-              <Loader2 className="w-12 h-12 text-maroon animate-spin mx-auto" />
-              <h2 className="font-outfit font-extrabold text-2xl text-ink">
-                Verifying Payment with Gateway...
-              </h2>
-              <p className="text-ink-soft text-sm max-w-md mx-auto">
-                Please wait while our backend cryptographically confirms your payment and generates your secure QR passes.
-              </p>
-            </div>
-          ) : confirmedPasses.length > 0 ? (
-            /* SUCCESS STATE — AUTHORITATIVE CONFIRMED PASSES */
-            <div className="space-y-6">
-              <div className="bg-white rounded-3xl p-8 sm:p-10 border-2 border-emerald-500/40 shadow-xl text-center space-y-5">
-                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center border border-emerald-200 shadow-inner">
-                  <CheckCircle2 className="w-8 h-8" />
-                </div>
-
-                <div className="space-y-1">
-                  {isTestOrder ? (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full uppercase tracking-wider border border-amber-300">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                      <span>STAGING TEST PAYMENT &bull; NOT A REAL PURCHASE</span>
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-200">
-                      Payment Verified &bull; Confirmed
-                    </span>
-                  )}
-                  <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink pt-1">
-                    {isTestOrder ? 'Pass Confirmed (Staging Test Mode)' : 'Your Passes are Ready!'}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-ink-soft">
-                    Order Reference:{' '}
-                    <span className="font-mono font-bold text-maroon">{confirmedOrderNumber}</span>
-                  </p>
-                </div>
-
+            {/* 2. SUCCESS STATE */}
+            <div className="text-center space-y-2">
+              <div className="inline-flex flex-wrap items-center justify-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 bg-emerald-50 px-4 py-1.5 rounded-full border border-emerald-300 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>PAYMENT / BOOKING CONFIRMED</span>
+                </span>
                 {isTestOrder && (
-                  <p className="text-xs sm:text-sm text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200 max-w-lg mx-auto font-medium">
-                    This commercial pass was generated using safe staging test mode without live Razorpay payment. Official QR codes and emails have been generated for testing.
-                  </p>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full uppercase tracking-wider border border-amber-300 shadow-xs">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>STAGING TEST PAYMENT &bull; NOT A REAL PURCHASE</span>
+                  </span>
                 )}
+              </div>
+              <p className="text-sm font-medium text-ink-soft pt-1">
+                Your digital entry pass is ready. Show the QR code below at the gate.
+              </p>
+              {isTestOrder && (
+                <p className="text-xs text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200 max-w-lg mx-auto font-medium">
+                  This commercial pass was generated using safe staging test mode without live Razorpay payment. Official QR codes and emails have been generated for testing.
+                </p>
+              )}
+            </div>
 
-                <p className="text-xs sm:text-sm text-ink-soft max-w-lg mx-auto">
-                  Show your digital QR code at any entry gate for scanning. You can download or print your pass below.
+            {/* 3. YOUR DIGITAL PASS — FIRST / MAIN FOCUS */}
+            <div className="space-y-4">
+              <div className="text-center">
+                <h2 className="font-outfit font-black text-xl sm:text-2xl text-ink uppercase tracking-wider">
+                  {confirmedPasses.length > 1 ? 'YOUR DIGITAL PASSES' : 'YOUR DIGITAL PASS'}
+                </h2>
+                <p className="text-xs text-ink-soft mt-1">
+                  {confirmedPasses.length > 1
+                    ? 'Each pass has a unique QR code. Present individual QR passes at the entrance.'
+                    : 'Present this QR pass to security staff at the entrance turnstiles.'}
                 </p>
               </div>
 
-              {/* GENERATED PASS CARDS */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {confirmedPasses.map((pass, index) => (
-                  <div
-                    key={pass.id || index}
-                    className="bg-white rounded-3xl p-6 border border-gold/40 shadow-lg flex flex-col justify-between space-y-4 relative overflow-hidden"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-[10px] font-bold text-maroon-dark bg-maroon-soft px-2.5 py-0.5 rounded-full uppercase">
-                          Pass #{index + 1}
-                        </span>
-                        {isTestOrder && (
-                          <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full uppercase ml-2">
-                            STAGING TEST PASS
-                          </span>
-                        )}
-                        <h3 className="font-outfit font-extrabold text-lg text-ink mt-1">
-                          {pass.name}
-                        </h3>
-                        <p className="text-xs text-ink-soft">Mobile: {pass.mobile}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xs font-mono font-bold text-ink">
-                          {pass.ticketNumber}
-                        </span>
-                        <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">● ACTIVE</p>
-                      </div>
-                    </div>
+              {/* Individual Pass Cards */}
+              <div className="space-y-6">
+                {confirmedPasses.map((pass, index) => {
+                  const passType = confirmedOrderSummary?.ticketType || ticketType;
+                  const passLabel = getPassTypeLabel(passType);
+                  const formattedDates = formatConfirmedDates(
+                    pass.bookingDays?.length ? pass.bookingDays : confirmedOrderSummary?.selectedDates,
+                    passType,
+                  );
 
-                    {/* QR CODE DISPLAY */}
-                    <div className="p-4 bg-cream-light rounded-2xl border border-stone-200 flex flex-col items-center justify-center text-center">
-                      {pass.qrSvg ? (
-                        <div
-                          className="w-48 h-48 sm:w-52 sm:h-52 bg-white p-2 rounded-xl shadow-xs border border-stone-200"
-                          dangerouslySetInnerHTML={{ __html: pass.qrSvg }}
-                        />
-                      ) : (
-                        <div className="w-48 h-48 bg-stone-100 flex items-center justify-center rounded-xl">
-                          <QrCode className="w-12 h-12 text-stone-400" />
+                  return (
+                    <div
+                      key={pass.id || index}
+                      className="bg-white rounded-3xl border-2 border-gold/70 shadow-xl overflow-hidden relative max-w-lg mx-auto"
+                    >
+                      {/* Top Decorative Gradient Strip */}
+                      <div className="h-2.5 bg-gradient-to-r from-maroon-deep via-gold to-maroon" />
+
+                      <div className="p-6 sm:p-8 text-center space-y-4">
+                        {/* Header within Card */}
+                        <div className="space-y-1">
+                          <img
+                            src="/images/logo-web.png"
+                            alt="ONGC Logo"
+                            className="h-10 sm:h-12 w-auto max-w-[180px] object-contain mx-auto"
+                          />
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-maroon">
+                            ONGC NAVRATRI 2026 &bull; OFFICIAL ENTRY PASS
+                          </div>
+                          <div className="inline-block bg-maroon-soft text-maroon font-bold text-xs px-3 py-1 rounded-full uppercase tracking-wider border border-gold/40">
+                            {passLabel} {confirmedPasses.length > 1 ? `• Pass #${index + 1}` : ''}
+                          </div>
                         </div>
-                      )}
-                      <span className="text-[10px] font-mono text-ink-soft mt-2 tracking-widest uppercase">
-                        Gate Scan Token
-                      </span>
-                    </div>
 
-                    <div className="space-y-1.5 text-xs text-ink-soft border-t border-stone-100 pt-3">
-                      <div className="flex items-center justify-between">
-                        <span>Category:</span>
-                        <span className="font-bold text-ink text-[11px]">
-                          Commercial Pass
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Event Dates:</span>
-                        <span className="font-bold text-ink text-[11px]">
-                          {pass.bookingDays?.length} Nights
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-stone-500 truncate">
-                        {pass.bookingDays?.map((d) => d.slice(5)).join(', ')}
-                      </p>
-                    </div>
+                        {/* Customer / Attendee Name */}
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-ink-soft">
+                            Pass Holder
+                          </div>
+                          <div className="font-outfit font-extrabold text-xl sm:text-2xl text-ink mt-0.5">
+                            {pass.name}
+                          </div>
+                        </div>
 
-                    <div className="pt-2 flex items-center gap-2">
-                      <Link
-                        href={`/ticket/${pass.qrCodeToken}`}
-                        className="flex-1 py-2.5 rounded-xl bg-gold text-maroon-deep font-bold text-xs hover:bg-gold-light transition-all text-center border border-maroon/20 flex items-center justify-center gap-1.5 shadow-xs"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>View Pass</span>
-                      </Link>
+                        {/* QR Code Container (High-contrast quiet zone, scannable) */}
+                        <div className="p-4 sm:p-5 bg-white rounded-2xl border-2 border-stone-200 inline-block mx-auto shadow-sm">
+                          {pass.qrSvg ? (
+                            <div
+                              className="w-48 h-48 sm:w-56 sm:h-56 mx-auto bg-white p-2 rounded-xl"
+                              dangerouslySetInnerHTML={{ __html: pass.qrSvg }}
+                            />
+                          ) : (
+                            <div className="w-48 h-48 sm:w-56 sm:h-56 bg-stone-100 flex items-center justify-center rounded-xl mx-auto">
+                              <QrCode className="w-12 h-12 text-stone-400" />
+                            </div>
+                          )}
+                          <div className="text-[11px] font-mono font-bold text-maroon uppercase tracking-widest mt-2">
+                            SCAN AT ENTRY
+                          </div>
+                        </div>
+
+                        {/* Ticket ID & Dates */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-cream-soft p-3.5 rounded-2xl border border-stone-200/80 text-left text-xs">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-ink-soft tracking-wider block">
+                              Ticket ID
+                            </span>
+                            <span className="font-mono font-bold text-maroon text-sm break-all">
+                              {pass.ticketNumber}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-ink-soft tracking-wider block">
+                              Event Date
+                            </span>
+                            <span className="font-semibold text-ink text-xs block">
+                              {formattedDates}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 4. TICKET ACTIONS (Directly below each ticket) */}
+                        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                          <Link
+                            href={`/ticket/${pass.qrCodeToken}`}
+                            className="flex-1 py-3 px-4 rounded-xl bg-gold text-maroon-deep font-bold text-xs sm:text-sm hover:bg-gold-light transition-all text-center border border-maroon/20 flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            <span>VIEW MY TICKET</span>
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadPass(pass, passLabel, formattedDates)}
+                            className="flex-1 py-3 px-4 rounded-xl bg-maroon text-white font-bold text-xs sm:text-sm hover:bg-maroon-dark transition-all text-center flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                          >
+                            <Download className="w-4 h-4 text-gold-light" />
+                            <span>DOWNLOAD PASS</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              {/* TICKET GUIDELINES */}
-              <TicketGuidelines className="mt-6" />
+              {/* 5. QR WARNING */}
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-center gap-2 text-center text-xs font-semibold text-amber-900 max-w-lg mx-auto shadow-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>This QR code is unique to this pass. Please do not share or forward it.</span>
+              </div>
+            </div>
 
-              <div className="text-center pt-4">
+            {/* 6. BOOKING DETAILS */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gold/40 shadow-md space-y-4">
+              <h3 className="font-outfit font-black text-sm sm:text-base uppercase tracking-wider text-ink border-b border-stone-100 pb-3">
+                BOOKING DETAILS
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Order Reference
+                  </span>
+                  <span className="font-mono font-bold text-maroon text-sm sm:text-base break-all">
+                    {confirmedOrderSummary?.orderNumber || confirmedOrderNumber}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Pass Type
+                  </span>
+                  <span className="font-bold text-ink">
+                    {getPassTypeLabel(confirmedOrderSummary?.ticketType || ticketType)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Event Date
+                  </span>
+                  <span className="font-semibold text-ink">
+                    {formatConfirmedDates(
+                      confirmedOrderSummary?.selectedDates,
+                      confirmedOrderSummary?.ticketType || ticketType,
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Pass Quantity
+                  </span>
+                  <span className="font-semibold text-ink">
+                    {confirmedPasses.length} {confirmedPasses.length === 1 ? 'Pass' : 'Passes'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Amount Paid
+                  </span>
+                  <span className="font-bold text-emerald-700 text-sm sm:text-base">
+                    ₹{(confirmedOrderSummary?.amountInr ?? estimatedTotal).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Booking Status
+                  </span>
+                  <span className="inline-block font-extrabold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-300 text-xs">
+                    CONFIRMED
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 7. EVENT INFORMATION */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gold/40 shadow-md space-y-4">
+              <h3 className="font-outfit font-black text-sm sm:text-base uppercase tracking-wider text-ink border-b border-stone-100 pb-3">
+                EVENT INFORMATION
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Venue
+                  </span>
+                  <span className="font-bold text-ink">
+                    ONGC Ground, Chandkheda, Ahmedabad
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Event
+                  </span>
+                  <span className="font-bold text-maroon">
+                    ONGC Navratri 2026
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Event Dates
+                  </span>
+                  <span className="font-semibold text-ink">
+                    11–19 October 2026
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Gates Open
+                  </span>
+                  <span className="font-semibold text-ink">
+                    From 7:00 PM
+                  </span>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-ink-soft block text-[11px] uppercase font-bold tracking-wider">
+                    Pass Timing
+                  </span>
+                  <span className="font-bold text-maroon text-sm">
+                    {getPassTiming(confirmedOrderSummary?.ticketType || ticketType)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 8. ENTRY GUIDELINES */}
+            <TicketGuidelines />
+
+            {/* 9. SPONSORS / PARTNERS */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gold/40 shadow-md space-y-5 text-center">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-maroon-soft border border-gold/40 text-maroon text-[11px] font-bold tracking-wider uppercase mx-auto">
+                <Sparkles className="w-3.5 h-3.5 text-gold-dark" />
+                <span>OUR PARTNERS</span>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <div className="text-[10px] font-bold text-ink-soft uppercase tracking-widest mb-3">
+                    TITLE SPONSORS
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                    <img
+                      src="/images/sponsors/Zaira_Logo_With_Tagline_v17.jpg"
+                      alt="Zaira Diamond"
+                      className="max-h-16 w-auto object-contain"
+                    />
+                    <span className="hidden sm:inline text-gold text-xs">◆</span>
+                    <img
+                      src="/images/sponsors/Om_Resort_Palace_Logowhitebg.jpg"
+                      alt="Om Sanctuary Palace"
+                      className="max-h-14 w-auto object-contain"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-stone-100">
+                  <div className="text-[10px] font-bold text-ink-soft uppercase tracking-widest mb-2">
+                    MEDIA SPONSOR
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <img
+                      src="/images/sponsors/Lalkaar_News.png"
+                      alt="Lalkaar News"
+                      className="max-h-12 w-auto object-contain"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 10. EVENT ORGANISER */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gold/40 shadow-md text-center space-y-2">
+              <div className="text-[10px] font-bold text-ink-soft uppercase tracking-widest">
+                EVENT ORGANISER
+              </div>
+              <img
+                src="/images/logo-web.png"
+                alt="ONGC Logo"
+                className="h-10 w-auto object-contain mx-auto"
+              />
+              <div className="font-outfit font-extrabold text-base text-maroon">
+                ONGC Navratri 2026 Organizing Committee
+              </div>
+              <p className="text-xs text-ink-soft">
+                Oil and Natural Gas Corporation Ltd. - Ahmedabad
+              </p>
+            </div>
+
+            {/* 11. FOOTER & ACTIONS */}
+            <div className="text-center space-y-4 pt-2">
+              <p className="text-xs text-ink-soft">
+                Need assistance? Contact support at{' '}
+                <a href="mailto:ticket@ongcnavratri.tech" className="text-maroon font-bold hover:underline">
+                  ticket@ongcnavratri.tech
+                </a>
+              </p>
+              <p className="text-[11px] text-stone-400">
+                This is an automated ticket confirmation. Please retain your booking reference.
+              </p>
+              <div className="pt-2">
                 <button
                   onClick={resetForm}
                   type="button"
-                  className="px-6 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition-all inline-flex items-center gap-2 shadow-md cursor-pointer"
+                  className="px-6 py-3 rounded-xl bg-maroon text-white font-bold text-xs sm:text-sm hover:bg-maroon-dark transition-all inline-flex items-center gap-2 shadow-md cursor-pointer"
                 >
                   <Ticket className="w-4 h-4 text-gold-light" />
                   <span>Buy Additional Passes</span>
                 </button>
               </div>
             </div>
-          ) : (
-            /* COMMERCIAL PURCHASE FORM */
-            <div className="bg-white rounded-3xl p-5 sm:p-8 md:p-10 border border-gold/40 shadow-xl space-y-6">
+          </div>
+        ) : (
+          /* CHECKOUT FORM EXPERIENCE */
+          <div className="max-w-4xl mx-auto pt-6 sm:pt-8 pb-12 px-4 sm:px-6">
+            {/* COMPACT CHECKOUT HEADER (Replaces large marketing hero) */}
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
+              <div>
+                <h1 className="font-outfit font-black text-2xl sm:text-3xl text-ink tracking-tight">
+                  Buy Your Commercial Pass
+                </h1>
+                <p className="text-xs sm:text-sm text-ink-soft">
+                  Official Digital Entry Passes &bull; ONGC Navratri 2026, Ahmedabad
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold w-fit">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>Official Ticketing Portal</span>
+              </div>
+            </div>
+
+            {verifying ? (
+              /* VERIFICATION IN PROGRESS */
+              <div className="bg-white rounded-3xl p-12 border border-gold/40 shadow-xl text-center space-y-4">
+                <Loader2 className="w-12 h-12 text-maroon animate-spin mx-auto" />
+                <h2 className="font-outfit font-extrabold text-2xl text-ink">
+                  Verifying Payment with Gateway...
+                </h2>
+                <p className="text-ink-soft text-sm max-w-md mx-auto">
+                  Please wait while our backend cryptographically confirms your payment and generates your secure QR passes.
+                </p>
+              </div>
+            ) : (
+              /* COMMERCIAL PURCHASE FORM */
+              <div className="bg-white rounded-3xl p-5 sm:p-8 md:p-10 border border-gold/40 shadow-xl space-y-6">
               {errorMessage && (
                 <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-semibold flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -1151,6 +1476,7 @@ export default function BookPassPage() {
             </div>
           )}
         </div>
+        )}
       </main>
 
       <PublicFooter />

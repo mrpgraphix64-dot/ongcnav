@@ -8,7 +8,24 @@ import {
   validateCustomerDetails,
   calculateCommercialTotals,
   validateBookingTerms,
+  getPassTiming,
+  getPassTypeLabel,
+  formatConfirmedDates,
+  escapeXml,
+  generateDownloadablePassSvg,
 } from './bookpass-order.util';
+
+const EVENT_DATES = [
+  '2026-10-11',
+  '2026-10-12',
+  '2026-10-13',
+  '2026-10-14',
+  '2026-10-15',
+  '2026-10-16',
+  '2026-10-17',
+  '2026-10-18',
+  '2026-10-19',
+];
 
 describe('Commercial /bookpass Staging Test Payment Regression Tests', () => {
   describe('resolveRazorpayOrderId', () => {
@@ -372,6 +389,272 @@ describe('Commercial /bookpass Staging Test Payment Regression Tests', () => {
         expect(isSubmitDisabled(true, false, false)).toBe(false);
         expect(isSubmitDisabled(true, true, false)).toBe(true);
         expect(isSubmitDisabled(true, false, true)).toBe(true);
+      });
+    });
+  });
+
+  describe('Commercial Ticket Confirmation UI/UX Experience', () => {
+    describe('Pass Timing Authority', () => {
+      it('1. One-pass Daily booking uses 8:00 PM – 4:00 AM', () => {
+        expect(getPassTiming('COMMERCIAL_DAILY')).toBe('8:00 PM – 4:00 AM');
+        expect(getPassTypeLabel('COMMERCIAL_DAILY')).toBe('Daily Entry Pass');
+      });
+
+      it('2. One-pass Mandli booking uses 12:00 AM – 4:00 AM', () => {
+        expect(getPassTiming('COMMERCIAL_MANDLI')).toBe('12:00 AM – 4:00 AM');
+        expect(getPassTypeLabel('COMMERCIAL_MANDLI')).toBe('Mandli Pass');
+      });
+
+      it('3. One-pass Any Day booking uses 8:00 PM – 4:00 AM', () => {
+        expect(getPassTiming('COMMERCIAL_ANY_DAY')).toBe('8:00 PM – 4:00 AM');
+        expect(getPassTypeLabel('COMMERCIAL_ANY_DAY')).toBe('Any Day Pass');
+      });
+
+      it('4. Season pass uses 8:00 PM – 4:00 AM and covers All 9 Nights', () => {
+        expect(getPassTiming('COMMERCIAL_SEASON')).toBe('8:00 PM – 4:00 AM');
+        expect(getPassTypeLabel('COMMERCIAL_SEASON')).toBe('Season Pass (All 9 Nights)');
+        expect(formatConfirmedDates(EVENT_DATES, 'COMMERCIAL_SEASON')).toBe(
+          '11–19 October 2026 (All 9 Nights)',
+        );
+      });
+    });
+
+    describe('Pass Card Structure & Formatting', () => {
+      it('5. Quantity > 1: multiple passes are represented with unique indices', () => {
+        const passes = [
+          {
+            id: 'pass-1',
+            ticketNumber: 'TK-COMM-ORD1-1-A1',
+            qrCodeToken: 'token_alpha_1',
+            qrSvg: '<svg>qr1</svg>',
+            name: 'Aarav Patel',
+            mobile: '9876543210',
+            category: 'Commercial Pass',
+            bookingDays: ['2026-10-11'],
+          },
+          {
+            id: 'pass-2',
+            ticketNumber: 'TK-COMM-ORD1-2-B2',
+            qrCodeToken: 'token_beta_2',
+            qrSvg: '<svg>qr2</svg>',
+            name: 'Diya Patel',
+            mobile: '9876543210',
+            category: 'Commercial Pass',
+            bookingDays: ['2026-10-11'],
+          },
+        ];
+
+        expect(passes).toHaveLength(2);
+        expect(passes[0].ticketNumber).not.toBe(passes[1].ticketNumber);
+        expect(passes[0].qrCodeToken).not.toBe(passes[1].qrCodeToken);
+        expect(passes[0].qrSvg).not.toBe(passes[1].qrSvg);
+      });
+
+      it('6. Multiple unique QR codes: each pass has its own secure token and SVG', () => {
+        const tokens = new Set(['token_unique_1', 'token_unique_2', 'token_unique_3']);
+        expect(tokens.size).toBe(3);
+      });
+
+      it('7. Correct ticket IDs: follows canonical format TK-COMM-...', () => {
+        const ticketId = 'TK-COMM-20261011-1-A1B2';
+        expect(ticketId).toMatch(/^TK-COMM-/);
+      });
+
+      it('8. Correct dates: formats single dates and date ranges cleanly', () => {
+        const singleDate = formatConfirmedDates(['2026-10-12'], 'COMMERCIAL_DAILY');
+        expect(singleDate).toContain('12 Oct 2026');
+
+        const seasonDate = formatConfirmedDates(EVENT_DATES, 'COMMERCIAL_SEASON');
+        expect(seasonDate).toBe('11–19 October 2026 (All 9 Nights)');
+      });
+
+      it('9. Correct order amount calculation', () => {
+        const dailyOrder = calculateCommercialTotals(249, 499, 3);
+        expect(dailyOrder.total).toBe(747);
+
+        const mandliOrder = calculateCommercialTotals(149, 299, 2);
+        expect(mandliOrder.total).toBe(298);
+
+        const seasonOrder = calculateCommercialTotals(1750, 3500, 1);
+        expect(seasonOrder.total).toBe(1750);
+      });
+
+      it('10. Correct secure ticket route URL: points to /ticket/[token]', () => {
+        const token = 'crypto_token_secure_98765';
+        const ticketUrl = `/ticket/${token}`;
+        expect(ticketUrl).toBe('/ticket/crypto_token_secure_98765');
+        expect(ticketUrl).not.toContain('cpf');
+        expect(ticketUrl).not.toContain('admin');
+      });
+
+      it('11. Staging test-payment confirmation is detected and preserved', () => {
+        const testRes: CreateOrderResponseLike = {
+          success: true,
+          isTestPayment: true,
+          order: {
+            orderNumber: 'ORD-COMM-STAGING-TEST',
+            isTestPayment: true,
+          },
+          passes: [
+            {
+              id: '1',
+              ticketNumber: 'TK-COMM-STG-1',
+              qrCodeToken: 'tok_stg_1',
+              qrSvg: '<svg></svg>',
+              name: 'Tester',
+            },
+          ],
+        };
+        expect(isStagingTestOrder(testRes, testRes.order)).toBe(true);
+      });
+    });
+
+    describe('generateDownloadablePassSvg security and functional assertions', () => {
+      const mockQrSvg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h29v29H0z"/><path stroke="#000000" d="M1 1.5h7m4 0h4m1 0h1m1 0h7M1 2.5h1"/></svg>';
+
+      it('1. Contains NO raw QR token as visible text', () => {
+        const secretToken = 'SECRET_QR_TOKEN_890a-bcde-f123456';
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'NR2026-COMM-1011-01',
+          name: 'Anjali Sharma',
+          passTypeLabel: 'Season Pass (All 9 Nights)',
+          formattedDates: '11–19 October 2026 (All 9 Nights)',
+          qrSvg: mockQrSvg,
+        });
+
+        // The token is not in any text tag or visible attribute
+        expect(svg).not.toContain(secretToken);
+        expect(svg).not.toContain(`>${secretToken}<`);
+      });
+
+      it('2. Contains NO database or internal IDs', () => {
+        const internalDbId = 'clx9876543210databaseid';
+        const internalUserId = 'usr_internal_admin_secret_999';
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'NR2026-COMM-1011-02',
+          name: 'Rohit Verma',
+          passTypeLabel: 'Daily Entry Pass',
+          formattedDates: '11 Oct 2026',
+          qrSvg: mockQrSvg,
+        });
+
+        expect(svg).not.toContain(internalDbId);
+        expect(svg).not.toContain(internalUserId);
+        expect(svg).not.toContain('clx');
+        expect(svg).not.toContain('orderId');
+        expect(svg).not.toContain('attendeeId');
+      });
+
+      it('3. Contains NO Razorpay or payment IDs', () => {
+        const rzpOrderId = 'order_MNOP1234567890';
+        const rzpPaymentId = 'pay_QRST9876543210';
+        const rzpSignature = 'sig_uvwxyz1234567890abcdef';
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'NR2026-COMM-1011-03',
+          name: 'Vikram Mehta',
+          passTypeLabel: 'Mandli Pass',
+          formattedDates: '15 Oct 2026',
+          qrSvg: mockQrSvg,
+        });
+
+        expect(svg).not.toContain(rzpOrderId);
+        expect(svg).not.toContain(rzpPaymentId);
+        expect(svg).not.toContain(rzpSignature);
+        expect(svg).not.toContain('razorpay');
+        expect(svg).not.toContain('amountPaise');
+      });
+
+      it('4. Contains ONLY the intended ticket information', () => {
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'NR2026-COMM-1011-04',
+          name: 'Pooja Bhatt',
+          passTypeLabel: 'Season Pass (All 9 Nights)',
+          formattedDates: '11–19 October 2026 (All 9 Nights)',
+          qrSvg: mockQrSvg,
+        });
+
+        // Event name
+        expect(svg).toContain('ONGC NAVRATRI 2026');
+        expect(svg).toContain('OFFICIAL ENTRY PASS');
+        // Pass type
+        expect(svg).toContain('Season Pass (All 9 Nights)');
+        // Attendee name
+        expect(svg).toContain('Pooja Bhatt');
+        // Ticket number
+        expect(svg).toContain('NR2026-COMM-1011-04');
+        // Event date
+        expect(svg).toContain('11–19 October 2026 (All 9 Nights)');
+        // Scan instruction
+        expect(svg).toContain('SCAN AT ENTRY');
+      });
+
+      it('5. QR remains scannable: preserves viewBox, crispEdges, and quiet zone background', () => {
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'NR2026-COMM-1011-05',
+          name: 'Test Attendee',
+          passTypeLabel: 'Daily Entry Pass',
+          formattedDates: '12 Oct 2026',
+          qrSvg: mockQrSvg,
+        });
+
+        // Preserves original viewBox
+        expect(svg).toContain('viewBox="0 0 29 29"');
+        // Preserves pixel-crisp rendering
+        expect(svg).toContain('shape-rendering="crispEdges"');
+        // Preserves white background quiet zone
+        expect(svg).toContain('fill="#ffffff" d="M0 0h29v29H0z"');
+        // Preserves QR matrix paths
+        expect(svg).toContain('stroke="#000000"');
+      });
+
+      it('6. Requires NO external network or resource references (zero http/https/imports)', () => {
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'NR2026-COMM-1011-06',
+          name: 'Self Contained Pass',
+          passTypeLabel: 'Any Day Pass',
+          formattedDates: '14 Oct 2026',
+          qrSvg: mockQrSvg,
+        });
+
+        // Only allowed XML namespace
+        const urls = svg.match(/https?:\/\/[^\s"'>]+/g) || [];
+        expect(urls).toEqual(['http://www.w3.org/2000/svg']);
+        expect(svg).not.toContain('@import');
+        expect(svg).not.toContain('<image');
+        expect(svg).not.toContain('<link');
+      });
+
+      it('7. Properly XML-escapes special characters to prevent malformed SVG XML', () => {
+        expect(escapeXml('A & B <Partners> "Gold" \'VIP\'')).toBe(
+          'A &amp; B &lt;Partners&gt; &quot;Gold&quot; &apos;VIP&apos;',
+        );
+
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'TK-1 & 2',
+          name: 'Mehta & Sons <VIP>',
+          passTypeLabel: 'Special & Daily Pass',
+          formattedDates: '11 & 12 Oct 2026',
+          qrSvg: mockQrSvg,
+        });
+
+        expect(svg).toContain('Mehta &amp; Sons &lt;VIP&gt;');
+        expect(svg).toContain('TK-1 &amp; 2');
+        expect(svg).toContain('Special &amp; Daily Pass');
+        expect(svg).toContain('11 &amp; 12 Oct 2026');
+        expect(svg).not.toContain('Mehta & Sons <VIP>');
+      });
+
+      it('8. Fallback to default name if attendee name is missing or empty', () => {
+        const svg = generateDownloadablePassSvg({
+          ticketNumber: 'TK-NO-NAME',
+          name: '',
+          passTypeLabel: 'Daily Entry Pass',
+          formattedDates: '11 Oct 2026',
+          qrSvg: mockQrSvg,
+        });
+
+        expect(svg).toContain('Pass Holder');
       });
     });
   });

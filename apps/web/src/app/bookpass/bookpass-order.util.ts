@@ -158,3 +158,121 @@ export function validateBookingTerms(termsAccepted: boolean): { isValid: boolean
   }
   return { isValid: true };
 }
+
+/**
+ * Returns the authoritative event timing for each pass type.
+ */
+export function getPassTiming(ticketType: string): string {
+  if (ticketType === 'COMMERCIAL_MANDLI') {
+    return '12:00 AM – 4:00 AM';
+  }
+  return '8:00 PM – 4:00 AM';
+}
+
+/**
+ * Returns the human-readable label for a pass type.
+ */
+export function getPassTypeLabel(ticketType: string): string {
+  switch (ticketType) {
+    case 'COMMERCIAL_SEASON':
+      return 'Season Pass (All 9 Nights)';
+    case 'COMMERCIAL_MANDLI':
+      return 'Mandli Pass';
+    case 'COMMERCIAL_ANY_DAY':
+      return 'Any Day Pass';
+    case 'COMMERCIAL_DAILY':
+    default:
+      return 'Daily Entry Pass';
+  }
+}
+
+/**
+ * Formats confirmed dates for display on digital passes and booking summaries.
+ */
+export function formatConfirmedDates(dates: string[] | undefined, ticketType: string): string {
+  if (ticketType === 'COMMERCIAL_SEASON') {
+    return '11–19 October 2026 (All 9 Nights)';
+  }
+  if (!dates || dates.length === 0) {
+    return '11–19 October 2026';
+  }
+  return dates
+    .map((d) => {
+      const dt = new Date(d + 'T00:00:00');
+      return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    })
+    .join(', ');
+}
+
+/**
+ * Escapes characters for safe inclusion in SVG / XML elements and attributes.
+ * Predefined XML entities: &amp;, &lt;, &gt;, &quot;, &apos;
+ */
+export function escapeXml(unsafe: string): string {
+  return (unsafe || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+export interface GeneratePassSvgOptions {
+  ticketNumber: string;
+  name?: string;
+  passTypeLabel: string;
+  formattedDates: string;
+  qrSvg: string;
+}
+
+/**
+ * Generates a self-contained, high-resolution downloadable SVG digital pass card.
+ *
+ * Security & Functional Guarantees:
+ * 1. Contains NO raw QR token as visible text (QR token is encoded strictly in matrix paths).
+ * 2. Contains NO database or internal IDs (no internal PKs, no user/order UUIDs).
+ * 3. Contains NO Razorpay or payment IDs (no order_id, payment_id, signatures).
+ * 4. Contains only intended ticket info: ONGC Navratri 2026, pass type, attendee name, ticket number, event date, QR.
+ * 5. QR code preserves original viewBox, crispEdges, and quiet zone padding for instant scanning.
+ * 6. Completely self-contained: zero external network dependencies, fonts, or external images.
+ */
+export function generateDownloadablePassSvg(options: GeneratePassSvgOptions): string {
+  const { ticketNumber, name, passTypeLabel, formattedDates, qrSvg } = options;
+
+  const escapedName = escapeXml(name?.trim() || 'Pass Holder');
+  const escapedTicketNumber = escapeXml(ticketNumber?.trim() || 'PASS-ENTRY');
+  const escapedPassType = escapeXml(passTypeLabel || 'Entry Pass');
+  const escapedDates = escapeXml(formattedDates || '11–19 October 2026');
+
+  // Extract viewBox and inner paths from the qrSvg
+  const viewBoxMatch = qrSvg.match(/viewBox="([^"]+)"/i);
+  const viewBox = viewBoxMatch ? viewBoxMatch[1] : '0 0 33 33';
+  const innerPaths = qrSvg
+    .replace(/<\?xml[^>]*\?>/gi, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<svg[^>]*>/i, '')
+    .replace(/<\/svg>/i, '')
+    .trim();
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 660" width="440" height="660">
+  <rect width="440" height="660" rx="24" fill="#FFFFFF" stroke="#D4AF37" stroke-width="2"/>
+  <rect x="0" y="0" width="440" height="12" rx="6" fill="#781014"/>
+  <text x="220" y="44" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="900" fill="#781014" text-anchor="middle" letter-spacing="2">ONGC NAVRATRI 2026</text>
+  <text x="220" y="66" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" fill="#85581A" text-anchor="middle" letter-spacing="1.5">OFFICIAL ENTRY PASS</text>
+  <rect x="70" y="80" width="300" height="28" rx="14" fill="#FBF3DB" stroke="#D4AF37" stroke-width="1"/>
+  <text x="220" y="99" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" fill="#781014" text-anchor="middle">${escapedPassType}</text>
+  <text x="220" y="136" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700" fill="#71717A" text-anchor="middle" letter-spacing="1">PASS HOLDER</text>
+  <text x="220" y="162" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="800" fill="#18181B" text-anchor="middle">${escapedName}</text>
+  <rect x="70" y="180" width="300" height="300" rx="16" fill="#FFFFFF" stroke="#E4E4E7" stroke-width="1.5"/>
+  <svg x="90" y="200" width="260" height="260" viewBox="${viewBox}" shape-rendering="crispEdges">
+    ${innerPaths}
+  </svg>
+  <text x="220" y="504" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="11" font-weight="700" fill="#781014" text-anchor="middle" letter-spacing="2">SCAN AT ENTRY</text>
+  <rect x="30" y="525" width="380" height="95" rx="14" fill="#FDFBF7" stroke="#E4E4E7" stroke-width="1"/>
+  <text x="50" y="550" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700" fill="#71717A" letter-spacing="1">TICKET ID</text>
+  <text x="50" y="572" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="13" font-weight="700" fill="#781014">${escapedTicketNumber}</text>
+  <text x="240" y="550" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700" fill="#71717A" letter-spacing="1">EVENT DATE</text>
+  <text x="240" y="572" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#18181B">${escapedDates}</text>
+  <text x="220" y="605" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="600" fill="#71717A" text-anchor="middle">Venue: ONGC Navratri Grounds, Ahmedabad &#8226; Valid with Govt ID</text>
+</svg>`;
+}

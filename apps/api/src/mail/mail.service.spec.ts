@@ -109,27 +109,132 @@ describe('MailService (Hostinger Mail API)', () => {
       const body = JSON.parse(sendOptions.body);
       expect(body.to).toEqual(['aarav@example.com']);
       expect(body.subject).toContain('ORD-COMM-20261011-TEST1');
-      expect(body.html).toContain('Your ONGC Navratri 2026 QR Pass is Ready 🎉');
-      expect(body.html).toContain('Your digital QR pass is attached to this email and is also available through your secure ticket link.');
-      expect(body.html).toContain('Please do not share your QR code. It is unique to your booking and will be validated at the entry gate.');
+      expect(body.html).toContain('ONGC NAVRATRI 2026');
+      expect(body.html).toContain('YOUR DIGITAL PASS');
       expect(body.html).toContain('Aarav Patel');
       expect(body.html).toContain('TK-COMM-TEST1-1-A1B2');
-      expect(body.html).toContain('Pass Timing:');
-      expect(body.html).toContain('Ticket Guidelines');
-      expect(body.html).toContain('Tickets are non-refundable and non-transferable.');
-      expect(body.html).toContain('This QR pass is valid only for the selected date and applicable pass timing.');
-      expect(body.html).toContain('Please keep the QR pass available on your phone at the entry gate.');
-      expect(body.html).toContain('Do not share or forward your QR code with unauthorized persons.');
-      expect(body.html).toContain('Entry is subject to event security and venue rules.');
-      expect(body.html).toContain('Please retain your booking confirmation until the end of your visit.');
       expect(body.html).toContain('SCAN AT ENTRY');
       expect(body.html).toContain('VIEW MY TICKET');
       expect(body.html).toContain('/ticket/secret_token_1234567890abcdef');
+      expect(body.html).toContain('This QR code is unique to this pass. Please do not share or forward it.');
+      expect(body.html).toContain('BOOKING DETAILS');
+      expect(body.html).toContain('EVENT INFORMATION');
+      expect(body.html).toContain('8:00 PM – 4:00 AM');
+      expect(body.html).toContain('non-refundable and non-transferable');
+      expect(body.html).toContain('OUR PARTNERS');
+      expect(body.html).toContain('Zaira Diamond');
+      expect(body.html).toContain('Om Sanctuary Palace');
+      expect(body.html).toContain('Lalkaar News');
+      expect(body.html).toContain('EVENT ORGANISER');
+      expect(body.html).toContain('ONGC Navratri 2026 Organizing Committee');
+
+      // Verify pass is positioned BEFORE booking details (Pass-first visual hierarchy)
+      const passIndex = body.html.indexOf('YOUR DIGITAL PASS');
+      const bookingDetailsIndex = body.html.indexOf('BOOKING DETAILS');
+      expect(passIndex).toBeGreaterThan(-1);
+      expect(bookingDetailsIndex).toBeGreaterThan(-1);
+      expect(passIndex).toBeLessThan(bookingDetailsIndex);
+
+      // Verify no raw token exposure outside /ticket/
+      const tokenOccurrences = body.html.split('secret_token_1234567890abcdef').length - 1;
+      expect(tokenOccurrences).toBe(1); // Only in the href="/ticket/..."
+      expect(body.html).not.toContain('rzp_');
+      expect(body.html).not.toContain('order_DBJOW');
+
+      // Verify attachments contain actual CID QR
       expect(body.attachments).toBeDefined();
       expect(body.attachments.length).toBe(1);
       expect(body.attachments[0].filename).toBe('QR-TK-COMM-TEST1-1-A1B2.png');
       expect(body.attachments[0].contentType).toBe('image/png');
-      expect(body.attachments[0].cid).toContain('qr-');
+      expect(body.attachments[0].cid).toBe('qr-TKCOMMTEST11A1B2-1');
+      expect(body.html).toContain(`src="cid:${body.attachments[0].cid}"`);
+    });
+
+    it('correctly handles MANDLI pass timing (12:00 AM – 4:00 AM)', async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            mailboxes: [{ resourceId: 'AC_TEST_MAILBOX_1', address: 'ticket@ongcnavratri.tech' }],
+          },
+        }),
+      });
+
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 204 });
+
+      const result = await service.sendCommercialTicketEmail({
+        orderNumber: 'ORD-COMM-MANDLI-1',
+        customerName: 'Bhavin Shah',
+        customerEmail: 'bhavin@example.com',
+        ticketType: 'COMMERCIAL_MANDLI',
+        selectedDates: ['2026-10-12'],
+        quantity: 1,
+        amountInr: 149,
+        passes: [
+          {
+            ticketNumber: 'TK-COMM-MANDLI-1-1',
+            token: 'token_mandli_xyz',
+            category: 'Commercial Pass',
+            attendeeName: 'Bhavin Shah',
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const [, sendOptions] = mockFetch.mock.calls[1];
+      const body = JSON.parse(sendOptions.body);
+
+      expect(body.html).toContain('Mandli Pass');
+      expect(body.html).toContain('12:00 AM – 4:00 AM');
+      expect(body.text).toContain('12:00 AM – 4:00 AM');
+      expect(body.html).toContain('TK-COMM-MANDLI-1-1');
+    });
+
+    it('correctly handles ANY DAY pass timing (8:00 PM – 4:00 AM)', async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            mailboxes: [{ resourceId: 'AC_TEST_MAILBOX_1', address: 'ticket@ongcnavratri.tech' }],
+          },
+        }),
+      });
+
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 204 });
+
+      const result = await service.sendCommercialTicketEmail({
+        orderNumber: 'ORD-COMM-ANYDAY-1',
+        customerName: 'Kavita Dave',
+        customerEmail: 'kavita@example.com',
+        ticketType: 'COMMERCIAL_ANY_DAY',
+        selectedDates: ['2026-10-15'],
+        quantity: 1,
+        amountInr: 279,
+        passes: [
+          {
+            ticketNumber: 'TK-COMM-ANYDAY-1-1',
+            token: 'token_anyday_xyz',
+            category: 'Commercial Pass',
+            attendeeName: 'Kavita Dave',
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const [, sendOptions] = mockFetch.mock.calls[1];
+      const body = JSON.parse(sendOptions.body);
+
+      expect(body.html).toContain('Any Day Pass');
+      expect(body.html).toContain('8:00 PM – 4:00 AM');
+      expect(body.text).toContain('8:00 PM – 4:00 AM');
     });
 
     it('correctly represents SEASON pass with multiple attendees and 9 nights', async () => {

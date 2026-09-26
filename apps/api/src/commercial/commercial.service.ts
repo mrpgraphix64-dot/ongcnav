@@ -403,6 +403,11 @@ export class CommercialService {
           success: true,
           message: 'Payment already verified.',
           orderNumber: order.orderNumber,
+          ticketType: order.ticketType,
+          selectedDates: order.selectedDates,
+          quantity: order.quantity,
+          amountInr: order.amountPaise / 100,
+          customerEmail: order.customerEmail,
           passes: passesWithSvg,
         };
       }
@@ -482,6 +487,11 @@ export class CommercialService {
         success: true,
         message: 'Payment confirmed successfully. Your digital entry pass is ready.',
         orderNumber: order.orderNumber,
+        ticketType: order.ticketType,
+        selectedDates: order.selectedDates,
+        quantity: order.quantity,
+        amountInr: order.amountPaise / 100,
+        customerEmail: order.customerEmail,
         passes: formattedPasses,
       };
     } finally {
