@@ -35,6 +35,9 @@ import {
   validateCameraVideoFeed,
   getScannerStatusInstruction,
   safeStopScannerInstance,
+  SCANNER_OFFICIAL_TEST_DATES,
+  formatEventDateLabel,
+  isSystemDateDiffering,
 } from './scanner-utils';
 
 const SCANNER_ELEMENT_ID = 'qr-scanner-viewport';
@@ -61,6 +64,10 @@ export default function ScannerPage() {
   // from the server (/auth/me), which derives it from the session cookie.
   const [staff, setStaff] = useState<StaffIdentity | null>(null);
   const [staffLoadFailed, setStaffLoadFailed] = useState(false);
+
+  // SUPER_ADMIN Scanner Test Mode state
+  const [testModeEnabled, setTestModeEnabled] = useState(false);
+  const [selectedTestDate, setSelectedTestDate] = useState<string>('2026-10-11');
 
   // Status & states
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'unstable' | 'offline'>('online');
@@ -100,6 +107,16 @@ export default function ScannerPage() {
   useEffect(() => {
     scanStateRef.current = scanState;
   }, [scanState]);
+
+  const testModeEnabledRef = useRef(testModeEnabled);
+  useEffect(() => {
+    testModeEnabledRef.current = testModeEnabled;
+  }, [testModeEnabled]);
+
+  const selectedTestDateRef = useRef(selectedTestDate);
+  useEffect(() => {
+    selectedTestDateRef.current = selectedTestDate;
+  }, [selectedTestDate]);
 
   const lastSuccessTokenRef = useRef<string | null>(null);
   const processTokenRef = useRef<(rawToken: string) => Promise<void>>(() => Promise.resolve());
@@ -177,13 +194,16 @@ export default function ScannerPage() {
   const checkPing = async () => {
     const start = Date.now();
     try {
-      await fetchApi('/scanner/heartbeat', {
+      const heartbeatRes = await fetchApi('/scanner/heartbeat', {
         method: 'POST',
         body: JSON.stringify({
           gateId,
           deviceId: 'web-scanner-' + (typeof window !== 'undefined' ? window.navigator.userAgent.slice(0, 8) : '01'),
         }),
       });
+      if (heartbeatRes?.activeDate && SCANNER_OFFICIAL_TEST_DATES.some((d) => d.value === heartbeatRes.activeDate)) {
+        setSelectedTestDate((prev) => (prev === '2026-10-11' ? heartbeatRes.activeDate : prev));
+      }
       const latency = Date.now() - start;
       setPingLatency(latency);
       setConnectionStatus(latency > 800 ? 'unstable' : 'online');
@@ -269,13 +289,19 @@ export default function ScannerPage() {
     processingRef.current = true;
     const start = Date.now();
 
+    const requestPayload: any = {
+      token,
+      gateId: gateIdRef.current,
+    };
+
+    if (staff?.role === 'SUPER_ADMIN' && testModeEnabledRef.current && selectedTestDateRef.current) {
+      requestPayload.testDate = selectedTestDateRef.current;
+    }
+
     try {
       const res = await fetchApi('/scanner/checkin', {
         method: 'POST',
-        body: JSON.stringify({
-          token,
-          gateId: gateIdRef.current,
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       if (!isMountedRef.current) return;
@@ -660,6 +686,89 @@ export default function ScannerPage() {
             </span>
           </div>
         </div>
+
+        {/* SUPER_ADMIN Scanner Test Mode Controls */}
+        {staff?.role === 'SUPER_ADMIN' && (
+          <div
+            className="bg-amber-50/90 border border-amber-300 rounded-2xl p-4 card-shadow space-y-3"
+            data-testid="scanner-test-mode-card"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 font-bold shrink-0">
+                  <Settings className="w-4 h-4 text-amber-700" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                      Scanner Test Mode
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
+                      SUPER_ADMIN ONLY
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800/80">
+                    Simulate check-in scans against official ONGC Navratri 2026 event dates without modifying server clock.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-amber-900">
+                  <input
+                    type="checkbox"
+                    checked={testModeEnabled}
+                    onChange={(e) => setTestModeEnabled(e.target.checked)}
+                    className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500"
+                    data-testid="scanner-test-mode-toggle"
+                  />
+                  <span>Enable Test Mode</span>
+                </label>
+
+                {testModeEnabled && (
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="scanner-test-date-select" className="text-xs font-bold text-amber-950">
+                      Date:
+                    </label>
+                    <select
+                      id="scanner-test-date-select"
+                      value={selectedTestDate}
+                      onChange={(e) => setSelectedTestDate(e.target.value)}
+                      className="text-xs font-bold text-amber-950 bg-white border border-amber-400 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                      data-testid="scanner-test-date-select"
+                    >
+                      {SCANNER_OFFICIAL_TEST_DATES.map((d) => (
+                        <option key={d.value} value={d.value}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Very Obvious Warning Banner when Test Mode is active and differs from actual system date */}
+        {staff?.role === 'SUPER_ADMIN' && testModeEnabled && isSystemDateDiffering(selectedTestDate) && (
+          <div
+            className="bg-amber-600 text-white px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-md border-2 border-amber-400/80"
+            data-testid="scanner-test-mode-warning"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="bg-black text-amber-400 text-xs font-black px-2 py-0.5 rounded tracking-widest uppercase">
+                TEST MODE
+              </span>
+              <span className="font-bold text-sm tracking-wide">
+                Scanning as: {formatEventDateLabel(selectedTestDate)}
+              </span>
+            </div>
+            <span className="text-xs text-amber-100 font-mono hidden sm:inline">
+              All scans will validate for {formatEventDateLabel(selectedTestDate)}
+            </span>
+          </div>
+        )}
 
         {/* Scanner & Result Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">

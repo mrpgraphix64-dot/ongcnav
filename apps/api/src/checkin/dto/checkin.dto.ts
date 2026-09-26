@@ -40,6 +40,22 @@ export class ProcessCheckinDto {
   @IsString()
   @IsOptional()
   loadTestRunId?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-10-11',
+    description: 'Optional scanner test/simulation event date (YYYY-MM-DD). Allowed strictly for SUPER_ADMIN only.',
+  })
+  @IsString()
+  @IsOptional()
+  testDate?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-10-11',
+    description: 'Alias for testDate (YYYY-MM-DD). Allowed strictly for SUPER_ADMIN only.',
+  })
+  @IsString()
+  @IsOptional()
+  simulationDate?: string;
 }
 
 export class ScannerHeartbeatDto {

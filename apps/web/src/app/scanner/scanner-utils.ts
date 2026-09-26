@@ -191,3 +191,33 @@ export async function safeStopScannerInstance(
     } catch {}
   }
 }
+
+export const SCANNER_OFFICIAL_TEST_DATES = [
+  { value: '2026-10-11', label: '11 Oct 2026' },
+  { value: '2026-10-12', label: '12 Oct 2026' },
+  { value: '2026-10-13', label: '13 Oct 2026' },
+  { value: '2026-10-14', label: '14 Oct 2026' },
+  { value: '2026-10-15', label: '15 Oct 2026' },
+  { value: '2026-10-16', label: '16 Oct 2026' },
+  { value: '2026-10-17', label: '17 Oct 2026' },
+  { value: '2026-10-18', label: '18 Oct 2026' },
+  { value: '2026-10-19', label: '19 Oct 2026' },
+] as const;
+
+export function formatEventDateLabel(isoDate: string): string {
+  const match = SCANNER_OFFICIAL_TEST_DATES.find((d) => d.value === isoDate);
+  if (match) return match.label;
+  try {
+    const parts = isoDate.split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+      return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    }
+  } catch {}
+  return isoDate;
+}
+
+export function isSystemDateDiffering(testDate: string, now: Date = new Date()): boolean {
+  const systemIst = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  return testDate !== systemIst;
+}

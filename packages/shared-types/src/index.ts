@@ -252,3 +252,21 @@ export interface PublicRegistrationResponseDto {
     qrSvg: string;
   }>;
 }
+
+export const OFFICIAL_EVENT_DATES = [
+  '2026-10-11',
+  '2026-10-12',
+  '2026-10-13',
+  '2026-10-14',
+  '2026-10-15',
+  '2026-10-16',
+  '2026-10-17',
+  '2026-10-18',
+  '2026-10-19',
+] as const;
+
+export type OfficialEventDate = (typeof OFFICIAL_EVENT_DATES)[number];
+
+export function isOfficialEventDate(date: string): date is OfficialEventDate {
+  return (OFFICIAL_EVENT_DATES as readonly string[]).includes(date);
+}

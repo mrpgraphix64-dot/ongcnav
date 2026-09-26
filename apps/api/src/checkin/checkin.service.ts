@@ -15,6 +15,8 @@ import {
   AttendeeStatus,
   GateType,
   UserRole,
+  isOfficialEventDate,
+  OFFICIAL_EVENT_DATES,
 } from '@ongc/shared-types';
 
 const DEFAULT_SCANNER_RATE_LIMIT_PER_MINUTE = 120; // 2/sec sustained, well above the 1/sec/gate baseline, with burst headroom
@@ -62,13 +64,34 @@ export class CheckinService {
     const isLoadTest = !!dto.isLoadTest;
     const loadTestRunId = dto.loadTestRunId ? BigInt(dto.loadTestRunId) : null;
 
-    // 0. Rate limiting — checked FIRST, before any database work, so a
-    // request flood from a single scanner never costs more than one Redis
-    // round-trip. Skipped for load-test traffic (that has its own,
-    // deliberately much higher, controlled request rate) and fails OPEN if
-    // Redis is unavailable (rate limiting is a protection, not a
-    // correctness guarantee — Postgres's unique constraint remains the
-    // actual source of truth for check-in safety regardless).
+    // 0. Test Date Resolution & Strict RBAC Enforcement
+    const rawTestDate = (dto.testDate || (dto as any).simulationDate)?.trim();
+    if (rawTestDate) {
+      if (scannedByUser?.role !== UserRole.SUPER_ADMIN) {
+        throw new ForbiddenException('Only SUPER_ADMIN is authorized to use scanner test-date simulation.');
+      }
+      if (!isOfficialEventDate(rawTestDate)) {
+        throw new BadRequestException(
+          `Invalid scanner test date: "${rawTestDate}". Allowed official event dates are: ${OFFICIAL_EVENT_DATES.join(', ')}`
+        );
+      }
+    }
+
+    const isSuperAdminTest = scannedByUser?.role === UserRole.SUPER_ADMIN && !!rawTestDate;
+
+    // 3. Active Event Date Resolution
+    const activeDateVal = await this.getSetting('event_control.active_event_date', 'active_event_date');
+    const configuredDate = activeDateVal && activeDateVal.trim() !== '' ? activeDateVal.trim() : this.getTodayIst();
+    const activeDate = isSuperAdminTest ? rawTestDate : configuredDate;
+
+    const effectiveReqMeta = {
+      ip: reqMeta?.ip,
+      userAgent: isSuperAdminTest
+        ? `[TEST_MODE:${activeDate}] ${reqMeta?.userAgent || ''}`.trim().slice(0, 255)
+        : reqMeta?.userAgent,
+    };
+
+    // 0b. Rate limiting — checked before database work
     if (scannedByUser && !isLoadTest) {
       const rateLimitPerMinute = this.getScannerRateLimitPerMinute();
       const rateLimitKey = `rl:scanner:${scannedByUser.id}`;
@@ -81,8 +104,8 @@ export class CheckinService {
           responseTimeMs: Date.now() - startTime,
           isLoadTest,
           loadTestRunId,
-          ipAddress: reqMeta?.ip,
-          userAgent: reqMeta?.userAgent,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
         });
 
         return {
@@ -104,8 +127,8 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
 
       return {
@@ -136,8 +159,8 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
 
       return {
@@ -147,10 +170,6 @@ export class CheckinService {
         statusCode: 403,
       };
     }
-
-    // 3. Active Event Date Resolution
-    const activeDateVal = await this.getSetting('event_control.active_event_date', 'active_event_date');
-    const activeDate = activeDateVal && activeDateVal.trim() !== '' ? activeDateVal.trim() : this.getTodayIst();
 
     // 4. Gate Verification & Operational Status
     const gate = await this.prisma.gate.findUnique({ where: { id: gateId } });
@@ -162,8 +181,8 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
 
       return {
@@ -182,8 +201,8 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
 
       return {
@@ -202,8 +221,8 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
 
       return {
@@ -309,8 +328,8 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
 
       return {
@@ -331,8 +350,8 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
 
       return {
@@ -357,9 +376,20 @@ export class CheckinService {
           responseTimeMs: Date.now() - startTime,
           isLoadTest,
           loadTestRunId,
-          ipAddress: reqMeta?.ip,
-          userAgent: reqMeta?.userAgent,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
         });
+
+        if (isSuperAdminTest && scannedByUser?.id) {
+          await this.recordSimulationAudit({
+            userId: scannedByUser.id,
+            testEventDate: activeDate,
+            gateId: gate.id.toString(),
+            token,
+            result: CheckinResult.NOT_BOOKED_TODAY,
+            attendeeId: attendee.id.toString(),
+          });
+        }
 
         return {
           success: false,
@@ -458,9 +488,20 @@ export class CheckinService {
           responseTimeMs: Date.now() - startTime,
           isLoadTest,
           loadTestRunId,
-          ipAddress: reqMeta?.ip,
-          userAgent: reqMeta?.userAgent,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
         });
+
+        if (isSuperAdminTest && scannedByUser?.id) {
+          await this.recordSimulationAudit({
+            userId: scannedByUser.id,
+            testEventDate: activeDate,
+            gateId: gate.id.toString(),
+            token,
+            result: CheckinResult.ALREADY_CHECKED_IN,
+            attendeeId: attendee.id.toString(),
+          });
+        }
 
         const timeStr = new Date(prev.checkinTime).toLocaleTimeString('en-IN', {
           timeZone: 'Asia/Kolkata',
@@ -490,9 +531,20 @@ export class CheckinService {
         responseTimeMs: Date.now() - startTime,
         isLoadTest,
         loadTestRunId,
-        ipAddress: reqMeta?.ip,
-        userAgent: reqMeta?.userAgent,
+        ipAddress: effectiveReqMeta.ip,
+        userAgent: effectiveReqMeta.userAgent,
       });
+
+      if (isSuperAdminTest && scannedByUser?.id) {
+        await this.recordSimulationAudit({
+          userId: scannedByUser.id,
+          testEventDate: activeDate,
+          gateId: gate.id.toString(),
+          token,
+          result: CheckinResult.SUCCESS,
+          attendeeId: attendee.id.toString(),
+        });
+      }
 
       const isFamily = !!attendee.familyMemberId;
       const attendeeName = isFamily ? attendee.familyMember?.name : (attendee.employee?.name || attendee.name || 'Attendee');
@@ -500,7 +552,7 @@ export class CheckinService {
       return {
         success: true,
         result: CheckinResult.SUCCESS,
-        message: 'Check-in successful',
+        message: isSuperAdminTest ? `Check-in successful [TEST MODE: ${activeDate}]` : 'Check-in successful',
         statusCode: 200,
         data: {
           checkinId: checkinResult.newCheckin?.id.toString(),
@@ -525,6 +577,8 @@ export class CheckinService {
           },
           checkinTime: checkinResult.newCheckin?.checkinTime,
           activeDate,
+          isTestScan: isSuperAdminTest,
+          testDate: isSuperAdminTest ? activeDate : undefined,
         },
       };
     } catch (err: any) {
@@ -538,9 +592,20 @@ export class CheckinService {
           responseTimeMs: Date.now() - startTime,
           isLoadTest,
           loadTestRunId,
-          ipAddress: reqMeta?.ip,
-          userAgent: reqMeta?.userAgent,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
         });
+
+        if (isSuperAdminTest && scannedByUser?.id) {
+          await this.recordSimulationAudit({
+            userId: scannedByUser.id,
+            testEventDate: activeDate,
+            gateId: gate.id.toString(),
+            token,
+            result: CheckinResult.ALREADY_CHECKED_IN,
+            attendeeId: attendee.id.toString(),
+          });
+        }
 
         return {
           success: false,
@@ -619,6 +684,35 @@ export class CheckinService {
     } catch (e) {
       // Non-blocking log failure
       console.error('Failed to write scan log:', e);
+    }
+  }
+
+  private async recordSimulationAudit(params: {
+    userId?: string | null;
+    testEventDate: string;
+    gateId: string;
+    token: string;
+    result: CheckinResult;
+    attendeeId?: string | null;
+  }) {
+    if (!params.userId) return;
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: BigInt(params.userId),
+          action: 'SCANNER_TEST_MODE_SCAN',
+          details: {
+            isSimulation: true,
+            testEventDate: params.testEventDate,
+            gateId: params.gateId,
+            tokenPreview: params.token.length > 8 ? `${params.token.slice(0, 4)}...${params.token.slice(-4)}` : '***',
+            result: params.result,
+            attendeeId: params.attendeeId || null,
+          },
+        },
+      });
+    } catch (e) {
+      console.error('Failed to write simulation audit log:', e);
     }
   }
 }

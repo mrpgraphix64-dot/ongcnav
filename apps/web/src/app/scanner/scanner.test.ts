@@ -9,6 +9,9 @@ import {
   validateCameraVideoFeed,
   getScannerStatusInstruction,
   safeStopScannerInstance,
+  SCANNER_OFFICIAL_TEST_DATES,
+  formatEventDateLabel,
+  isSystemDateDiffering,
 } from './scanner-utils';
 
 describe('Scanner Camera/API Duplicate Prevention (shouldProcessScan)', () => {
@@ -295,5 +298,68 @@ describe('Safe Scanner Stopping and Cleanup (safeStopScannerInstance)', () => {
     };
     await expect(safeStopScannerInstance(mockInstance, false)).resolves.not.toThrow();
     expect(mockInstance.clear).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SUPER_ADMIN Scanner Test Mode Frontend Logic', () => {
+  it('contains exactly the 9 official ONGC Navratri 2026 dates (11 Oct to 19 Oct 2026)', () => {
+    expect(SCANNER_OFFICIAL_TEST_DATES).toHaveLength(9);
+    expect(SCANNER_OFFICIAL_TEST_DATES.map((d) => d.value)).toEqual([
+      '2026-10-11',
+      '2026-10-12',
+      '2026-10-13',
+      '2026-10-14',
+      '2026-10-15',
+      '2026-10-16',
+      '2026-10-17',
+      '2026-10-18',
+      '2026-10-19',
+    ]);
+  });
+
+  it('correctly formats event date labels', () => {
+    expect(formatEventDateLabel('2026-10-11')).toBe('11 Oct 2026');
+    expect(formatEventDateLabel('2026-10-19')).toBe('19 Oct 2026');
+    expect(formatEventDateLabel('2026-10-15')).toBe('15 Oct 2026');
+  });
+
+  it('correctly detects whether test date differs from current system Asia/Kolkata date', () => {
+    // 2026-10-11 at 12:00 UTC (17:30 IST)
+    const fixedOct11 = new Date('2026-10-11T12:00:00Z');
+    expect(isSystemDateDiffering('2026-10-11', fixedOct11)).toBe(false);
+    expect(isSystemDateDiffering('2026-10-12', fixedOct11)).toBe(true);
+  });
+
+  it('builds scanner payload without testDate for non-SUPER_ADMIN operators', () => {
+    const buildPayload = (userRole: string, testModeEnabled: boolean, selectedTestDate: string, token: string, gateId: string) => {
+      return {
+        token,
+        gateId,
+        ...(userRole === 'SUPER_ADMIN' && testModeEnabled && selectedTestDate ? { testDate: selectedTestDate } : {}),
+      };
+    };
+
+    // Gate Manager
+    const gateManagerPayload = buildPayload('GATE_MANAGER', true, '2026-10-15', 'tok-123', '1');
+    expect(gateManagerPayload).toEqual({ token: 'tok-123', gateId: '1' });
+    expect((gateManagerPayload as any).testDate).toBeUndefined();
+
+    // Admin (not SUPER_ADMIN)
+    const adminPayload = buildPayload('ADMIN', true, '2026-10-15', 'tok-123', '1');
+    expect(adminPayload).toEqual({ token: 'tok-123', gateId: '1' });
+    expect((adminPayload as any).testDate).toBeUndefined();
+
+    // Super Admin with test mode disabled
+    const superAdminDisabled = buildPayload('SUPER_ADMIN', false, '2026-10-15', 'tok-123', '1');
+    expect(superAdminDisabled).toEqual({ token: 'tok-123', gateId: '1' });
+    expect((superAdminDisabled as any).testDate).toBeUndefined();
+
+    // Super Admin with test mode enabled
+    const superAdminEnabled = buildPayload('SUPER_ADMIN', true, '2026-10-15', 'tok-123', '1');
+    expect(superAdminEnabled).toEqual({
+      token: 'tok-123',
+      gateId: '1',
+      testDate: '2026-10-15',
+    });
   });
 });
