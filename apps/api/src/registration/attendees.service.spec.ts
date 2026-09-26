@@ -384,6 +384,9 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
       expect(ticketNumbers[9]).toBe('TK-COMM-500-10');
       expect(parentBooking.passes![0].status).toBe('checked_in');
       expect(parentBooking.passes![1].status).toBe('active');
+      expect(parentBooking.passes![0].order).toBeDefined();
+      expect(parentBooking.passes![0].order?.orderNumber).toBe('ORD-COMM-500');
+      expect(parentBooking.passes![0].classification).toBe('OTHER');
     });
 
     it('keeps 2 separate orders from same customer as 2 separate booking groups', async () => {
@@ -540,6 +543,49 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
           },
         };
         expect(service.isStagingTestAttendee(testCommercialAtt)).toBe(true);
+
+        // Historical Agent Offline Test Order with synthetic agent
+        const syntheticAgentAtt = {
+          id: BigInt(14),
+          registrationType: RegistrationType.COMMERCIAL,
+          order: {
+            id: BigInt(102),
+            orderNumber: 'ORD-AGENT-TEST-001',
+            source: 'AGENT',
+            paymentMode: 'OFFLINE',
+            agent: { email: 'test_agent_882301@staging.test' },
+          },
+        };
+        expect(service.isStagingTestAttendee(syntheticAgentAtt)).toBe(true);
+
+        // Agent Offline Order with real/non-synthetic agent
+        const realAgentAtt = {
+          id: BigInt(15),
+          registrationType: RegistrationType.COMMERCIAL,
+          order: {
+            id: BigInt(103),
+            orderNumber: 'ORD-AGENT-NORMAL-001',
+            source: 'AGENT',
+            paymentMode: 'OFFLINE',
+            agent: { email: 'siddharthkambaliya13@gmail.com' },
+          },
+        };
+        expect(service.isStagingTestAttendee(realAgentAtt)).toBe(false);
+
+        // Genuine Razorpay payment ID (e.g. Order #7 / #9) is NEVER test data
+        const genuineRazorpayAtt = {
+          id: BigInt(16),
+          registrationType: RegistrationType.COMMERCIAL,
+          order: {
+            id: BigInt(7),
+            orderNumber: 'ORD-COMM-2026-000007',
+            orderStatus: OrderStatus.PAID,
+            paymentStatus: PaymentStatus.CAPTURED,
+            razorpayPaymentId: 'pay_TgENB19Y5Pms2k',
+            metadata: { isTestPayment: true },
+          },
+        };
+        expect(service.isStagingTestAttendee(genuineRazorpayAtt)).toBe(false);
       });
     });
 
@@ -788,6 +834,70 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
         expect(res.protectedTickets[1].ticketNumber).toBe('TK-EMP-960');
       });
 
+      it('bulk deletes synthetic agent test passes while protecting non-synthetic agent passes', async () => {
+        process.env.NODE_ENV = 'staging';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'true';
+
+        const syntheticAgentOrder = {
+          id: BigInt(880),
+          orderNumber: 'ORD-AGENT-880',
+          orderStatus: OrderStatus.PAID,
+          paymentStatus: PaymentStatus.CAPTURED,
+          paymentMode: 'OFFLINE',
+          source: 'AGENT',
+          agent: { email: 'test_agent_882301@staging.test' },
+        };
+
+        const normalAgentOrder = {
+          id: BigInt(890),
+          orderNumber: 'ORD-AGENT-890',
+          orderStatus: OrderStatus.PAID,
+          paymentStatus: PaymentStatus.CAPTURED,
+          paymentMode: 'OFFLINE',
+          source: 'AGENT',
+          agent: { email: 'siddharthkambaliya13@gmail.com' },
+        };
+
+        const syntheticPass = {
+          id: BigInt(881),
+          registrationType: RegistrationType.COMMERCIAL,
+          name: 'Synthetic Test Pass',
+          ticketNumber: 'TK-SYNTH-881',
+          qrCodeToken: 'tok-881',
+          orderId: BigInt(880),
+          order: syntheticAgentOrder,
+          dailyCheckins: [{ id: BigInt(10) }],
+          scanLogs: [],
+        };
+
+        const normalAgentPass = {
+          id: BigInt(891),
+          registrationType: RegistrationType.COMMERCIAL,
+          name: 'Ambiguous Agent Pass',
+          ticketNumber: 'TK-AGENT-891',
+          qrCodeToken: 'tok-891',
+          orderId: BigInt(890),
+          order: normalAgentOrder,
+          dailyCheckins: [],
+          scanLogs: [],
+        };
+
+        prisma.attendee.findMany.mockResolvedValueOnce([syntheticPass, normalAgentPass]);
+        prisma.attendee.count.mockResolvedValue(0);
+
+        const res = await service.bulkDestroy(
+          [BigInt(881), BigInt(891)],
+          { id: BigInt(99), role: UserRole.SUPER_ADMIN },
+        );
+
+        expect(res.testDeletedCount).toBe(1);
+        expect(res.protectedCount).toBe(1);
+        expect(prisma.attendee.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: [BigInt(881)] } },
+        });
+        expect(res.protectedTickets[0].ticketNumber).toBe('TK-AGENT-891');
+      });
+
       it('in production or with flag false, test bypass does NOT run and preserves safety', async () => {
         process.env.NODE_ENV = 'production';
         process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'false';
@@ -805,6 +915,45 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
           where: { id: { in: [BigInt(901)] } },
           data: { status: AttendeeStatus.REVOKED },
         });
+      });
+
+      it('in test delete mode, employee passes with ZERO check-ins and ambiguous passes are protected', async () => {
+        process.env.NODE_ENV = 'staging';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'true';
+
+        const unCheckedInEmployee = {
+          id: BigInt(970),
+          registrationType: RegistrationType.EMPLOYEE,
+          name: 'Zero Checkin Employee',
+          ticketNumber: 'TK-EMP-970',
+          employeeId: BigInt(75),
+          dailyCheckins: [],
+          scanLogs: [],
+          order: null,
+        };
+
+        const ambiguousCommercialPass = {
+          id: BigInt(980),
+          registrationType: RegistrationType.COMMERCIAL,
+          name: 'Ambiguous Pass',
+          ticketNumber: 'TK-AMBIG-980',
+          dailyCheckins: [],
+          scanLogs: [],
+          order: null,
+        };
+
+        prisma.attendee.findMany.mockResolvedValueOnce([unCheckedInEmployee, ambiguousCommercialPass]);
+
+        const res = await service.bulkDestroy([BigInt(970), BigInt(980)], {
+          id: BigInt(99),
+          role: UserRole.SUPER_ADMIN,
+        });
+
+        // Neither should be deleted in test delete mode
+        expect(res.testDeletedCount).toBe(0);
+        expect(res.protectedCount).toBe(2);
+        expect(prisma.attendee.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.attendee.updateMany).not.toHaveBeenCalled();
       });
     });
   });

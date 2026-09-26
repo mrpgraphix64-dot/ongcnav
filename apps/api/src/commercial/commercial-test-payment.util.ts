@@ -44,15 +44,61 @@ export function isAdminTestDataDeleteEnabled(
 }
 
 /**
+ * Identifies explicitly synthetic staging test accounts.
+ * Safe predicate: only accounts in explicit synthetic testing domains (.staging.test, .synthetic.test)
+ * are recognized as test creators. Real domains (e.g. ongc.co.in, gmail.com) are NEVER synthetic test accounts.
+ */
+export function isSyntheticStagingTestAccount(
+  emailOrUser?: string | { email?: string | null } | null,
+): boolean {
+  if (!emailOrUser) return false;
+  const email = (
+    typeof emailOrUser === 'string' ? emailOrUser : emailOrUser.email || ''
+  )
+    .toLowerCase()
+    .trim();
+  if (!email) return false;
+  return (
+    email.endsWith('@staging.test') ||
+    email.endsWith('.staging.test') ||
+    email.endsWith('@synthetic.test') ||
+    email.endsWith('.synthetic.test')
+  );
+}
+
+/**
  * Checks whether an order is an explicitly identifiable test/staging order.
+ *
+ * Safeguards:
+ * - Real Razorpay payment identifiers (starts with 'pay_' and not 'TEST_PAY_') are NEVER test orders.
+ *
  * Identifiable markers:
  * 1. metadata.isTestPayment === true
  * 2. metadata.testMode === 'STAGING_TEST_PAYMENT'
  * 3. razorpayOrderId starts with 'TEST_ORD_'
  * 4. razorpayPaymentId starts with 'TEST_PAY_'
+ * 5. Historical Agent Offline orders whose creator/agent is an explicitly synthetic staging test account
  */
-export function isStagingTestOrder(order: any): boolean {
+export function isStagingTestOrder(order: any, agentUser?: any): boolean {
   if (!order) return false;
+
+  // STRICT FINANCIAL SAFEGUARD: Real Razorpay payment IDs or real Razorpay order IDs are NEVER test data
+  if (
+    typeof order.razorpayPaymentId === 'string' &&
+    order.razorpayPaymentId.startsWith('pay_') &&
+    !order.razorpayPaymentId.startsWith('TEST_PAY_')
+  ) {
+    return false;
+  }
+
+  if (
+    typeof order.razorpayOrderId === 'string' &&
+    order.razorpayOrderId.startsWith('order_') &&
+    !order.razorpayOrderId.startsWith('TEST_ORD_')
+  ) {
+    return false;
+  }
+
   let meta: any = order.metadata;
   if (typeof meta === 'string') {
     try {
@@ -64,6 +110,7 @@ export function isStagingTestOrder(order: any): boolean {
     meta = {};
   }
 
+  // 1. Definitive online test payment markers
   if (meta.isTestPayment === true || meta.testMode === 'STAGING_TEST_PAYMENT') {
     return true;
   }
@@ -74,6 +121,20 @@ export function isStagingTestOrder(order: any): boolean {
 
   if (typeof order.razorpayPaymentId === 'string' && order.razorpayPaymentId.startsWith('TEST_PAY_')) {
     return true;
+  }
+
+  // 2. Historical Agent Offline test orders with authoritative synthetic agent evidence
+  const isAgentOrder =
+    order.source === 'AGENT' ||
+    order.paymentMode === 'OFFLINE' ||
+    order.agentId != null;
+
+  if (isAgentOrder) {
+    const candidateAgent =
+      agentUser || order.agent || meta.bookedByAgentEmail;
+    if (isSyntheticStagingTestAccount(candidateAgent)) {
+      return true;
+    }
   }
 
   return false;

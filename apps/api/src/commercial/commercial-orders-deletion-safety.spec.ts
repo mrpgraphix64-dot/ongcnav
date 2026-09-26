@@ -9,6 +9,7 @@ import { RazorpayService } from './razorpay.service';
 import {
   isAdminTestDataDeleteEnabled,
   isStagingTestOrder,
+  isSyntheticStagingTestAccount,
 } from './commercial-test-payment.util';
 import {
   CommercialOrderSource,
@@ -165,6 +166,58 @@ describe('Commercial Orders Deletion Safety & Staging Test-Data Delete Mode Test
       })).toBe(false);
       expect(isStagingTestOrder(null)).toBe(false);
       expect(isStagingTestOrder(undefined)).toBe(false);
+    });
+
+    it('Point 6f: identifies synthetic staging test accounts correctly', () => {
+      expect(isSyntheticStagingTestAccount('test_agent_882301@staging.test')).toBe(true);
+      expect(isSyntheticStagingTestAccount('test_agent_950347@staging.test')).toBe(true);
+      expect(isSyntheticStagingTestAccount({ email: 'tester@sub.staging.test' })).toBe(true);
+      expect(isSyntheticStagingTestAccount('agent@synthetic.test')).toBe(true);
+      expect(isSyntheticStagingTestAccount('realagent@gmail.com')).toBe(false);
+      expect(isSyntheticStagingTestAccount('staff@ongc.co.in')).toBe(false);
+      expect(isSyntheticStagingTestAccount(null)).toBe(false);
+      expect(isSyntheticStagingTestAccount('')).toBe(false);
+    });
+
+    it('Point 6g: identifies historical agent offline test orders created by synthetic test agents', () => {
+      const agentOfflineTestOrder = {
+        source: CommercialOrderSource.AGENT,
+        paymentMode: 'OFFLINE',
+        agent: { email: 'test_agent_882301@staging.test' },
+      };
+      expect(isStagingTestOrder(agentOfflineTestOrder)).toBe(true);
+      expect(isStagingTestOrder({ source: CommercialOrderSource.AGENT, paymentMode: 'OFFLINE' }, { email: 'test_agent_950347@staging.test' })).toBe(true);
+    });
+
+    it('Point 6h: protects agent offline orders created by non-synthetic agents (e.g. gmail.com)', () => {
+      const agentOfflineNormalOrder = {
+        source: CommercialOrderSource.AGENT,
+        paymentMode: 'OFFLINE',
+        agent: { email: 'siddharthkambaliya13@gmail.com' },
+      };
+      expect(isStagingTestOrder(agentOfflineNormalOrder)).toBe(false);
+    });
+
+    it('Point 6i: STRICT FINANCIAL SAFEGUARD - real Razorpay payments (pay_...) are NEVER test orders', () => {
+      const realPaymentOrder = {
+        razorpayOrderId: 'order_TgENabcdef',
+        razorpayPaymentId: 'pay_TgEN123456',
+        metadata: { isTestPayment: true, testMode: 'STAGING_TEST_PAYMENT' },
+        source: CommercialOrderSource.AGENT,
+        agent: { email: 'test_agent_882301@staging.test' },
+      };
+      expect(isStagingTestOrder(realPaymentOrder)).toBe(false);
+    });
+
+    it('Point 6j: STRICT FINANCIAL SAFEGUARD - real Razorpay order IDs (order_...) are NEVER test orders even if paymentId is absent', () => {
+      const realOrderOnly = {
+        razorpayOrderId: 'order_TgENabcdef',
+        razorpayPaymentId: null,
+        metadata: { isTestPayment: true, testMode: 'STAGING_TEST_PAYMENT' },
+        source: CommercialOrderSource.AGENT,
+        agent: { email: 'test_agent_882301@staging.test' },
+      };
+      expect(isStagingTestOrder(realOrderOnly)).toBe(false);
     });
   });
 

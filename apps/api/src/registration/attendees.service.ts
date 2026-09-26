@@ -249,10 +249,19 @@ export class AttendeesService {
               currency: true,
               orderStatus: true,
               paymentStatus: true,
+              paymentMode: true,
+              source: true,
               paidAt: true,
               metadata: true,
               razorpayOrderId: true,
               razorpayPaymentId: true,
+              agent: {
+                select: {
+                  id: true,
+                  email: true,
+                  name: true,
+                },
+              },
             },
           },
           dailyCheckins: {
@@ -340,8 +349,22 @@ export class AttendeesService {
 
         // 1. Commercial Order Booking Group
         if (p.orderId && p.order) {
-          const isTestPayment = isStagingTestOrder(p.order);
+          const isTestPayment = isStagingTestOrder(p.order, (p.order as any).agent);
           const rawPasses = orderPassesMap.get(p.orderId.toString()) || [p];
+          const isRealProtectedOrder =
+            (p.order.orderStatus === 'PAID' &&
+              p.order.razorpayPaymentId != null &&
+              !p.order.razorpayPaymentId.startsWith('TEST_PAY_')) ||
+            (typeof p.order.razorpayOrderId === 'string' &&
+              p.order.razorpayOrderId.startsWith('order_') &&
+              !p.order.razorpayOrderId.startsWith('TEST_ORD_'));
+
+          const orderClassification = isTestPayment
+            ? 'TEST'
+            : isRealProtectedOrder
+            ? 'PROTECTED'
+            : 'OTHER';
+
           const formattedPasses = await Promise.all(
             rawPasses.map(async (pass) => {
               const passCheckin = pass.dailyCheckins?.[0];
@@ -369,6 +392,17 @@ export class AttendeesService {
                 qr_svg: passQrSvg,
                 order_id: p.orderId!.toString(),
                 isTestPayment,
+                classification: orderClassification,
+                order: {
+                  id: p.order!.id.toString(),
+                  orderNumber: p.order!.orderNumber,
+                  orderStatus: p.order!.orderStatus,
+                  paymentStatus: p.order!.paymentStatus,
+                  paymentMode: (p.order as any).paymentMode,
+                  isTestPayment,
+                  razorpayOrderId: p.order!.razorpayOrderId,
+                  razorpayPaymentId: p.order!.razorpayPaymentId,
+                },
               };
             }),
           );
@@ -385,6 +419,7 @@ export class AttendeesService {
             secure_token: p.qrCodeToken,
             category: p.order.ticketType || 'Commercial Order',
             registrationType: 'COMMERCIAL',
+            classification: orderClassification,
             status: anyPassCheckedIn
               ? 'checked_in'
               : p.order.orderStatus === 'PAID'
@@ -411,9 +446,12 @@ export class AttendeesService {
               amountInr: p.order.amountPaise / 100,
               orderStatus: p.order.orderStatus,
               paymentStatus: p.order.paymentStatus,
+              paymentMode: (p.order as any).paymentMode,
               selectedDates: p.order.selectedDates,
               paidAt: p.order.paidAt ? p.order.paidAt.toISOString() : null,
               isTestPayment,
+              razorpayOrderId: p.order.razorpayOrderId,
+              razorpayPaymentId: p.order.razorpayPaymentId,
             },
             passes: formattedPasses,
             family_tickets: formattedPasses,
@@ -443,6 +481,7 @@ export class AttendeesService {
               secure_token: fam.qrCodeToken,
               category: fam.category || `Family (${fam.familyMember?.relation || 'Member'})`,
               registrationType: fam.registrationType,
+              classification: 'PROTECTED',
               status: famCheckedIn ? 'checked_in' : fam.status.toLowerCase(),
               rawStatus: fam.status,
               relation: fam.familyMember?.relation || 'Family Member',
@@ -455,6 +494,12 @@ export class AttendeesService {
           }),
         );
 
+        const isEmployeeOrStaff =
+          p.employeeId != null ||
+          p.registrationType === RegistrationType.EMPLOYEE ||
+          p.category === 'ONGC STAFF' ||
+          p.category === 'FAMILY MEMBER';
+
         return {
           id: p.id.toString(),
           name: p.name || p.employee?.name || 'Primary Attendee',
@@ -465,6 +510,7 @@ export class AttendeesService {
           secure_token: p.qrCodeToken,
           category: p.category || (p.employee ? 'ONGC STAFF' : 'General'),
           registrationType: p.registrationType,
+          classification: isEmployeeOrStaff ? 'PROTECTED' : 'OTHER',
           status: isCheckedIn ? 'checked_in' : p.status.toLowerCase(),
           rawStatus: p.status,
           checked_in_at: latestCheckin ? latestCheckin.checkinTime.toISOString() : null,
@@ -899,7 +945,7 @@ export class AttendeesService {
 
     // Must be associated with an order that is an explicitly marked staging test order
     if (attendee.order) {
-      return isStagingTestOrder(attendee.order);
+      return isStagingTestOrder(attendee.order, attendee.order.agent);
     }
 
     return false;
@@ -919,6 +965,8 @@ export class AttendeesService {
             orderNumber: true,
             orderStatus: true,
             paymentStatus: true,
+            paymentMode: true,
+            source: true,
             razorpayOrderId: true,
             razorpayPaymentId: true,
             metadata: true,
@@ -928,6 +976,13 @@ export class AttendeesService {
             customerName: true,
             customerMobile: true,
             customerEmail: true,
+            agent: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -979,7 +1034,7 @@ export class AttendeesService {
         await tx.attendee.delete({ where: { id: attendee.id } });
 
         // 4. Sibling safety: if this was the last remaining attendee of an eligible test order, also clean up the test order
-        if (attendee.orderId && isStagingTestOrder(attendee.order)) {
+        if (attendee.orderId && isStagingTestOrder(attendee.order, attendee.order?.agent)) {
           const remainingCount = await tx.attendee.count({
             where: { orderId: attendee.orderId },
           });
@@ -1053,6 +1108,8 @@ export class AttendeesService {
             orderNumber: true,
             orderStatus: true,
             paymentStatus: true,
+            paymentMode: true,
+            source: true,
             razorpayOrderId: true,
             razorpayPaymentId: true,
             metadata: true,
@@ -1062,6 +1119,13 @@ export class AttendeesService {
             customerName: true,
             customerMobile: true,
             customerEmail: true,
+            agent: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -1073,13 +1137,55 @@ export class AttendeesService {
 
     for (const att of attendees) {
       const isTest = this.isStagingTestAttendee(att);
-      if (testDeleteActive && isTest) {
-        eligibleTestAttendees.push(att);
+      if (testDeleteActive) {
+        if (isTest) {
+          eligibleTestAttendees.push(att);
+        } else {
+          // In test delete mode: ALL non-test records (real, staff, ambiguous) remain protected
+          let reason: string = 'it is not an identifiable staging test pass';
+          if (
+            att.registrationType === RegistrationType.EMPLOYEE ||
+            att.employeeId != null ||
+            att.familyMemberId != null ||
+            att.category === 'ONGC STAFF' ||
+            att.category === 'FAMILY MEMBER'
+          ) {
+            reason = 'it is an employee or family registration';
+          } else if (att.dailyCheckins && att.dailyCheckins.length > 0) {
+            reason = 'it contains checked-in passes or entry records';
+          } else if (att.scanLogs && att.scanLogs.length > 0) {
+            reason = 'it contains scan audit logs';
+          } else if (
+            att.order &&
+            (att.order.orderStatus === OrderStatus.PAID ||
+              att.order.paymentStatus === PaymentStatus.CAPTURED ||
+              att.order.razorpayPaymentId ||
+              (typeof att.order.razorpayOrderId === 'string' &&
+                att.order.razorpayOrderId.startsWith('order_')))
+          ) {
+            reason = 'it belongs to a confirmed/paid transaction';
+          }
+          protectedTickets.push({
+            id: att.id.toString(),
+            name: att.name || 'Unknown',
+            ticketNumber: att.ticketNumber,
+            reason,
+          });
+        }
         continue;
       }
 
+      // Normal mode (non-test delete)
       let reason: string | null = null;
-      if (att.dailyCheckins && att.dailyCheckins.length > 0) {
+      if (
+        att.registrationType === RegistrationType.EMPLOYEE ||
+        att.employeeId != null ||
+        att.familyMemberId != null ||
+        att.category === 'ONGC STAFF' ||
+        att.category === 'FAMILY MEMBER'
+      ) {
+        reason = 'it is an employee or family registration';
+      } else if (att.dailyCheckins && att.dailyCheckins.length > 0) {
         reason = 'it contains checked-in passes or entry records';
       } else if (att.scanLogs && att.scanLogs.length > 0) {
         reason = 'it contains scan audit logs';
@@ -1087,7 +1193,9 @@ export class AttendeesService {
         att.order &&
         (att.order.orderStatus === OrderStatus.PAID ||
           att.order.paymentStatus === PaymentStatus.CAPTURED ||
-          att.order.razorpayPaymentId)
+          att.order.razorpayPaymentId ||
+          (typeof att.order.razorpayOrderId === 'string' &&
+            att.order.razorpayOrderId.startsWith('order_')))
       ) {
         reason = 'it belongs to a confirmed/paid transaction';
       }
@@ -1147,7 +1255,7 @@ export class AttendeesService {
         const affectedOrderIds = Array.from(
           new Set(
             eligibleTestAttendees
-              .filter((a) => a.orderId && isStagingTestOrder(a.order))
+              .filter((a) => a.orderId && isStagingTestOrder(a.order, a.order?.agent))
               .map((a) => a.orderId as bigint),
           ),
         );
@@ -1230,6 +1338,15 @@ export class AttendeesService {
 
   getAttendeeProtectionReasonFromRecord(att: any): string | null {
     if (!att) return null;
+    if (
+      att.registrationType === RegistrationType.EMPLOYEE ||
+      att.employeeId != null ||
+      att.familyMemberId != null ||
+      att.category === 'ONGC STAFF' ||
+      att.category === 'FAMILY MEMBER'
+    ) {
+      return 'it is an employee or family registration';
+    }
     if (att.dailyCheckins && att.dailyCheckins.length > 0) {
       return 'it contains checked-in passes or entry records';
     }
@@ -1240,7 +1357,9 @@ export class AttendeesService {
       att.order &&
       (att.order.orderStatus === OrderStatus.PAID ||
         att.order.paymentStatus === PaymentStatus.CAPTURED ||
-        att.order.razorpayPaymentId)
+        att.order.razorpayPaymentId ||
+        (typeof att.order.razorpayOrderId === 'string' &&
+          att.order.razorpayOrderId.startsWith('order_')))
     ) {
       return 'it belongs to a confirmed/paid transaction';
     }
@@ -1307,6 +1426,7 @@ export class AttendeesService {
       where.employeeId = { not: null };
       where.registrationType = RegistrationType.EMPLOYEE;
     }
+
     if (query.ids && query.ids.length > 0) {
       where.id = { in: query.ids };
     } else {

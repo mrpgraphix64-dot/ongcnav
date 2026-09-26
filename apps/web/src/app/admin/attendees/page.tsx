@@ -45,19 +45,22 @@ interface EmployeeData {
 interface CommercialOrderData {
   id: string;
   orderNumber: string;
-  customerName: string;
-  customerMobile: string;
-  customerEmail: string;
-  ticketType: string;
-  quantity: number;
-  unitPricePaise: number;
-  amountPaise: number;
-  amountInr: number;
+  customerName?: string;
+  customerMobile?: string;
+  customerEmail?: string;
+  ticketType?: string;
+  quantity?: number;
+  unitPricePaise?: number;
+  amountPaise?: number;
+  amountInr?: number;
   orderStatus: string;
   paymentStatus: string;
-  selectedDates: string[];
+  paymentMode?: string;
+  selectedDates?: string[];
   paidAt?: string | null;
   isTestPayment?: boolean;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
 }
 
 interface AttendeeItem {
@@ -69,6 +72,8 @@ interface AttendeeItem {
   ticketNumber: string;
   secure_token: string;
   category: string;
+  registrationType?: string;
+  classification?: 'TEST' | 'PROTECTED' | 'OTHER';
   status: string;
   rawStatus?: string;
   relation?: string;
@@ -276,22 +281,28 @@ export default function AdminAttendeesPage() {
       if (!item) continue;
 
       const isTest =
+        item.classification === 'TEST' ||
         item.isTestPayment === true ||
         item.order?.isTestPayment === true ||
         item.order?.orderNumber?.includes('TEST') ||
         item.ticketNumber?.includes('TEST');
 
-      const isStaffOrProtected =
+      const isStaffOrRealProtected =
+        item.classification === 'PROTECTED' ||
+        item.registrationType === 'EMPLOYEE' ||
         item.employee_id != null ||
         item.employee != null ||
         item.category === 'ONGC STAFF' ||
         item.category === 'FAMILY MEMBER' ||
-        (!isTest && item.order && item.order.orderStatus === 'PAID') ||
-        (!isTest && (item.checked_in_at || item.status === 'checked_in'));
+        (!isTest &&
+          ((Boolean(item.order?.razorpayPaymentId) &&
+            !item.order?.razorpayPaymentId?.startsWith('TEST_PAY_')) ||
+            (Boolean(item.order?.razorpayOrderId) &&
+              !item.order?.razorpayOrderId?.startsWith('TEST_ORD_'))));
 
       if (isTest) {
         testPassCount++;
-      } else if (isStaffOrProtected) {
+      } else if (isStaffOrRealProtected) {
         protectedCount++;
       } else {
         otherCount++;
@@ -852,7 +863,7 @@ export default function AdminAttendeesPage() {
                             <div>
                               <div className="font-bold text-xs text-stone-800 flex items-center gap-1.5">
                                 <span>
-                                  ₹{(primary.order?.amountInr ?? (primary.order ? primary.order.amountPaise / 100 : 0)).toLocaleString('en-IN')}
+                                  ₹{(primary.order?.amountInr ?? ((primary.order?.amountPaise ?? 0) / 100)).toLocaleString('en-IN')}
                                 </span>
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
                                   {primary.order?.orderStatus || 'PAID'}
@@ -1574,7 +1585,7 @@ export default function AdminAttendeesPage() {
               </div>
               {selectionAnalysis.testPassCount > 0 && (
                 <div className="flex justify-between items-center text-emerald-700 font-medium">
-                  <span>Eligible Test Passes:</span>
+                  <span>Eligible Staging Test Passes:</span>
                   <span className="font-bold bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded">
                     {selectionAnalysis.testPassCount}
                   </span>
@@ -1582,7 +1593,7 @@ export default function AdminAttendeesPage() {
               )}
               {selectionAnalysis.protectedCount > 0 && (
                 <div className="flex justify-between items-center text-amber-700 font-medium">
-                  <span>Protected (Real / Staff):</span>
+                  <span>Protected Real / Staff:</span>
                   <span className="font-bold bg-amber-100/80 text-amber-800 px-2 py-0.5 rounded">
                     {selectionAnalysis.protectedCount}
                   </span>
@@ -1590,7 +1601,7 @@ export default function AdminAttendeesPage() {
               )}
               {selectionAnalysis.otherCount > 0 && (
                 <div className="flex justify-between items-center text-stone-600 font-medium">
-                  <span>Other Passes:</span>
+                  <span>Other / Protected:</span>
                   <span className="font-bold text-stone-800">
                     {selectionAnalysis.otherCount}
                   </span>
