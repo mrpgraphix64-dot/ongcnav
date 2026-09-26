@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
   Users,
@@ -89,6 +90,7 @@ export default function AdminStaffPage() {
     gate_ids: [] as string[],
   });
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -103,6 +105,12 @@ export default function AdminStaffPage() {
     gate_ids: [] as string[],
   });
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
@@ -120,6 +128,31 @@ export default function AdminStaffPage() {
   const [resetPwdInput, setResetPwdInput] = useState('OngcPass@2026');
   const [resettingPwd, setResettingPwd] = useState(false);
   const [resetPwdError, setResetPwdError] = useState<string | null>(null);
+
+  // Handle ESC key to dismiss any active modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (staffToDelete) {
+          setStaffToDelete(null);
+          setStaffDeleteError(null);
+        } else if (staffToToggle) {
+          setStaffToToggle(null);
+        } else if (staffToResetPwd) {
+          setStaffToResetPwd(null);
+          setResetPwdError(null);
+        } else if (showEditModal) {
+          setShowEditModal(false);
+          setEditError(null);
+        } else if (showCreateModal) {
+          setShowCreateModal(false);
+          setCreateError(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [staffToDelete, staffToToggle, staffToResetPwd, showEditModal, showCreateModal]);
 
   const loadData = useCallback(async () => {
     try {
@@ -195,8 +228,9 @@ export default function AdminStaffPage() {
   // Handle Create Staff
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.name || !createForm.email || !createForm.password) {
-      setMsg({ text: 'Please fill in all required fields.', type: 'error' });
+    setCreateError(null);
+    if (!createForm.name?.trim() || !createForm.email?.trim() || !createForm.password) {
+      setCreateError('Please fill in all required fields.');
       return;
     }
 
@@ -205,10 +239,10 @@ export default function AdminStaffPage() {
       await fetchApi('/admin/staff', {
         method: 'POST',
         body: JSON.stringify({
-          name: createForm.name,
-          email: createForm.email,
-          mobile: createForm.mobile || undefined,
-          staff_id: createForm.staff_id || undefined,
+          name: createForm.name.trim(),
+          email: createForm.email.trim(),
+          mobile: createForm.mobile?.trim() || undefined,
+          staff_id: createForm.staff_id?.trim() || undefined,
           role: createForm.role,
           status: createForm.status,
           password: createForm.password,
@@ -217,6 +251,7 @@ export default function AdminStaffPage() {
       });
 
       setShowCreateModal(false);
+      setCreateError(null);
       setCreateForm({
         name: '',
         staff_id: '',
@@ -230,7 +265,7 @@ export default function AdminStaffPage() {
       setMsg({ text: `Staff operator created successfully.`, type: 'success' });
       loadData();
     } catch (e: any) {
-      setMsg({ text: e.message || 'Failed to create staff member', type: 'error' });
+      setCreateError(e.message || 'Failed to create staff member');
     } finally {
       setCreateSubmitting(false);
     }
@@ -239,6 +274,7 @@ export default function AdminStaffPage() {
   // Open Edit Modal
   const openEditModal = (staff: StaffRecord) => {
     const existingGateIds = (staff.gates || staff.assignedGates || []).map((g) => g.id);
+    setEditError(null);
     setEditForm({
       id: staff.id,
       name: staff.name,
@@ -256,8 +292,9 @@ export default function AdminStaffPage() {
   // Handle Update Staff
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editForm.name || !editForm.email || !editForm.staff_id) {
-      setMsg({ text: 'Please fill in required fields.', type: 'error' });
+    setEditError(null);
+    if (!editForm.name?.trim() || !editForm.email?.trim() || !editForm.staff_id?.trim()) {
+      setEditError('Please fill in required fields.');
       return;
     }
 
@@ -266,22 +303,23 @@ export default function AdminStaffPage() {
       await fetchApi(`/admin/staff/${editForm.id}`, {
         method: 'PUT',
         body: JSON.stringify({
-          name: editForm.name,
-          staff_id: editForm.staff_id,
-          email: editForm.email,
-          mobile: editForm.mobile || undefined,
+          name: editForm.name.trim(),
+          staff_id: editForm.staff_id.trim(),
+          email: editForm.email.trim(),
+          mobile: editForm.mobile?.trim() || undefined,
           role: editForm.role,
           status: editForm.status,
-          password: editForm.password ? editForm.password : undefined,
+          password: editForm.password?.trim() ? editForm.password.trim() : undefined,
           gate_ids: editForm.gate_ids,
         }),
       });
 
       setShowEditModal(false);
+      setEditError(null);
       setMsg({ text: `Staff member '${editForm.name}' updated successfully.`, type: 'success' });
       loadData();
     } catch (e: any) {
-      setMsg({ text: e.message || 'Failed to update staff member', type: 'error' });
+      setEditError(e.message || 'Failed to update staff member');
     } finally {
       setEditSubmitting(false);
     }
@@ -953,22 +991,40 @@ export default function AdminStaffPage() {
       </div>
 
       {/* CREATE STAFF MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
-          <div className="min-h-full flex items-center justify-center py-4">
-            <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 sm:space-y-5 border border-stone-200 shadow-xl my-auto">
-              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+      {mounted && showCreateModal && createPortal(
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowCreateModal(false);
+              setCreateError(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 sm:space-y-5 border border-stone-200 shadow-2xl my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <h3 className="font-outfit font-bold text-lg text-[#7A1113] flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-amber-500" />
                 <span>Create Staff Operator Account</span>
               </h3>
               <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-stone-400 hover:text-stone-700"
+                type="button"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreateError(null);
+                }}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg hover:bg-stone-100 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {createError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{createError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -979,6 +1035,7 @@ export default function AdminStaffPage() {
                   <input
                     type="text"
                     required
+                    autoComplete="name"
                     placeholder="e.g. Rahul Sharma"
                     value={createForm.name}
                     onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
@@ -992,6 +1049,7 @@ export default function AdminStaffPage() {
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
                     placeholder="e.g. STF-101 (Auto if blank)"
                     value={createForm.staff_id}
                     onChange={(e) => setCreateForm({ ...createForm, staff_id: e.target.value })}
@@ -1008,6 +1066,7 @@ export default function AdminStaffPage() {
                   <input
                     type="email"
                     required
+                    autoComplete="username"
                     placeholder="rahul@ongc.co.in"
                     value={createForm.email}
                     onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
@@ -1021,6 +1080,7 @@ export default function AdminStaffPage() {
                   </label>
                   <input
                     type="text"
+                    autoComplete="tel"
                     placeholder="9876543210"
                     value={createForm.mobile}
                     onChange={(e) => setCreateForm({ ...createForm, mobile: e.target.value })}
@@ -1075,6 +1135,7 @@ export default function AdminStaffPage() {
                 <PasswordInput
                   required
                   placeholder="••••••••"
+                  autoComplete="new-password"
                   value={createForm.password}
                   onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
@@ -1137,7 +1198,10 @@ export default function AdminStaffPage() {
               <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreateError(null);
+                  }}
                   className="px-4 py-2 rounded-xl text-sm font-semibold text-stone-600 hover:text-stone-900"
                 >
                   Cancel
@@ -1152,27 +1216,45 @@ export default function AdminStaffPage() {
               </div>
             </form>
           </div>
-        </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* EDIT STAFF MODAL */}
-      {showEditModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
-          <div className="min-h-full flex items-center justify-center py-4">
-            <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 sm:space-y-5 border border-stone-200 shadow-xl my-auto">
-              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+      {mounted && showEditModal && createPortal(
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEditModal(false);
+              setEditError(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 sm:space-y-5 border border-stone-200 shadow-2xl my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <h3 className="font-outfit font-bold text-lg text-[#7A1113] flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-amber-500" />
                 <span>Edit Staff Account</span>
               </h3>
               <button
-                onClick={() => setShowEditModal(false)}
-                className="text-stone-400 hover:text-stone-700"
+                type="button"
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditError(null);
+                }}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg hover:bg-stone-100 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {editError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{editError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1183,6 +1265,7 @@ export default function AdminStaffPage() {
                   <input
                     type="text"
                     required
+                    autoComplete="name"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
@@ -1196,6 +1279,7 @@ export default function AdminStaffPage() {
                   <input
                     type="text"
                     required
+                    autoComplete="off"
                     value={editForm.staff_id}
                     onChange={(e) => setEditForm({ ...editForm, staff_id: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm uppercase focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
@@ -1211,6 +1295,7 @@ export default function AdminStaffPage() {
                   <input
                     type="email"
                     required
+                    autoComplete="username"
                     value={editForm.email}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
@@ -1223,6 +1308,7 @@ export default function AdminStaffPage() {
                   </label>
                   <input
                     type="text"
+                    autoComplete="tel"
                     value={editForm.mobile}
                     onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
@@ -1283,6 +1369,7 @@ export default function AdminStaffPage() {
                 </label>
                 <PasswordInput
                   placeholder="Leave blank to keep existing password"
+                  autoComplete="new-password"
                   value={editForm.password}
                   onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
@@ -1336,7 +1423,10 @@ export default function AdminStaffPage() {
               <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditError(null);
+                  }}
                   className="px-4 py-2 rounded-xl text-sm font-semibold text-stone-600 hover:text-stone-900"
                 >
                   Cancel
@@ -1351,284 +1441,305 @@ export default function AdminStaffPage() {
               </div>
             </form>
           </div>
-        </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* DELETE STAFF CONFIRMATION MODAL */}
-      {staffToDelete && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
-          <div className="min-h-full flex items-center justify-center py-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl my-auto">
-              <div className="flex items-center gap-3 text-rose-700">
-                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
-                  <Trash2 className="w-5 h-5 text-rose-600" />
-                </div>
-                <div>
-                  <h3 className="font-outfit font-bold text-lg text-stone-900">
-                    Delete Staff Account
-                  </h3>
-                  <p className="text-xs text-stone-500">
-                    Irreversible administrative operation
-                  </p>
-                </div>
+      {mounted && staffToDelete && createPortal(
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setStaffToDelete(null);
+              setStaffDeleteError(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-2xl my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-rose-700">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
               </div>
-
-              {/* Staff Details Card */}
-              <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200/80 space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Staff Name:</span>
-                  <span className="font-bold text-stone-900">{staffToDelete.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Staff ID:</span>
-                  <span className="font-mono font-bold text-[#7A1113]">
-                    {staffToDelete.staffId || staffToDelete.staff_id || '—'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Email:</span>
-                  <span className="font-semibold text-stone-700">{staffToDelete.email}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Role:</span>
-                  <span className="font-bold text-stone-800">
-                    {ROLES_MAP[staffToDelete.role] || staffToDelete.role}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Status:</span>
-                  <span
-                    className={`font-bold ${
-                      staffToDelete.isActive ? 'text-emerald-700' : 'text-stone-500'
-                    }`}
-                  >
-                    {staffToDelete.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Error / Audit Safety Notice */}
-              {staffDeleteError ? (
-                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-3">
-                  <div className="flex items-start gap-2 text-rose-800">
-                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-                    <span className="font-medium leading-relaxed">{staffDeleteError}</span>
-                  </div>
-                  <div className="pt-2 border-t border-rose-200/70 flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-rose-700 font-semibold">
-                      Recommendation:
-                    </span>
-                    <button
-                      type="button"
-                      disabled={deletingStaff}
-                      onClick={handleDeactivateInsteadFromDeleteModal}
-                      className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition-all"
-                    >
-                      {deletingStaff ? 'Deactivating...' : 'Deactivate Instead'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Are you sure you want to permanently delete this staff account? If this account
-                  has performed scans, issued passes, or generated audit logs, the backend will
-                  safely protect historical records and recommend deactivation instead.
+              <div>
+                <h3 className="font-outfit font-bold text-lg text-stone-900">
+                  Delete Staff Account
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Irreversible administrative operation
                 </p>
-              )}
+              </div>
+            </div>
 
-              {/* Action Buttons */}
+            {/* Staff Details Card */}
+            <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200/80 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-stone-500">Staff Name:</span>
+                <span className="font-bold text-stone-900">{staffToDelete.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Staff ID:</span>
+                <span className="font-mono font-bold text-[#7A1113]">
+                  {staffToDelete.staffId || staffToDelete.staff_id || '—'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Email:</span>
+                <span className="font-semibold text-stone-700">{staffToDelete.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Role:</span>
+                <span className="font-bold text-stone-800">
+                  {ROLES_MAP[staffToDelete.role] || staffToDelete.role}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Status:</span>
+                <span
+                  className={`font-bold ${
+                    staffToDelete.isActive ? 'text-emerald-700' : 'text-stone-500'
+                  }`}
+                >
+                  {staffToDelete.isActive ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
+
+            {/* Error / Audit Safety Notice */}
+            {staffDeleteError ? (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-3">
+                <div className="flex items-start gap-2 text-rose-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                  <span className="font-medium leading-relaxed">{staffDeleteError}</span>
+                </div>
+                <div className="pt-2 border-t border-rose-200/70 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-rose-700 font-semibold">
+                    Recommendation:
+                  </span>
+                  <button
+                    type="button"
+                    disabled={deletingStaff}
+                    onClick={handleDeactivateInsteadFromDeleteModal}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition-all"
+                  >
+                    {deletingStaff ? 'Deactivating...' : 'Deactivate Instead'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Are you sure you want to permanently delete this staff account? If this account
+                has performed scans, issued passes, or generated audit logs, the backend will
+                safely protect historical records and recommend deactivation instead.
+              </p>
+            )}
+
+            {/* Action Buttons */}
+            <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setStaffToDelete(null);
+                  setStaffDeleteError(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingStaff}
+                onClick={handleConfirmDeleteStaff}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+              >
+                {deletingStaff ? 'Checking & Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* TOGGLE STATUS (ACTIVATE / DEACTIVATE) CONFIRMATION MODAL */}
+      {mounted && staffToToggle && createPortal(
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setStaffToToggle(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-2xl my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                  staffToToggle.isActive
+                    ? 'bg-amber-100 text-amber-600'
+                    : 'bg-emerald-100 text-emerald-600'
+                }`}
+              >
+                {staffToToggle.isActive ? (
+                  <UserX className="w-5 h-5" />
+                ) : (
+                  <UserCheck className="w-5 h-5" />
+                )}
+              </div>
+              <div>
+                <h3 className="font-outfit font-bold text-lg text-stone-900">
+                  {staffToToggle.isActive
+                    ? 'Deactivate Staff Account'
+                    : 'Activate Staff Account'}
+                </h3>
+                <p className="text-xs text-stone-500">
+                  {staffToToggle.isActive
+                    ? 'Disable login and operational access'
+                    : 'Restore login and scanner access'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#FAF7F2] rounded-xl p-3.5 border border-stone-200 text-xs space-y-1.5">
+              <div>
+                <span className="text-stone-500">Staff Member: </span>
+                <span className="font-bold text-stone-900">{staffToToggle.name}</span>
+              </div>
+              <div>
+                <span className="text-stone-500">Staff ID: </span>
+                <span className="font-mono font-bold text-[#7A1113]">
+                  {staffToToggle.staffId || staffToToggle.staff_id || '—'}
+                </span>
+              </div>
+              <div>
+                <span className="text-stone-500">Role: </span>
+                <span className="font-bold text-stone-800">
+                  {ROLES_MAP[staffToToggle.role] || staffToToggle.role}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed">
+              {staffToToggle.isActive
+                ? 'Deactivating will immediately prevent this user from logging in or scanning passes at gates. Historical scans and pass issuance audit logs remain completely preserved.'
+                : 'Activating will immediately restore login and operational access for this staff member.'}
+            </p>
+
+            <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setStaffToToggle(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={togglingStaff}
+                onClick={handleConfirmToggleStaff}
+                className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 ${
+                  staffToToggle.isActive
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {togglingStaff
+                  ? 'Updating...'
+                  : staffToToggle.isActive
+                  ? 'Deactivate Staff'
+                  : 'Activate Staff'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* RESET PASSWORD MODAL */}
+      {mounted && staffToResetPwd && createPortal(
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setStaffToResetPwd(null);
+              setResetPwdError(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-2xl my-auto animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-stone-900">
+              <div className="w-10 h-10 rounded-full bg-[#7A1113]/10 flex items-center justify-center shrink-0">
+                <KeyRound className="w-5 h-5 text-[#7A1113]" />
+              </div>
+              <div>
+                <h3 className="font-outfit font-bold text-lg text-stone-900">
+                  Reset Staff Password
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Set a new password for this operator account
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#FAF7F2] rounded-xl p-3.5 border border-stone-200 text-xs space-y-1">
+              <div>
+                <span className="text-stone-500">Staff Member: </span>
+                <span className="font-bold text-stone-900">{staffToResetPwd.name}</span>
+              </div>
+              <div>
+                <span className="text-stone-500">Email (Login): </span>
+                <span className="font-semibold text-stone-700">{staffToResetPwd.email}</span>
+              </div>
+            </div>
+
+            {resetPwdError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{resetPwdError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmResetPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  New Password *
+                </label>
+                <PasswordInput
+                  required
+                  minLength={6}
+                  value={resetPwdInput}
+                  onChange={(e) => setResetPwdInput(e.target.value)}
+                  placeholder="Enter new secure password"
+                  autoComplete="new-password"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] font-mono"
+                />
+                <p className="text-[11px] text-stone-400 mt-1">
+                  Provide this temporary/new password to the operator so they can sign in.
+                </p>
+              </div>
+
               <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => {
-                    setStaffToDelete(null);
-                    setStaffDeleteError(null);
+                    setStaffToResetPwd(null);
+                    setResetPwdError(null);
                   }}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
                 >
                   Cancel
                 </button>
                 <button
-                  type="button"
-                  disabled={deletingStaff}
-                  onClick={handleConfirmDeleteStaff}
-                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                  type="submit"
+                  disabled={resettingPwd || !resetPwdInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
                 >
-                  {deletingStaff ? 'Checking & Deleting...' : 'Confirm Delete'}
+                  {resettingPwd ? 'Updating Password...' : 'Save New Password'}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
-        </div>
-      )}
-
-      {/* TOGGLE STATUS (ACTIVATE / DEACTIVATE) CONFIRMATION MODAL */}
-      {staffToToggle && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
-          <div className="min-h-full flex items-center justify-center py-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl my-auto">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                    staffToToggle.isActive
-                      ? 'bg-amber-100 text-amber-600'
-                      : 'bg-emerald-100 text-emerald-600'
-                  }`}
-                >
-                  {staffToToggle.isActive ? (
-                    <UserX className="w-5 h-5" />
-                  ) : (
-                    <UserCheck className="w-5 h-5" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-outfit font-bold text-lg text-stone-900">
-                    {staffToToggle.isActive
-                      ? 'Deactivate Staff Account'
-                      : 'Activate Staff Account'}
-                  </h3>
-                  <p className="text-xs text-stone-500">
-                    {staffToToggle.isActive
-                      ? 'Disable login and operational access'
-                      : 'Restore login and scanner access'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-[#FAF7F2] rounded-xl p-3.5 border border-stone-200 text-xs space-y-1.5">
-                <div>
-                  <span className="text-stone-500">Staff Member: </span>
-                  <span className="font-bold text-stone-900">{staffToToggle.name}</span>
-                </div>
-                <div>
-                  <span className="text-stone-500">Staff ID: </span>
-                  <span className="font-mono font-bold text-[#7A1113]">
-                    {staffToToggle.staffId || staffToToggle.staff_id || '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-stone-500">Role: </span>
-                  <span className="font-bold text-stone-800">
-                    {ROLES_MAP[staffToToggle.role] || staffToToggle.role}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-xs text-stone-600 leading-relaxed">
-                {staffToToggle.isActive
-                  ? 'Deactivating will immediately prevent this user from logging in or scanning passes at gates. Historical scans and pass issuance audit logs remain completely preserved.'
-                  : 'Activating will immediately restore login and operational access for this staff member.'}
-              </p>
-
-              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setStaffToToggle(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={togglingStaff}
-                  onClick={handleConfirmToggleStaff}
-                  className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 ${
-                    staffToToggle.isActive
-                      ? 'bg-amber-600 hover:bg-amber-700'
-                      : 'bg-emerald-600 hover:bg-emerald-700'
-                  }`}
-                >
-                  {togglingStaff
-                    ? 'Updating...'
-                    : staffToToggle.isActive
-                    ? 'Deactivate Staff'
-                    : 'Activate Staff'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* RESET PASSWORD MODAL */}
-      {staffToResetPwd && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4">
-          <div className="min-h-full flex items-center justify-center py-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl my-auto">
-              <div className="flex items-center gap-3 text-stone-900">
-                <div className="w-10 h-10 rounded-full bg-[#7A1113]/10 flex items-center justify-center shrink-0">
-                  <KeyRound className="w-5 h-5 text-[#7A1113]" />
-                </div>
-                <div>
-                  <h3 className="font-outfit font-bold text-lg text-stone-900">
-                    Reset Staff Password
-                  </h3>
-                  <p className="text-xs text-stone-500">
-                    Set a new password for this operator account
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-[#FAF7F2] rounded-xl p-3.5 border border-stone-200 text-xs space-y-1">
-                <div>
-                  <span className="text-stone-500">Staff Member: </span>
-                  <span className="font-bold text-stone-900">{staffToResetPwd.name}</span>
-                </div>
-                <div>
-                  <span className="text-stone-500">Email (Login): </span>
-                  <span className="font-semibold text-stone-700">{staffToResetPwd.email}</span>
-                </div>
-              </div>
-
-              {resetPwdError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{resetPwdError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleConfirmResetPassword} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
-                    New Password *
-                  </label>
-                  <PasswordInput
-                    required
-                    minLength={6}
-                    value={resetPwdInput}
-                    onChange={(e) => setResetPwdInput(e.target.value)}
-                    placeholder="Enter new secure password"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] font-mono"
-                  />
-                  <p className="text-[11px] text-stone-400 mt-1">
-                    Provide this temporary/new password to the operator so they can sign in.
-                  </p>
-                </div>
-
-                <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStaffToResetPwd(null);
-                      setResetPwdError(null);
-                    }}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={resettingPwd || !resetPwdInput.trim()}
-                    className="px-4 py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
-                  >
-                    {resettingPwd ? 'Updating Password...' : 'Save New Password'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

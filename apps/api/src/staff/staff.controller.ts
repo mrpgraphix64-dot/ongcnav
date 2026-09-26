@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -56,6 +57,15 @@ export class StaffController {
   @Put(':id')
   @ApiOperation({ summary: 'Update staff member' })
   async update(@Param('id') id: string, @Body() dto: UpdateStaffDto, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return user !== undefined
+      ? this.staffService.update(BigInt(id), dto, user)
+      : this.staffService.update(BigInt(id), dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Patch staff member' })
+  async patch(@Param('id') id: string, @Body() dto: UpdateStaffDto, @Req() req?: Request) {
     const user = req ? (req as any).user : undefined;
     return user !== undefined
       ? this.staffService.update(BigInt(id), dto, user)

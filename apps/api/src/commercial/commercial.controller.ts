@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -101,5 +102,19 @@ export class CommercialAdminController {
       date,
       groupBy,
     });
+  }
+
+  @Post('orders/bulk-delete')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.COMMERCIAL_ADMIN)
+  @ApiOperation({ summary: 'Bulk delete commercial orders with strict dependency and financial protections' })
+  async bulkDeleteOrders(@Body() body: { orderIds: string[] }) {
+    return this.commercialService.bulkDeleteOrdersAdmin(body?.orderIds || []);
+  }
+
+  @Delete('orders/:id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.COMMERCIAL_ADMIN)
+  @ApiOperation({ summary: 'Delete a single commercial order with strict financial protections' })
+  async deleteOrder(@Param('id') id: string) {
+    return this.commercialService.deleteOrderAdmin(BigInt(id));
   }
 }

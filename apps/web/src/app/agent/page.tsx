@@ -176,12 +176,16 @@ export default function CommercialAgentPortal() {
       setAllocations(allocData.allocations || []);
       setSummary(allocData.summary || null);
     } catch (err: any) {
+      if (err?.message?.includes('Authentication required') || err?.status === 401) {
+        router.push('/agent/login');
+        return;
+      }
       setErrorMsg(err.message || 'Failed to load agent profile.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [router]);
 
   // Fetch bookings history
   const loadBookings = useCallback(async () => {
@@ -229,7 +233,7 @@ export default function CommercialAgentPortal() {
     try {
       localStorage.removeItem('ongc_admin_user');
     } catch {}
-    router.push('/admin/login');
+    router.push('/agent/login');
   };
 
   // Helper to find available quantity for current pass type
@@ -522,7 +526,7 @@ export default function CommercialAgentPortal() {
               <span>{errorMsg}</span>
             </div>
             <div className="flex items-center gap-2.5 text-xs font-semibold shrink-0">
-              <Link href="/admin/login" className="text-maroon hover:underline">
+              <Link href="/agent/login" className="text-maroon hover:underline">
                 Sign In
               </Link>
               <span className="text-stone-300">&bull;</span>

@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Optional,
@@ -736,12 +737,19 @@ export class CommercialService {
     }
 
     const skip = (Math.max(1, page) - 1) * limit;
-    const where: any = {
-      registrationType: RegistrationType.COMMERCIAL,
-    };
+    const where: any = {};
 
-    if (source && source !== 'ALL') {
-      where.source = source;
+    if (source === 'FREE') {
+      where.OR = [
+        { registrationType: RegistrationType.FREE },
+        { source: 'FREE' },
+        { unitPricePaise: 0 },
+      ];
+    } else {
+      where.registrationType = RegistrationType.COMMERCIAL;
+      if (source && source !== 'ALL') {
+        where.source = source;
+      }
     }
 
     if (agentId && agentId.trim() !== '') {
@@ -773,55 +781,87 @@ export class CommercialService {
       ];
     }
 
-    const [total, orders, publicOrdersCount, agentOrdersCount, totalPaidAgg, totalPassesAgg] =
-      await Promise.all([
-        this.prisma.commercialOrder.count({ where }),
-        this.prisma.commercialOrder.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            _count: { select: { attendees: true } },
-            agent: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-                staffId: true,
-                role: true,
-                parentAgentId: true,
-                parentAgent: { select: { id: true, name: true } },
-              },
-            },
-            attendees: {
-              select: {
-                id: true,
-                ticketNumber: true,
-                status: true,
-                category: true,
-                bookingDays: true,
-              },
-              take: 20,
+    const [
+      total,
+      orders,
+      publicOrdersCount,
+      agentOrdersCount,
+      publicAgg,
+      agentAgg,
+      totalPaidAgg,
+      totalPassesAgg,
+      freePassesCount,
+      freeCheckedInCount,
+      freeOrdersCount,
+    ] = await Promise.all([
+      this.prisma.commercialOrder.count({ where }),
+      this.prisma.commercialOrder.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { attendees: true } },
+          agent: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              staffId: true,
+              role: true,
+              parentAgentId: true,
+              parentAgent: { select: { id: true, name: true } },
             },
           },
-        }),
-        this.prisma.commercialOrder.count({
-          where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.PUBLIC },
-        }),
-        this.prisma.commercialOrder.count({
-          where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.AGENT },
-        }),
-        this.prisma.commercialOrder.aggregate({
-          where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
-          _sum: { amountPaise: true },
-        }),
-        this.prisma.commercialOrder.aggregate({
-          where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
-          _sum: { quantity: true },
-        }),
-      ]);
+          attendees: {
+            select: {
+              id: true,
+              ticketNumber: true,
+              status: true,
+              category: true,
+              bookingDays: true,
+            },
+            take: 20,
+          },
+        },
+      }),
+      this.prisma.commercialOrder.count({
+        where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.PUBLIC },
+      }),
+      this.prisma.commercialOrder.count({
+        where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.AGENT },
+      }),
+      this.prisma.commercialOrder.aggregate({
+        where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.PUBLIC, orderStatus: OrderStatus.PAID },
+        _sum: { amountPaise: true, quantity: true },
+      }),
+      this.prisma.commercialOrder.aggregate({
+        where: { registrationType: RegistrationType.COMMERCIAL, source: CommercialOrderSource.AGENT, orderStatus: OrderStatus.PAID },
+        _sum: { amountPaise: true, quantity: true },
+      }),
+      this.prisma.commercialOrder.aggregate({
+        where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
+        _sum: { amountPaise: true },
+      }),
+      this.prisma.commercialOrder.aggregate({
+        where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
+        _sum: { quantity: true },
+      }),
+      this.prisma.attendee?.count
+        ? this.prisma.attendee.count({
+            where: { registrationType: RegistrationType.FREE },
+          })
+        : Promise.resolve(0),
+      this.prisma.attendee?.count
+        ? this.prisma.attendee.count({
+            where: { registrationType: RegistrationType.FREE, dailyCheckins: { some: {} } },
+          })
+        : Promise.resolve(0),
+      this.prisma.commercialOrder.count({
+        where: { OR: [{ registrationType: RegistrationType.FREE }, { source: 'FREE' }, { unitPricePaise: 0 }] },
+      }),
+    ]);
 
     let agentGroups: any[] = [];
     if (groupBy === 'agent' || source === 'AGENT') {
@@ -917,66 +957,128 @@ export class CommercialService {
 
     const totalSalesAllInr = (totalPaidAgg._sum.amountPaise || 0) / 100;
     const totalPassesAll = totalPassesAgg._sum.quantity || 0;
+    const publicPassesCount = publicAgg._sum.quantity || 0;
+    const publicSalesInr = (publicAgg._sum.amountPaise || 0) / 100;
+    const agentPassesCount = agentAgg._sum.quantity || 0;
+    const agentSalesInr = (agentAgg._sum.amountPaise || 0) / 100;
+
+    let ordersResult = (orders || []).map((o: any) => {
+      const isTestPayment = (o.metadata as any)?.isTestPayment === true;
+      return {
+        id: o.id.toString(),
+        orderNumber: o.orderNumber,
+        registrationType: o.registrationType,
+        source: o.source,
+        paymentMode: o.paymentMode,
+        agentId: o.agentId ? o.agentId.toString() : null,
+        agent: o.agent
+          ? {
+              id: o.agent.id.toString(),
+              name: o.agent.name,
+              email: o.agent.email,
+              phone: o.agent.phone,
+              staffId: o.agent.staffId,
+              role: o.agent.role,
+              isSubAgent: !!o.agent.parentAgentId,
+              parentAgent: o.agent.parentAgent
+                ? { id: o.agent.parentAgent.id.toString(), name: o.agent.parentAgent.name }
+                : null,
+            }
+          : null,
+        customerName: o.customerName,
+        customerMobile: o.customerMobile,
+        customerEmail: o.customerEmail,
+        ticketType: o.ticketType,
+        selectedDates: o.selectedDates as string[],
+        quantity: o.quantity,
+        amountInr: o.amountPaise / 100,
+        currency: o.currency,
+        orderStatus: o.orderStatus,
+        paymentStatus: o.paymentStatus,
+        isTestPayment,
+        razorpayOrderId: o.razorpayOrderId,
+        razorpayPaymentId: o.razorpayPaymentId,
+        passesCount: o._count.attendees,
+        attendees: (o.attendees || []).map((a: any) => ({
+          id: a.id.toString(),
+          ticketNumber: a.ticketNumber,
+          status: a.status,
+          category: a.category,
+          bookingDays: a.bookingDays,
+        })),
+        createdAt: o.createdAt.toISOString(),
+        paidAt: o.paidAt?.toISOString() || null,
+      };
+    });
+
+    // Fallback for standalone free attendees when viewing FREE passes tab and no free orders exist
+    if (source === 'FREE' && ordersResult.length === 0 && freePassesCount > 0) {
+      const freeAttendees = await this.prisma.attendee.findMany({
+        where: { registrationType: RegistrationType.FREE },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          dailyCheckins: { select: { id: true } },
+        },
+      });
+
+      ordersResult = freeAttendees.map((fa: any) => ({
+        id: fa.id.toString(),
+        orderNumber: `FREE-${fa.ticketNumber}`,
+        registrationType: RegistrationType.FREE,
+        source: 'FREE',
+        paymentMode: 'COMPLIMENTARY',
+        agentId: null,
+        agent: null,
+        customerName: fa.name || 'Complimentary Guest',
+        customerMobile: fa.mobile || '—',
+        customerEmail: fa.email || '—',
+        ticketType: fa.category || 'FREE_PASS',
+        selectedDates: fa.bookingDays || [],
+        quantity: 1,
+        amountInr: 0,
+        currency: 'INR',
+        orderStatus: OrderStatus.PAID,
+        paymentStatus: PaymentStatus.CAPTURED,
+        isTestPayment: false,
+        razorpayOrderId: null,
+        razorpayPaymentId: null,
+        passesCount: 1,
+        attendees: [
+          {
+            id: fa.id.toString(),
+            ticketNumber: fa.ticketNumber,
+            status: fa.status,
+            category: fa.category,
+            bookingDays: fa.bookingDays,
+          },
+        ],
+        createdAt: fa.createdAt ? fa.createdAt.toISOString() : new Date().toISOString(),
+        paidAt: fa.createdAt ? fa.createdAt.toISOString() : new Date().toISOString(),
+      }));
+    }
 
     return {
-      total,
+      total: source === 'FREE' && total === 0 ? freePassesCount : total,
       page,
       limit,
       summary: {
-        totalOrders: publicOrdersCount + agentOrdersCount,
+        totalOrders: publicOrdersCount + agentOrdersCount + freeOrdersCount,
         totalSalesInr: totalSalesAllInr,
-        totalPasses: totalPassesAll,
+        totalPasses: totalPassesAll + freePassesCount,
         publicOrdersCount,
+        publicPassesCount,
+        publicSalesInr,
         agentOrdersCount,
+        agentPassesCount,
+        agentSalesInr,
+        freeOrdersCount,
+        freePassesCount,
+        freeCheckedInCount,
+        freeAvailableCount: Math.max(0, freePassesCount - freeCheckedInCount),
       },
-      orders: orders.map((o: any) => {
-        const isTestPayment = (o.metadata as any)?.isTestPayment === true;
-        return {
-          id: o.id.toString(),
-          orderNumber: o.orderNumber,
-          registrationType: o.registrationType,
-          source: o.source,
-          paymentMode: o.paymentMode,
-          agentId: o.agentId ? o.agentId.toString() : null,
-          agent: o.agent
-            ? {
-                id: o.agent.id.toString(),
-                name: o.agent.name,
-                email: o.agent.email,
-                phone: o.agent.phone,
-                staffId: o.agent.staffId,
-                role: o.agent.role,
-                isSubAgent: !!o.agent.parentAgentId,
-                parentAgent: o.agent.parentAgent
-                  ? { id: o.agent.parentAgent.id.toString(), name: o.agent.parentAgent.name }
-                  : null,
-              }
-            : null,
-          customerName: o.customerName,
-          customerMobile: o.customerMobile,
-          customerEmail: o.customerEmail,
-          ticketType: o.ticketType,
-          selectedDates: o.selectedDates,
-          quantity: o.quantity,
-          amountInr: o.amountPaise / 100,
-          currency: o.currency,
-          orderStatus: o.orderStatus,
-          paymentStatus: isTestPayment ? 'TEST_PAID' : o.paymentStatus,
-          isTestPayment,
-          razorpayOrderId: o.razorpayOrderId,
-          razorpayPaymentId: o.razorpayPaymentId,
-          passesCount: o._count.attendees,
-          attendees: (o.attendees || []).map((att: any) => ({
-            id: att.id.toString(),
-            ticketNumber: att.ticketNumber,
-            status: att.status,
-            category: att.category,
-            bookingDays: att.bookingDays,
-          })),
-          createdAt: o.createdAt,
-          paidAt: o.paidAt,
-        };
-      }),
+      orders: ordersResult,
       agentGroups,
     };
   }
@@ -1128,5 +1230,167 @@ export class CommercialService {
         };
       }),
     );
+  }
+
+  /**
+   * Delete a single commercial order with strict financial, payment, and ticket protections
+   */
+  async deleteOrderAdmin(orderId: bigint) {
+    const order = await this.prisma.commercialOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        attendees: {
+          include: {
+            dailyCheckins: { select: { id: true } },
+            scanLogs: { select: { id: true } },
+          },
+        },
+        webhookEvents: { select: { id: true } },
+        allocationEvents: { select: { id: true } },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${orderId} not found.`);
+    }
+
+    const protectionReason = this.getOrderProtectionReason(order);
+    if (protectionReason) {
+      throw new ConflictException(
+        `Order ${order.orderNumber} cannot be deleted because ${protectionReason}.`,
+      );
+    }
+
+    // Safely delete attendees without scans/checkins, then order in a transaction
+    await this.prisma.$transaction(async (tx) => {
+      await tx.attendee.deleteMany({
+        where: { orderId: order.id },
+      });
+      await tx.commercialOrder.delete({
+        where: { id: order.id },
+      });
+    });
+
+    return {
+      success: true,
+      message: `Order ${order.orderNumber} deleted successfully.`,
+      orderNumber: order.orderNumber,
+    };
+  }
+
+  /**
+   * Bulk delete commercial orders with strict dependency and financial audit protections
+   */
+  async bulkDeleteOrdersAdmin(rawOrderIds: string[]) {
+    if (!Array.isArray(rawOrderIds) || rawOrderIds.length === 0) {
+      throw new BadRequestException('Please select at least one order to delete.');
+    }
+
+    const orderIds = rawOrderIds
+      .map((id) => {
+        try {
+          return BigInt(id);
+        } catch {
+          return null;
+        }
+      })
+      .filter((id): id is bigint => id !== null);
+
+    if (orderIds.length === 0) {
+      throw new BadRequestException('No valid order IDs provided.');
+    }
+
+    const orders = await this.prisma.commercialOrder.findMany({
+      where: { id: { in: orderIds } },
+      include: {
+        attendees: {
+          include: {
+            dailyCheckins: { select: { id: true } },
+            scanLogs: { select: { id: true } },
+          },
+        },
+        webhookEvents: { select: { id: true } },
+        allocationEvents: { select: { id: true } },
+      },
+    });
+
+    const protectedOrders: { id: string; orderNumber: string; reason: string }[] = [];
+    const deletableOrders: typeof orders = [];
+
+    for (const ord of orders) {
+      const reason = this.getOrderProtectionReason(ord);
+      if (reason) {
+        protectedOrders.push({
+          id: ord.id.toString(),
+          orderNumber: ord.orderNumber,
+          reason,
+        });
+      } else {
+        deletableOrders.push(ord);
+      }
+    }
+
+    if (deletableOrders.length > 0) {
+      const deletableIds = deletableOrders.map((o) => o.id);
+      await this.prisma.$transaction(async (tx) => {
+        await tx.attendee.deleteMany({
+          where: { orderId: { in: deletableIds } },
+        });
+        await tx.commercialOrder.deleteMany({
+          where: { id: { in: deletableIds } },
+        });
+      });
+    }
+
+    const deletedCount = deletableOrders.length;
+    const protectedCount = protectedOrders.length;
+
+    let message = '';
+    if (deletedCount > 0 && protectedCount === 0) {
+      message = `Successfully deleted ${deletedCount} order(s).`;
+    } else if (deletedCount > 0 && protectedCount > 0) {
+      message = `Deleted ${deletedCount} order(s). ${protectedCount} order(s) could not be deleted because they contain financial or ticket records.`;
+    } else {
+      message = `None of the selected orders could be deleted. All ${protectedCount} order(s) contain financial, payment, or ticket records.`;
+    }
+
+    return {
+      totalSelected: rawOrderIds.length,
+      deletedCount,
+      protectedCount,
+      deletedOrders: deletableOrders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber })),
+      protectedOrders,
+      message,
+    };
+  }
+
+  /**
+   * Helper to check why an order is protected from deletion
+   */
+  private getOrderProtectionReason(order: any): string | null {
+    if (order.orderStatus === OrderStatus.PAID) {
+      return 'it is a confirmed paid transaction';
+    }
+    if (order.paymentStatus === PaymentStatus.CAPTURED) {
+      return 'payment has been captured by gateway';
+    }
+    if (order.razorpayPaymentId) {
+      return 'financial payment reference exists';
+    }
+    if (order.webhookEvents && order.webhookEvents.length > 0) {
+      return 'payment webhook audit records exist';
+    }
+    if (order.allocationEvents && order.allocationEvents.length > 0) {
+      return 'linked agent allocation history exists';
+    }
+    const hasCheckinsOrScans = (order.attendees || []).some(
+      (a: any) =>
+        (a.dailyCheckins && a.dailyCheckins.length > 0) ||
+        (a.scanLogs && a.scanLogs.length > 0),
+    );
+    if (hasCheckinsOrScans) {
+      return 'it contains checked-in passes or scan audit logs';
+    }
+    return null;
   }
 }

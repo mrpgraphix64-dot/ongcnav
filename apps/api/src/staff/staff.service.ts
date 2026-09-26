@@ -225,6 +225,8 @@ export class StaffService {
         : existing.isActive;
 
     if (
+      dto.role !== undefined &&
+      dto.role !== existing.role &&
       (dto.role === UserRole.COMMERCIAL_ADMIN || dto.role === UserRole.EMPLOYEE_ADMIN || dto.role === UserRole.SUPER_ADMIN) &&
       currentUser &&
       currentUser.role !== UserRole.SUPER_ADMIN
@@ -233,6 +235,7 @@ export class StaffService {
     }
 
     // Hard rule: Maximum 1 active COMMERCIAL_ADMIN and 1 active EMPLOYEE_ADMIN
+    // When editing the existing active domain admin, id: { not: id } guarantees they are not treated as a duplicate of themselves
     if (
       (targetRole === UserRole.COMMERCIAL_ADMIN || targetRole === UserRole.EMPLOYEE_ADMIN) &&
       targetIsActive
@@ -241,7 +244,7 @@ export class StaffService {
         where: {
           role: targetRole,
           isActive: true,
-          NOT: { id },
+          id: { not: id },
         },
       });
       if (existingAdmin) {
@@ -261,7 +264,7 @@ export class StaffService {
       const duplicate = await this.prisma.user.findFirst({
         where: {
           email: { equals: email, mode: 'insensitive' },
-          NOT: { id },
+          id: { not: id },
         },
       });
       if (duplicate) {
@@ -281,7 +284,7 @@ export class StaffService {
         const duplicate = await this.prisma.user.findFirst({
           where: {
             staffId: sId,
-            NOT: { id },
+            id: { not: id },
           },
         });
         if (duplicate) {
@@ -321,7 +324,7 @@ export class StaffService {
             where: {
               role: targetRole,
               isActive: true,
-              NOT: { id },
+              id: { not: id },
             },
           });
           if (concurrentCheck) {
@@ -353,11 +356,23 @@ export class StaffService {
 
       return this.findOne(id);
     } catch (err: any) {
-      if (err?.code === 'P2002' || err?.message?.includes('unique_active_commercial_admin')) {
+      if (
+        (err?.code === 'P2002' && (err?.meta?.target?.includes('role') || err?.message?.includes('unique_active_commercial_admin'))) ||
+        err?.message?.includes('unique_active_commercial_admin')
+      ) {
         throw new ConflictException('An active E-Pass Admin already exists. Only one active E-Pass Admin is permitted.');
       }
-      if (err?.code === 'P2002' || err?.message?.includes('unique_active_employee_admin')) {
+      if (
+        (err?.code === 'P2002' && (err?.meta?.target?.includes('role') || err?.message?.includes('unique_active_employee_admin'))) ||
+        err?.message?.includes('unique_active_employee_admin')
+      ) {
         throw new ConflictException('An active Employee Admin already exists. Only one active Employee Admin is permitted.');
+      }
+      if (err?.code === 'P2002' && err?.meta?.target?.includes('email')) {
+        throw new ConflictException('A staff account with this email address already exists.');
+      }
+      if (err?.code === 'P2002' && (err?.meta?.target?.includes('staff_id') || err?.meta?.target?.includes('staffId'))) {
+        throw new ConflictException('This Staff ID is already assigned to another staff member.');
       }
       throw err;
     }
@@ -377,7 +392,7 @@ export class StaffService {
         where: {
           role: user.role,
           isActive: true,
-          NOT: { id },
+          id: { not: id },
         },
       });
       if (existingActive) {
@@ -396,10 +411,16 @@ export class StaffService {
 
       return this.findOne(updated.id);
     } catch (err: any) {
-      if (err?.code === 'P2002' || err?.message?.includes('unique_active_commercial_admin')) {
+      if (
+        (err?.code === 'P2002' && (err?.meta?.target?.includes('role') || err?.message?.includes('unique_active_commercial_admin'))) ||
+        err?.message?.includes('unique_active_commercial_admin')
+      ) {
         throw new ConflictException('An active E-Pass Admin already exists. Only one active E-Pass Admin is permitted.');
       }
-      if (err?.code === 'P2002' || err?.message?.includes('unique_active_employee_admin')) {
+      if (
+        (err?.code === 'P2002' && (err?.meta?.target?.includes('role') || err?.message?.includes('unique_active_employee_admin'))) ||
+        err?.message?.includes('unique_active_employee_admin')
+      ) {
         throw new ConflictException('An active Employee Admin already exists. Only one active Employee Admin is permitted.');
       }
       throw err;

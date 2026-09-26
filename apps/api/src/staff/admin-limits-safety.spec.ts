@@ -321,4 +321,105 @@ describe('Admin Account Limits & RBAC Safety Tests', () => {
       );
     });
   });
+
+  describe('4. Self-Update & Password Security Tests', () => {
+    it('allows an existing E-Pass Admin to be updated (self-update) without 409 conflict', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: BigInt(10),
+        name: 'Existing E-Pass Admin',
+        email: 'epass@ongc.co.in',
+        role: UserRole.COMMERCIAL_ADMIN,
+        isActive: true,
+        staffId: 'STF-010',
+        gateUsers: [],
+      });
+
+      // findFirst checking for OTHER active domain admins returns null because ID 10 is excluded
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      const caller = { id: BigInt(1), role: UserRole.SUPER_ADMIN };
+      const res = await service.update(
+        BigInt(10),
+        { name: 'Updated E-Pass Admin Name', role: UserRole.COMMERCIAL_ADMIN } as any,
+        caller,
+      );
+
+      expect(res).toBeDefined();
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(10) },
+          data: expect.objectContaining({ name: 'Updated E-Pass Admin Name' }),
+        }),
+      );
+    });
+
+    it('allows an existing Employee Admin to be updated (self-update) without 409 conflict', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: BigInt(6),
+        name: 'Existing Employee Admin',
+        email: 'employee.admin@ongc.co.in',
+        role: UserRole.EMPLOYEE_ADMIN,
+        isActive: true,
+        staffId: 'STF-006',
+        gateUsers: [],
+      });
+
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      const caller = { id: BigInt(1), role: UserRole.SUPER_ADMIN };
+      const res = await service.update(
+        BigInt(6),
+        { name: 'Updated Employee Admin Name', role: UserRole.EMPLOYEE_ADMIN } as any,
+        caller,
+      );
+
+      expect(res).toBeDefined();
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(6) },
+          data: expect.objectContaining({ name: 'Updated Employee Admin Name' }),
+        }),
+      );
+    });
+
+    it('does not overwrite password if password field is omitted or empty string', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: BigInt(10),
+        name: 'Existing E-Pass Admin',
+        email: 'epass@ongc.co.in',
+        role: UserRole.COMMERCIAL_ADMIN,
+        isActive: true,
+        staffId: 'STF-010',
+        password: '$2b$10$existinghashedpassword',
+        gateUsers: [],
+      });
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await service.update(BigInt(10), { name: 'E-Pass Admin', password: '' } as any);
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(10) },
+          data: expect.not.objectContaining({ password: expect.anything() }),
+        }),
+      );
+    });
+
+    it('never exposes password or passwordHash in returned staff object', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: BigInt(10),
+        name: 'Existing E-Pass Admin',
+        email: 'epass@ongc.co.in',
+        role: UserRole.COMMERCIAL_ADMIN,
+        isActive: true,
+        staffId: 'STF-010',
+        password: '$2b$10$supersecretpasswordhash',
+        gateUsers: [],
+      });
+
+      const res: any = await service.findOne(BigInt(10));
+      expect(res.password).toBeUndefined();
+      expect(res.passwordHash).toBeUndefined();
+    });
+  });
 });

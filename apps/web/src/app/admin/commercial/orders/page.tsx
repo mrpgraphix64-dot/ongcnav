@@ -26,6 +26,12 @@ import {
   Shield,
   QrCode,
   DollarSign,
+  Trash2,
+  CheckSquare,
+  Square,
+  Gift,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 
@@ -40,7 +46,7 @@ interface AttendeePass {
 interface OrderRecord {
   id: string;
   orderNumber: string;
-  source: 'PUBLIC' | 'AGENT';
+  source: 'PUBLIC' | 'AGENT' | 'FREE';
   paymentMode?: string | null;
   agentId?: string | null;
   agent?: {
@@ -95,7 +101,31 @@ interface OrdersSummary {
   totalSalesInr: number;
   totalPasses: number;
   publicOrdersCount: number;
+  publicPassesCount: number;
+  publicSalesInr: number;
   agentOrdersCount: number;
+  agentPassesCount: number;
+  agentSalesInr: number;
+  freeOrdersCount: number;
+  freePassesCount: number;
+  freeCheckedInCount: number;
+  freeAvailableCount: number;
+}
+
+function isOrderProtected(order: OrderRecord): { isProtected: boolean; reason?: string } {
+  if (order.orderStatus === 'PAID') {
+    return { isProtected: true, reason: 'Order is fully PAID' };
+  }
+  if (order.paymentStatus === 'CAPTURED') {
+    return { isProtected: true, reason: 'Payment is CAPTURED' };
+  }
+  if (order.razorpayPaymentId) {
+    return { isProtected: true, reason: 'Razorpay payment ID exists' };
+  }
+  if (order.attendees && order.attendees.some((a) => a.status === 'CHECKED_IN')) {
+    return { isProtected: true, reason: 'Passes are already CHECKED IN' };
+  }
+  return { isProtected: false };
 }
 
 export default function CommercialOrdersAuditPage() {
@@ -106,14 +136,23 @@ export default function CommercialOrdersAuditPage() {
     totalSalesInr: 0,
     totalPasses: 0,
     publicOrdersCount: 0,
+    publicPassesCount: 0,
+    publicSalesInr: 0,
     agentOrdersCount: 0,
+    agentPassesCount: 0,
+    agentSalesInr: 0,
+    freeOrdersCount: 0,
+    freePassesCount: 0,
+    freeCheckedInCount: 0,
+    freeAvailableCount: 0,
   });
 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
-  // Tabs & Filters
-  const [channelTab, setChannelTab] = useState<'ALL' | 'PUBLIC' | 'AGENT'>('ALL');
+  // Channel Tabs: ONLINE PASSES, AGENT PASSES, FREE PASSES
+  const [channelTab, setChannelTab] = useState<'PUBLIC' | 'AGENT' | 'FREE'>('PUBLIC');
   const [searchQuery, setSearchQuery] = useState('');
   const [ticketTypeFilter, setTicketTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -125,12 +164,19 @@ export default function CommercialOrdersAuditPage() {
 
   // Agent Expansion state (agentId -> boolean)
   const [expandedAgentIds, setExpandedAgentIds] = useState<Record<string, boolean>>({});
-  // Agent Orders cache (agentId -> OrderRecord[])
   const [agentOrdersMap, setAgentOrdersMap] = useState<Record<string, OrderRecord[]>>({});
   const [agentOrdersLoading, setAgentOrdersLoading] = useState<Record<string, boolean>>({});
 
   // Expanded attendee passes in table (orderId -> boolean)
   const [expandedOrderPasses, setExpandedOrderPasses] = useState<Record<string, boolean>>({});
+
+  // Order selection for Bulk Delete
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+
+  // Delete Confirmation Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [ordersToDelete, setOrdersToDelete] = useState<OrderRecord[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Copied feedback
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
@@ -150,9 +196,7 @@ export default function CommercialOrdersAuditPage() {
       params.set('page', page.toString());
       params.set('limit', limit.toString());
       params.set('groupBy', 'agent');
-
-      if (channelTab === 'PUBLIC') params.set('source', 'PUBLIC');
-      if (channelTab === 'AGENT') params.set('source', 'AGENT');
+      params.set('source', channelTab);
 
       if (ticketTypeFilter !== 'ALL') params.set('ticketType', ticketTypeFilter);
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
@@ -161,7 +205,23 @@ export default function CommercialOrdersAuditPage() {
       const res = await fetchApi<any>(`/admin/commercial/orders?${params.toString()}`);
       setOrders(res.orders || []);
       setTotalOrdersCount(res.total || 0);
-      if (res.summary) setSummary(res.summary);
+      if (res.summary) {
+        setSummary({
+          totalOrders: res.summary.totalOrders ?? 0,
+          totalSalesInr: res.summary.totalSalesInr ?? 0,
+          totalPasses: res.summary.totalPasses ?? 0,
+          publicOrdersCount: res.summary.publicOrdersCount ?? 0,
+          publicPassesCount: res.summary.publicPassesCount ?? 0,
+          publicSalesInr: res.summary.publicSalesInr ?? 0,
+          agentOrdersCount: res.summary.agentOrdersCount ?? 0,
+          agentPassesCount: res.summary.agentPassesCount ?? 0,
+          agentSalesInr: res.summary.agentSalesInr ?? 0,
+          freeOrdersCount: res.summary.freeOrdersCount ?? 0,
+          freePassesCount: res.summary.freePassesCount ?? 0,
+          freeCheckedInCount: res.summary.freeCheckedInCount ?? 0,
+          freeAvailableCount: res.summary.freeAvailableCount ?? 0,
+        });
+      }
       if (res.agentGroups) setAgentGroups(res.agentGroups);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load E-Pass orders audit.');
@@ -172,6 +232,8 @@ export default function CommercialOrdersAuditPage() {
 
   useEffect(() => {
     loadOrders();
+    // Clear selection on tab change
+    setSelectedOrderIds(new Set());
   }, [loadOrders]);
 
   // Load Orders for a specific Agent
@@ -179,7 +241,6 @@ export default function CommercialOrdersAuditPage() {
     const isCurrentlyExpanded = !!expandedAgentIds[agentId];
     setExpandedAgentIds((prev) => ({ ...prev, [agentId]: !isCurrentlyExpanded }));
 
-    // If opening and not yet loaded, fetch orders for this agent
     if (!isCurrentlyExpanded && !agentOrdersMap[agentId]) {
       try {
         setAgentOrdersLoading((prev) => ({ ...prev, [agentId]: true }));
@@ -201,7 +262,6 @@ export default function CommercialOrdersAuditPage() {
     }
   };
 
-  // Toggle order passes expansion
   const toggleOrderPasses = (orderId: string) => {
     setExpandedOrderPasses((prev) => ({
       ...prev,
@@ -209,159 +269,404 @@ export default function CommercialOrdersAuditPage() {
     }));
   };
 
+  // Selection Logic
+  const handleToggleSelectOrder = (orderId: string) => {
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllCurrentPage = () => {
+    const currentPageOrderIds = orders.map((o) => o.id);
+    const allSelected = currentPageOrderIds.every((id) => selectedOrderIds.has(id));
+
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        currentPageOrderIds.forEach((id) => next.delete(id));
+      } else {
+        currentPageOrderIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const isAllCurrentPageSelected =
+    orders.length > 0 && orders.every((o) => selectedOrderIds.has(o.id));
+
+  // Open Delete Modal for Bulk Selection
+  const handleOpenBulkDeleteModal = () => {
+    if (selectedOrderIds.size === 0) return;
+    // Map selected IDs to orders from either current page or agent maps
+    const allOrdersPool: OrderRecord[] = [
+      ...orders,
+      ...Object.values(agentOrdersMap).flat(),
+    ];
+    const targetOrders = Array.from(selectedOrderIds).map((id) => {
+      const found = allOrdersPool.find((o) => o.id === id);
+      return (
+        found || {
+          id,
+          orderNumber: `ORD-${id}`,
+          source: 'PUBLIC' as const,
+          customerName: 'Unknown',
+          customerMobile: '',
+          customerEmail: '',
+          ticketType: 'COMMERCIAL_DAILY',
+          quantity: 1,
+          amountInr: 0,
+          currency: 'INR',
+          orderStatus: 'PENDING',
+          paymentStatus: 'PENDING',
+          passesCount: 1,
+          attendees: [],
+          createdAt: new Date().toISOString(),
+        }
+      );
+    });
+
+    setOrdersToDelete(targetOrders);
+    setShowDeleteModal(true);
+  };
+
+  // Open Delete Modal for Single Order
+  const handleOpenSingleDeleteModal = (order: OrderRecord) => {
+    setOrdersToDelete([order]);
+    setShowDeleteModal(true);
+  };
+
+  // Execute Deletion
+  const handleConfirmDelete = async () => {
+    if (ordersToDelete.length === 0) return;
+    setIsDeleting(true);
+    setActionSuccessMsg(null);
+    setErrorMsg(null);
+
+    try {
+      const orderIds = ordersToDelete.map((o) => o.id);
+      const res = await fetchApi<any>('/admin/commercial/orders/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ orderIds }),
+      });
+
+      setShowDeleteModal(false);
+      setSelectedOrderIds(new Set());
+      setOrdersToDelete([]);
+
+      setActionSuccessMsg(
+        res.message ||
+          `Successfully processed deletion. ${res.deletedCount || 0} deleted, ${
+            res.skippedProtectedCount || 0
+          } protected orders preserved.`
+      );
+
+      // Reload fresh data
+      loadOrders();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to delete orders.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const totalPages = Math.ceil(totalOrdersCount / limit) || 1;
 
+  // Analysis of orders to delete (for modal display)
+  const deleteAnalysis = useMemo(() => {
+    let safeCount = 0;
+    let protectedCount = 0;
+    const protectedReasons: string[] = [];
+
+    ordersToDelete.forEach((ord) => {
+      const check = isOrderProtected(ord);
+      if (check.isProtected) {
+        protectedCount++;
+        if (check.reason && !protectedReasons.includes(check.reason)) {
+          protectedReasons.push(check.reason);
+        }
+      } else {
+        safeCount++;
+      }
+    });
+
+    return {
+      total: ordersToDelete.length,
+      safeCount,
+      protectedCount,
+      protectedReasons,
+    };
+  }, [ordersToDelete]);
+
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 rounded-2xl border border-stone-200/70 shadow-sm">
-        <div>
-          <h2 className="text-xl font-outfit font-black text-[#7A1113] flex items-center gap-2.5">
-            <ShoppingBag className="w-5 h-5 text-amber-500" />
-            <span>E-Pass Orders & Transactions Audit</span>
-          </h2>
-          <p className="text-xs text-stone-500 mt-1">
-            Authoritative financial audit of Online Public checkout bookings and Offline Agent transactions.
-          </p>
+    <div className="space-y-5">
+      {/* Top Compact Actions Bar */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
+            E-Pass Management
+          </span>
+          <span className="text-stone-300">•</span>
+          <span className="text-xs font-semibold text-stone-700">
+            {channelTab === 'PUBLIC' && 'Online Sales Channel'}
+            {channelTab === 'AGENT' && 'Agent Distribution Channel'}
+            {channelTab === 'FREE' && 'Free & Complimentary Passes'}
+          </span>
         </div>
 
         <button
           onClick={loadOrders}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors self-start md:self-auto"
-          title="Refresh Data"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-200/80 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors shadow-2xs"
+          title="Refresh Channel Data"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
         </button>
       </div>
 
-      {/* Top Authoritative Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        {/* Total Orders */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-stone-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Orders</span>
-            <ShoppingBag className="w-4 h-4 text-[#7A1113]" />
+      {/* Top 3 Compact Channel Summary Cards (Clicking activates section/filter) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+        {/* Card 1: ONLINE PASSES */}
+        <button
+          type="button"
+          onClick={() => {
+            setChannelTab('PUBLIC');
+            setPage(1);
+          }}
+          className={`text-left p-4 rounded-2xl border transition-all shadow-xs flex flex-col justify-between ${
+            channelTab === 'PUBLIC'
+              ? 'bg-blue-50/60 border-blue-400 ring-2 ring-blue-400/20'
+              : 'bg-white border-stone-200/80 hover:border-blue-200 hover:bg-blue-50/20'
+          }`}
+        >
+          <div className="flex items-center justify-between w-full">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+              <CreditCard className="w-4 h-4 text-blue-600" />
+              ONLINE PASSES
+            </span>
+            {channelTab === 'PUBLIC' && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
+                Active
+              </span>
+            )}
           </div>
-          <div className="font-outfit font-black text-2xl text-stone-900">
-            {summary.totalOrders.toLocaleString()}
+          <div className="mt-3 flex items-baseline justify-between">
+            <div>
+              <div className="font-outfit font-black text-2xl text-blue-950">
+                {summary.publicOrdersCount.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-blue-700/80 font-medium">Orders Placed</div>
+            </div>
+            <div className="text-right">
+              <div className="font-outfit font-extrabold text-base text-blue-900">
+                ₹{summary.publicSalesInr.toLocaleString('en-IN')}
+              </div>
+              <div className="text-[11px] text-blue-700/80 font-medium">
+                {summary.publicPassesCount.toLocaleString()} passes sold
+              </div>
+            </div>
           </div>
-          <div className="text-[11px] text-stone-400">All channels combined</div>
-        </div>
+        </button>
 
-        {/* Total Sales */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-stone-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Revenue</span>
-            <TrendingUp className="w-4 h-4 text-emerald-600" />
+        {/* Card 2: AGENT PASSES */}
+        <button
+          type="button"
+          onClick={() => {
+            setChannelTab('AGENT');
+            setPage(1);
+          }}
+          className={`text-left p-4 rounded-2xl border transition-all shadow-xs flex flex-col justify-between ${
+            channelTab === 'AGENT'
+              ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-400/20'
+              : 'bg-white border-stone-200/80 hover:border-amber-200 hover:bg-amber-50/20'
+          }`}
+        >
+          <div className="flex items-center justify-between w-full">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-amber-600" />
+              AGENT PASSES
+            </span>
+            {channelTab === 'AGENT' && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-600 text-white">
+                Active
+              </span>
+            )}
           </div>
-          <div className="font-outfit font-black text-2xl text-emerald-600">
-            ₹{summary.totalSalesInr.toLocaleString('en-IN')}
+          <div className="mt-3 flex items-baseline justify-between">
+            <div>
+              <div className="font-outfit font-black text-2xl text-amber-950">
+                {summary.agentOrdersCount.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-amber-700/80 font-medium">Orders Placed</div>
+            </div>
+            <div className="text-right">
+              <div className="font-outfit font-extrabold text-base text-amber-900">
+                ₹{summary.agentSalesInr.toLocaleString('en-IN')}
+              </div>
+              <div className="text-[11px] text-amber-700/80 font-medium">
+                {summary.agentPassesCount.toLocaleString()} passes sold
+              </div>
+            </div>
           </div>
-          <div className="text-[11px] text-emerald-700/80 font-medium">Authoritative paid sales</div>
-        </div>
+        </button>
 
-        {/* Total Passes */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-stone-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Passes Sold</span>
-            <Ticket className="w-4 h-4 text-amber-500" />
+        {/* Card 3: FREE PASSES */}
+        <button
+          type="button"
+          onClick={() => {
+            setChannelTab('FREE');
+            setPage(1);
+          }}
+          className={`text-left p-4 rounded-2xl border transition-all shadow-xs flex flex-col justify-between ${
+            channelTab === 'FREE'
+              ? 'bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-400/20'
+              : 'bg-white border-stone-200/80 hover:border-emerald-200 hover:bg-emerald-50/20'
+          }`}
+        >
+          <div className="flex items-center justify-between w-full">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+              <Gift className="w-4 h-4 text-emerald-600" />
+              FREE PASSES
+            </span>
+            {channelTab === 'FREE' && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                Active
+              </span>
+            )}
           </div>
-          <div className="font-outfit font-black text-2xl text-stone-900">
-            {summary.totalPasses.toLocaleString()}
+          <div className="mt-3 flex items-baseline justify-between">
+            <div>
+              <div className="font-outfit font-black text-2xl text-emerald-950">
+                {summary.freePassesCount.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-emerald-700/80 font-medium">Total Issued</div>
+            </div>
+            <div className="text-right">
+              <div className="font-outfit font-extrabold text-base text-emerald-900">
+                {summary.freeCheckedInCount.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-emerald-700/80 font-medium">
+                Checked In • {summary.freeAvailableCount.toLocaleString()} unused
+              </div>
+            </div>
           </div>
-          <div className="text-[11px] text-stone-400">Daily & Season entries</div>
-        </div>
-
-        {/* Public Orders */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-stone-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Public Online</span>
-            <CreditCard className="w-4 h-4 text-blue-500" />
-          </div>
-          <div className="font-outfit font-black text-2xl text-blue-600">
-            {summary.publicOrdersCount.toLocaleString()}
-          </div>
-          <div className="text-[11px] text-stone-400">Online checkout gateway</div>
-        </div>
-
-        {/* Agent Orders */}
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-1 col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between text-stone-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Agent Orders</span>
-            <Users className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="font-outfit font-black text-2xl text-amber-600">
-            {summary.agentOrdersCount.toLocaleString()}
-          </div>
-          <div className="text-[11px] text-stone-400">Direct agent offline desk</div>
-        </div>
+        </button>
       </div>
 
-      {/* Error Alert */}
+      {/* Success Notification Banner */}
+      {actionSuccessMsg && (
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-medium">{actionSuccessMsg}</span>
+          </div>
+          <button
+            onClick={() => setActionSuccessMsg(null)}
+            className="text-stone-400 hover:text-stone-700 p-0.5"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Error Notification Banner */}
       {errorMsg && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between gap-3">
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{errorMsg}</span>
+            <span className="font-medium">{errorMsg}</span>
           </div>
-          <button onClick={() => setErrorMsg(null)} className="text-stone-400 hover:text-stone-700">
-            ✕
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="text-stone-400 hover:text-stone-700 p-0.5"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {/* Channel Tabs & Filter Controls */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-3">
+      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
-          {/* Segmented Channel Tabs */}
+          {/* Segmented Channel Tabs with EXACT Labels */}
           <div className="flex items-center p-1 bg-stone-100 rounded-xl text-xs font-bold self-start">
-            <button
-              onClick={() => {
-                setChannelTab('ALL');
-                setPage(1);
-              }}
-              className={`px-4 py-1.5 rounded-lg transition-all ${
-                channelTab === 'ALL'
-                  ? 'bg-white text-[#7A1113] shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              All Orders ({summary.totalOrders})
-            </button>
             <button
               onClick={() => {
                 setChannelTab('PUBLIC');
                 setPage(1);
               }}
-              className={`px-4 py-1.5 rounded-lg transition-all ${
+              className={`px-4 py-2 rounded-lg transition-all ${
                 channelTab === 'PUBLIC'
-                  ? 'bg-white text-blue-700 shadow-xs'
+                  ? 'bg-white text-blue-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              Online Public ({summary.publicOrdersCount})
+              ONLINE PASSES ({summary.publicOrdersCount})
             </button>
             <button
               onClick={() => {
                 setChannelTab('AGENT');
                 setPage(1);
               }}
-              className={`px-4 py-1.5 rounded-lg transition-all ${
+              className={`px-4 py-2 rounded-lg transition-all ${
                 channelTab === 'AGENT'
-                  ? 'bg-white text-amber-700 shadow-xs'
+                  ? 'bg-white text-amber-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              Agent Orders ({summary.agentOrdersCount})
+              AGENT PASSES ({summary.agentOrdersCount})
+            </button>
+            <button
+              onClick={() => {
+                setChannelTab('FREE');
+                setPage(1);
+              }}
+              className={`px-4 py-2 rounded-lg transition-all ${
+                channelTab === 'FREE'
+                  ? 'bg-white text-emerald-800 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              FREE PASSES ({summary.freePassesCount})
             </button>
           </div>
 
-          <div className="text-xs text-stone-500 font-medium">
-            {channelTab === 'AGENT'
-              ? `${agentGroups.length} Active Agent Sales Accounts`
-              : `Showing ${orders.length} of ${totalOrdersCount} records`}
+          {/* Records Counter or Selected Actions */}
+          <div className="flex items-center gap-3">
+            {selectedOrderIds.size > 0 ? (
+              <div className="flex items-center gap-2.5 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
+                <span className="text-xs font-bold text-rose-800">
+                  {selectedOrderIds.size} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={handleOpenBulkDeleteModal}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 transition-colors shadow-2xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Selected</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderIds(new Set())}
+                  className="text-xs text-rose-700 hover:underline font-semibold"
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <div className="text-xs text-stone-500 font-medium">
+                {channelTab === 'AGENT'
+                  ? `${agentGroups.length} Active Agent Groups`
+                  : `Showing ${orders.length} of ${totalOrdersCount} records`}
+              </div>
+            )}
           </div>
         </div>
 
@@ -374,6 +679,8 @@ export default function CommercialOrdersAuditPage() {
               placeholder={
                 channelTab === 'AGENT'
                   ? 'Search agent by name, staff ID, phone, or customer order under agent...'
+                  : channelTab === 'FREE'
+                  ? 'Search by ticket number, recipient name, mobile, or email...'
                   : 'Search by order number, customer name, mobile, or email...'
               }
               value={searchQuery}
@@ -386,46 +693,48 @@ export default function CommercialOrdersAuditPage() {
           </div>
 
           <div className="flex items-center gap-2.5 w-full md:w-auto">
-            {/* Ticket Type Filter */}
-            <select
-              value={ticketTypeFilter}
-              onChange={(e) => {
-                setTicketTypeFilter(e.target.value);
-                setPage(1);
-              }}
-              className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
-            >
-              <option value="ALL">All Pass Types</option>
-              <option value="COMMERCIAL_DAILY">Daily Pass</option>
-              <option value="COMMERCIAL_SEASON">Season Pass</option>
-            </select>
+            {channelTab !== 'FREE' && (
+              <>
+                <select
+                  value={ticketTypeFilter}
+                  onChange={(e) => {
+                    setTicketTypeFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+                >
+                  <option value="ALL">All Pass Types</option>
+                  <option value="COMMERCIAL_DAILY">Daily Pass</option>
+                  <option value="COMMERCIAL_SEASON">Season Pass</option>
+                </select>
 
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="PAID">Paid / Confirmed</option>
-              <option value="PENDING">Pending</option>
-              <option value="CANCELLED">Cancelled</option>
-              <option value="FAILED">Failed</option>
-            </select>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PAID">Paid / Confirmed</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="CANCELLED">Cancelled</option>
+                  <option value="FAILED">Failed</option>
+                </select>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* VIEW 1: AGENT-WISE GROUPED VIEW (When [Agent Orders] Tab is Selected) */}
-      {channelTab === 'AGENT' ? (
+      {/* SECTION 1: AGENT PASSES (Expandable Agent Groups) */}
+      {channelTab === 'AGENT' && (
         <div className="space-y-4">
           {loading ? (
             <div className="p-12 text-center text-xs text-stone-500 bg-white rounded-2xl border border-stone-200">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#7A1113] mb-2" />
-              <span>Loading agent sales groups...</span>
+              <span>Loading agent pass groups...</span>
             </div>
           ) : agentGroups.length === 0 ? (
             <div className="p-12 text-center bg-white rounded-2xl border border-stone-200 text-stone-500 text-xs">
@@ -582,6 +891,9 @@ export default function CommercialOrdersAuditPage() {
                             <table className="w-full text-left text-xs">
                               <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
                                 <tr>
+                                  <th className="px-3 py-3 w-8 text-center">
+                                    <span className="sr-only">Select</span>
+                                  </th>
                                   <th className="px-4 py-3">Order Number</th>
                                   <th className="px-4 py-3">Customer Details</th>
                                   <th className="px-4 py-3">Pass Type & Dates</th>
@@ -590,24 +902,39 @@ export default function CommercialOrdersAuditPage() {
                                   <th className="px-4 py-3">Payment Mode</th>
                                   <th className="px-4 py-3">Order Date</th>
                                   <th className="px-4 py-3 text-center">Passes</th>
+                                  <th className="px-4 py-3 text-center">Action</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-stone-100 text-stone-900">
                                 {agentOrders.map((ord) => {
                                   const showPasses = !!expandedOrderPasses[ord.id];
+                                  const isSelected = selectedOrderIds.has(ord.id);
+                                  const protCheck = isOrderProtected(ord);
 
                                   return (
                                     <React.Fragment key={ord.id}>
-                                      <tr className="hover:bg-[#FAF7F2]/40 transition-colors">
+                                      <tr className={`transition-colors ${isSelected ? 'bg-rose-50/40' : 'hover:bg-[#FAF7F2]/40'}`}>
+                                        <td className="px-3 py-3 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleToggleSelectOrder(ord.id)}
+                                            className="text-stone-400 hover:text-stone-700"
+                                          >
+                                            {isSelected ? (
+                                              <CheckSquare className="w-4 h-4 text-rose-600" />
+                                            ) : (
+                                              <Square className="w-4 h-4" />
+                                            )}
+                                          </button>
+                                        </td>
+
                                         <td className="px-4 py-3">
                                           <div className="flex items-center gap-1.5">
                                             <span className="font-mono font-bold text-[#7A1113]">
                                               {ord.orderNumber}
                                             </span>
                                             <button
-                                              onClick={() =>
-                                                copyToClipboard(ord.orderNumber, ord.id)
-                                              }
+                                              onClick={() => copyToClipboard(ord.orderNumber, ord.id)}
                                               className="text-stone-400 hover:text-stone-700 p-0.5"
                                               title="Copy Order Number"
                                             >
@@ -621,9 +948,7 @@ export default function CommercialOrdersAuditPage() {
                                         </td>
 
                                         <td className="px-4 py-3">
-                                          <div className="font-bold text-stone-900">
-                                            {ord.customerName}
-                                          </div>
+                                          <div className="font-bold text-stone-900">{ord.customerName}</div>
                                           <div className="text-[11px] text-stone-500">
                                             {ord.customerMobile} • {ord.customerEmail}
                                           </div>
@@ -680,12 +1005,23 @@ export default function CommercialOrdersAuditPage() {
                                             )}
                                           </button>
                                         </td>
+
+                                        <td className="px-4 py-3 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenSingleDeleteModal(ord)}
+                                            className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                            title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Order'}
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        </td>
                                       </tr>
 
                                       {/* Nested Attendee Passes View */}
                                       {showPasses && (
                                         <tr>
-                                          <td colSpan={8} className="p-3 bg-stone-50 border-y border-stone-200">
+                                          <td colSpan={10} className="p-3 bg-stone-50 border-y border-stone-200">
                                             <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
                                               <div className="flex items-center justify-between text-xs font-bold text-stone-700">
                                                 <span className="flex items-center gap-1.5 text-[#7A1113]">
@@ -736,15 +1072,30 @@ export default function CommercialOrdersAuditPage() {
             })
           )}
         </div>
-      ) : (
-        /* VIEW 2: FLAT / FILTERED ORDERS TABLE (For [All Orders] and [Online Public]) */
+      )}
+
+      {/* SECTION 2: ONLINE PASSES TABLE */}
+      {channelTab === 'PUBLIC' && (
         <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
                 <tr>
+                  <th className="px-3 py-3.5 w-8 text-center">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllCurrentPage}
+                      className="text-stone-400 hover:text-stone-700"
+                      title="Select all on this page"
+                    >
+                      {isAllCurrentPageSelected ? (
+                        <CheckSquare className="w-4 h-4 text-rose-600" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  </th>
                   <th className="px-4 py-3.5">Order Number</th>
-                  <th className="px-4 py-3.5">Channel / Context</th>
                   <th className="px-4 py-3.5">Customer Information</th>
                   <th className="px-4 py-3.5">Pass Details</th>
                   <th className="px-4 py-3.5 text-center">Qty</th>
@@ -752,21 +1103,22 @@ export default function CommercialOrdersAuditPage() {
                   <th className="px-4 py-3.5">Payment</th>
                   <th className="px-4 py-3.5">Date</th>
                   <th className="px-4 py-3.5 text-center">Passes</th>
+                  <th className="px-4 py-3.5 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 text-stone-900">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-stone-400">
+                    <td colSpan={10} className="px-4 py-12 text-center text-stone-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#7A1113] mb-2" />
-                      <span>Loading orders...</span>
+                      <span>Loading online passes...</span>
                     </td>
                   </tr>
                 ) : orders.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-stone-400">
-                      <ShoppingBag className="w-10 h-10 text-stone-300 mx-auto mb-2" />
-                      <p className="font-semibold text-stone-600">No E-Pass orders found.</p>
+                    <td colSpan={10} className="px-4 py-12 text-center text-stone-400">
+                      <CreditCard className="w-10 h-10 text-stone-300 mx-auto mb-2" />
+                      <p className="font-semibold text-stone-600">No Online Public orders found.</p>
                       <p className="text-stone-400 text-xs mt-1">
                         Try adjusting your search query or filter settings.
                       </p>
@@ -775,10 +1127,27 @@ export default function CommercialOrdersAuditPage() {
                 ) : (
                   orders.map((order) => {
                     const showPasses = !!expandedOrderPasses[order.id];
+                    const isSelected = selectedOrderIds.has(order.id);
+                    const protCheck = isOrderProtected(order);
 
                     return (
                       <React.Fragment key={order.id}>
-                        <tr className="hover:bg-[#FAF7F2]/40 transition-colors">
+                        <tr className={`transition-colors ${isSelected ? 'bg-rose-50/40' : 'hover:bg-[#FAF7F2]/40'}`}>
+                          {/* Row Select Checkbox */}
+                          <td className="px-3 py-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelectOrder(order.id)}
+                              className="text-stone-400 hover:text-stone-700"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-rose-600" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          </td>
+
                           {/* Order Number */}
                           <td className="px-4 py-3.5 font-mono font-bold text-[#7A1113] whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
@@ -797,29 +1166,6 @@ export default function CommercialOrdersAuditPage() {
                             </div>
                           </td>
 
-                          {/* Channel / Context */}
-                          <td className="px-4 py-3.5">
-                            {order.source === 'AGENT' ? (
-                              <div>
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
-                                  AGENT OFFLINE
-                                </span>
-                                {order.agent && (
-                                  <div className="text-[11px] font-bold text-stone-800 mt-0.5">
-                                    {order.agent.name}{' '}
-                                    <span className="font-mono text-stone-400 font-normal">
-                                      ({order.agent.staffId || 'ID'})
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-900 border border-blue-200">
-                                ONLINE PUBLIC
-                              </span>
-                            )}
-                          </td>
-
                           {/* Customer */}
                           <td className="px-4 py-3.5">
                             <div className="font-bold text-stone-900">{order.customerName}</div>
@@ -831,9 +1177,7 @@ export default function CommercialOrdersAuditPage() {
                           {/* Pass Type & Dates */}
                           <td className="px-4 py-3.5">
                             <div className="font-semibold text-stone-800">
-                              {order.ticketType === 'COMMERCIAL_SEASON'
-                                ? 'Season Pass'
-                                : 'Daily Pass'}
+                              {order.ticketType === 'COMMERCIAL_SEASON' ? 'Season Pass' : 'Daily Pass'}
                             </div>
                             {order.selectedDates && order.selectedDates.length > 0 && (
                               <div className="text-[10px] text-stone-400 mt-0.5 truncate max-w-xs">
@@ -892,12 +1236,24 @@ export default function CommercialOrdersAuditPage() {
                               )}
                             </button>
                           </td>
+
+                          {/* Action (Delete) */}
+                          <td className="px-4 py-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSingleDeleteModal(order)}
+                              className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Order'}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
 
                         {/* Nested Passes Row */}
                         {showPasses && (
                           <tr>
-                            <td colSpan={9} className="p-3 bg-stone-50 border-y border-stone-200">
+                            <td colSpan={10} className="p-3 bg-stone-50 border-y border-stone-200">
                               <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
                                 <div className="flex items-center justify-between text-xs font-bold text-stone-700">
                                   <span className="flex items-center gap-1.5 text-[#7A1113]">
@@ -963,6 +1319,286 @@ export default function CommercialOrdersAuditPage() {
                 className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white font-semibold text-stone-700 disabled:opacity-40 hover:bg-stone-50"
               >
                 Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 3: FREE PASSES DEDICATED SECTION */}
+      {channelTab === 'FREE' && (
+        <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
+          {loading ? (
+            <div className="p-12 text-center text-xs text-stone-500">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-600 mb-2" />
+              <span>Loading free passes registry...</span>
+            </div>
+          ) : orders.length === 0 && summary.freePassesCount === 0 ? (
+            /* EXACT REQUIRED EMPTY STATE */
+            <div className="p-16 text-center text-stone-500 max-w-md mx-auto space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs border border-emerald-100">
+                <Gift className="w-7 h-7" />
+              </div>
+              <h3 className="font-outfit font-bold text-base text-stone-800">
+                No free passes issued yet.
+              </h3>
+              <p className="text-xs text-stone-500 leading-relaxed">
+                Free passes and complimentary entries will appear here once allocated or registered by authorized administrators.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="px-3 py-3.5 w-8 text-center">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllCurrentPage}
+                          className="text-stone-400 hover:text-stone-700"
+                        >
+                          {isAllCurrentPageSelected ? (
+                            <CheckSquare className="w-4 h-4 text-rose-600" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3.5">Ticket / Identifier</th>
+                      <th className="px-4 py-3.5">Recipient Details</th>
+                      <th className="px-4 py-3.5">Pass Category</th>
+                      <th className="px-4 py-3.5 text-center">Qty</th>
+                      <th className="px-4 py-3.5">Check-in Status</th>
+                      <th className="px-4 py-3.5">Issued At</th>
+                      <th className="px-4 py-3.5 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 text-stone-900">
+                    {orders.map((ord) => {
+                      const isSelected = selectedOrderIds.has(ord.id);
+                      const protCheck = isOrderProtected(ord);
+
+                      return (
+                        <tr
+                          key={ord.id}
+                          className={`transition-colors ${isSelected ? 'bg-rose-50/40' : 'hover:bg-[#FAF7F2]/40'}`}
+                        >
+                          <td className="px-3 py-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelectOrder(ord.id)}
+                              className="text-stone-400 hover:text-stone-700"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-rose-600" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          </td>
+
+                          <td className="px-4 py-3.5 font-mono font-bold text-emerald-800 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span>{ord.orderNumber}</span>
+                              <button
+                                onClick={() => copyToClipboard(ord.orderNumber, ord.id)}
+                                className="text-stone-400 hover:text-stone-700 p-0.5"
+                                title="Copy Identifier"
+                              >
+                                {copiedOrderId === ord.id ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-stone-900">{ord.customerName}</div>
+                            <div className="text-[11px] text-stone-500">
+                              {ord.customerMobile} {ord.customerEmail && `• ${ord.customerEmail}`}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              {ord.ticketType || 'FREE COMPLIMENTARY'}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-3.5 font-bold text-center">{ord.quantity || 1}</td>
+
+                          <td className="px-4 py-3.5">
+                            {ord.orderStatus === 'CHECKED_IN' ||
+                            (ord.attendees && ord.attendees.some((a) => a.status === 'CHECKED_IN')) ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                CHECKED IN
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                AVAILABLE / UNUSED
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3.5 text-stone-500 whitespace-nowrap">
+                            {new Date(ord.createdAt).toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+
+                          <td className="px-4 py-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSingleDeleteModal(ord)}
+                              className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title={protCheck.isProtected ? `Protected: ${protCheck.reason}` : 'Delete Free Pass'}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="p-4 border-t border-stone-200 flex items-center justify-between bg-stone-50 text-xs">
+                <span className="text-stone-500">
+                  Page <strong>{page}</strong> of <strong>{totalPages}</strong> ({totalOrdersCount} Total Records)
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1 || loading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white font-semibold text-stone-700 disabled:opacity-40 hover:bg-stone-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages || loading}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white font-semibold text-stone-700 disabled:opacity-40 hover:bg-stone-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL (NO window.confirm()) */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-stone-100 flex items-start gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-outfit font-bold text-base text-stone-900">
+                  Confirm Order Deletion
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Verify order dependency safety before proceeding.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="text-stone-400 hover:text-stone-700 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-stone-600">
+                  <span>Total Selected for Deletion:</span>
+                  <span className="font-bold font-mono text-stone-900">{deleteAnalysis.total}</span>
+                </div>
+                <div className="flex justify-between items-center text-emerald-700">
+                  <span className="font-semibold">Safe to Delete:</span>
+                  <span className="font-bold font-mono">{deleteAnalysis.safeCount}</span>
+                </div>
+                <div className="flex justify-between items-center text-rose-700">
+                  <span className="font-semibold">Protected (Cannot be deleted):</span>
+                  <span className="font-bold font-mono">{deleteAnalysis.protectedCount}</span>
+                </div>
+              </div>
+
+              {deleteAnalysis.protectedCount > 0 && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Protected orders will not be deleted</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    {deleteAnalysis.protectedCount} order(s) are locked because they have captured payments, confirmed paid status, or active check-ins. The system will preserve them automatically.
+                  </p>
+                </div>
+              )}
+
+              {deleteAnalysis.safeCount === 0 ? (
+                <div className="p-3 rounded-xl bg-stone-100 text-stone-600 text-xs text-center font-medium">
+                  None of the selected orders can be deleted because all are protected.
+                </div>
+              ) : (
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Proceeding will permanently remove{' '}
+                  <strong className="text-stone-900 font-bold">{deleteAnalysis.safeCount}</strong> unfulfilled/pending order(s). This action cannot be reversed.
+                </p>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-[#FAF7F2] border-t border-stone-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 font-bold text-xs hover:bg-stone-50 transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting || deleteAnalysis.safeCount === 0}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 disabled:opacity-40 transition-colors shadow-xs"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>
+                      {deleteAnalysis.safeCount === 1
+                        ? 'Delete 1 Order'
+                        : `Delete ${deleteAnalysis.safeCount} Orders`}
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>

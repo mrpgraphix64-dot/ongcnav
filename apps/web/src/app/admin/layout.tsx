@@ -321,18 +321,9 @@ export default function AdminLayout({
     return <>{children}</>;
   }
 
-  // Hydrate user from localStorage first for zero-flash initial render
-  const [user, setUser] = useState<AdminUser | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('ongc_admin_user');
-        return cached ? JSON.parse(cached) : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  // Hydrate user safely after mount to prevent React Error #418 (hydration mismatch)
+  const [user, setUser] = useState<AdminUser | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -352,19 +343,51 @@ export default function AdminLayout({
     async function loadUserProfile() {
       try {
         const res = await fetchApi('/auth/me');
-        if (isMounted && res?.user) {
+        if (!isMounted) return;
+
+        if (res?.user) {
+          const normRole = normalizeRole(res.user.role);
+
+          // If an agent tries to access the admin shell, route them to their agent portal
+          if (normRole === 'COMMERCIAL_AGENT' || normRole === 'COMMERCIAL_SUB_AGENT') {
+            try {
+              localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
+            } catch {}
+            router.replace('/agent');
+            return;
+          }
+
+          // Enforce domain isolation for EMPLOYEE_ADMIN on /admin/commercial/*
+          if (normRole === 'EMPLOYEE_ADMIN' && pathname.startsWith('/admin/commercial')) {
+            router.replace('/admin');
+            return;
+          }
+
+          // Enforce domain isolation for COMMERCIAL_ADMIN on employee routes
+          if (
+            normRole === 'COMMERCIAL_ADMIN' &&
+            (pathname.startsWith('/admin/attendees') || pathname.startsWith('/admin/bulk-upload'))
+          ) {
+            router.replace('/admin/commercial/orders');
+            return;
+          }
+
           setUser(res.user);
+          setAuthChecking(false);
           try {
             localStorage.setItem('ongc_admin_user', JSON.stringify(res.user));
           } catch {}
+        } else {
+          throw new Error('No user profile');
         }
       } catch {
-        // If unauthenticated, redirect to /admin/login
+        // If unauthenticated, redirect to /admin/login preserving redirect target
         if (isMounted) {
           try {
             localStorage.removeItem('ongc_admin_user');
           } catch {}
-          router.push('/admin/login');
+          const redirectQuery = pathname && pathname !== '/admin' ? `?redirect=${encodeURIComponent(pathname)}` : '';
+          router.replace(`/admin/login${redirectQuery}`);
         }
       }
     }
@@ -373,7 +396,7 @@ export default function AdminLayout({
     return () => {
       isMounted = false;
     };
-  }, [router]);
+  }, [pathname, router]);
 
   // Fetch real event-control status periodically from backend
   useEffect(() => {
@@ -465,6 +488,36 @@ export default function AdminLayout({
     if (normalizedRole === 'COMMERCIAL_SUB_AGENT') return 'E-Pass Sub-Agent';
     return normalizedRole.replace(/_/g, ' ');
   })();
+
+  if (authChecking) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-cream font-sans select-none">
+        <div className="w-10 h-10 border-3 border-stone-200 border-t-maroon rounded-full animate-spin mb-4" />
+        <div className="font-outfit font-extrabold text-xs tracking-widest uppercase text-maroon">
+          ONGC Navratri Operations
+        </div>
+        <p className="text-xs text-ink-soft mt-1">Verifying administrative access...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-cream p-8 text-center">
+        <ShieldAlert className="w-12 h-12 text-maroon mb-3" />
+        <h2 className="text-lg font-bold text-ink">Access Restricted</h2>
+        <p className="text-sm text-ink-soft max-w-md mt-1">
+          Your role ({roleBadgeLabel}) does not have permission to access this section under domain isolation policy.
+        </p>
+        <button
+          onClick={() => router.replace('/admin')}
+          className="mt-4 px-4 py-2 bg-maroon text-white text-xs font-bold rounded-xl shadow-xs hover:bg-maroon-dark transition-colors"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col font-sans bg-cream text-ink selection:bg-maroon selection:text-white overflow-hidden">

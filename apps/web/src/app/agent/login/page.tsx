@@ -9,16 +9,17 @@ import {
   AlertCircle,
   ArrowRight,
   ArrowLeft,
+  Ticket,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import PasswordInput from '@/components/PasswordInput';
 
-function AdminLoginForm() {
+function AgentLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get('redirect');
 
-  const [identifier, setIdentifier] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,7 @@ function AdminLoginForm() {
       const res = await fetchApi('/auth/login', {
         method: 'POST',
         body: JSON.stringify({
-          identifier: identifier.trim(),
+          identifier: email.trim(),
           password,
         }),
       });
@@ -45,16 +46,18 @@ function AdminLoginForm() {
 
       const role = String(res?.user?.role || '').toUpperCase();
       if (role === 'COMMERCIAL_AGENT' || role === 'COMMERCIAL_SUB_AGENT') {
-        router.push('/agent');
-      } else if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
-        router.push('/scanner');
-      } else if (redirectUrl && redirectUrl.startsWith('/admin')) {
-        router.push(redirectUrl);
+        if (redirectUrl && redirectUrl.startsWith('/agent')) {
+          router.push(redirectUrl);
+        } else {
+          router.push('/agent');
+        }
+      } else if (role === 'SUPER_ADMIN' || role === 'COMMERCIAL_ADMIN') {
+        router.push(redirectUrl || '/admin/commercial/orders');
       } else {
-        router.push('/admin');
+        router.push('/agent');
       }
     } catch (err: any) {
-      setError(err.message || 'Invalid credentials. Enter your registered Email address.');
+      setError(err.message || 'Invalid credentials. Please verify your registered agent email and password.');
     } finally {
       setLoading(false);
     }
@@ -62,20 +65,16 @@ function AdminLoginForm() {
 
   return (
     <div className="min-h-screen font-sans bg-cream text-ink flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative selection:bg-maroon selection:text-white">
-      {/* Background decorative ambient circles */}
+      {/* Background ambient decorative shapes */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-maroon/5 blur-3xl" />
         <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-gold/10 blur-3xl" />
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        {/* Login Card Container */}
-        <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-7 sm:p-9 relative overflow-hidden">
-          {/* Subtle gold accent bar at top */}
+        <div className="bg-white rounded-3xl border border-stone-200/80 shadow-xl p-7 sm:p-9 relative overflow-hidden">
+          {/* Gold & Maroon gradient accent line */}
           <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-maroon via-gold to-maroon" />
-
-          {/* Dot pattern subtle accent */}
-          <div className="absolute top-0 right-0 w-32 h-32 dot-texture opacity-30 pointer-events-none" />
 
           {/* Top Header & Branding */}
           <div className="text-center space-y-3 pb-6 border-b border-stone-100">
@@ -96,18 +95,19 @@ function AdminLoginForm() {
             </div>
 
             <div className="space-y-0.5">
-              <div className="font-outfit font-extrabold text-xs tracking-widest uppercase text-maroon">
-                ONGC NAVRATRI
+              <div className="font-outfit font-extrabold text-xs tracking-widest uppercase text-maroon flex items-center justify-center gap-1.5">
+                <Ticket className="w-3.5 h-3.5 text-gold" />
+                <span>ONGC NAVRATRI 2026</span>
               </div>
-              <div className="font-outfit font-black text-[15px] tracking-wider uppercase text-ink">
-                ENTRY CONTROL PORTAL
+              <div className="font-outfit font-black text-lg tracking-wider uppercase text-ink">
+                E-Pass Agent Portal
               </div>
             </div>
 
             <div className="pt-2">
-              <h2 className="text-2xl font-outfit font-bold text-ink">Welcome Back</h2>
+              <h2 className="text-xl font-outfit font-bold text-ink">Agent Sign In</h2>
               <p className="text-xs text-ink-soft mt-1">
-                Sign in to manage registrations, tickets and entry operations.
+                Enter your registered agent email to access offline pass booking and inventory distribution.
               </p>
             </div>
           </div>
@@ -120,11 +120,11 @@ function AdminLoginForm() {
             </div>
           )}
 
-          {/* Standard Login Form */}
+          {/* Agent Login Form */}
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-ink-soft mb-1.5">
-                Registered Email
+                Agent Email Address
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -132,9 +132,9 @@ function AdminLoginForm() {
                   type="email"
                   required
                   autoComplete="username"
-                  placeholder="name@ongc.co.in"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="agent@domain.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-ink placeholder-stone-400 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
                 />
               </div>
@@ -169,13 +169,13 @@ function AdminLoginForm() {
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-maroon text-white font-outfit font-bold text-sm hover:bg-maroon-dark transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-60 cursor-pointer"
               >
-                <span>{loading ? 'AUTHENTICATING...' : 'LOGIN'}</span>
+                <span>{loading ? 'AUTHENTICATING...' : 'SIGN IN TO AGENT PORTAL'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>
 
-          {/* Bottom Back link */}
+          {/* Navigation link */}
           <div className="mt-6 text-center">
             <Link
               href="/"
@@ -189,17 +189,17 @@ function AdminLoginForm() {
 
         {/* Footer Notice */}
         <p className="mt-6 text-center text-xs text-ink-soft">
-          ONGC Navratri 2026 &middot; Entry Control System &middot; Authorized Personnel Only
+          ONGC Navratri 2026 &middot; Official E-Pass Distribution Network &middot; Authorized Agents Only
         </p>
       </div>
     </div>
   );
 }
 
-export default function AdminLoginPage() {
+export default function AgentLoginPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-cream" />}>
-      <AdminLoginForm />
+      <AgentLoginForm />
     </Suspense>
   );
 }

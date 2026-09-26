@@ -17,6 +17,7 @@ describe('Commercial Orders Grouping & Filters Tests', () => {
         count: jest.fn().mockImplementation(({ where }) => {
           if (where?.source === CommercialOrderSource.PUBLIC) return Promise.resolve(5);
           if (where?.source === CommercialOrderSource.AGENT) return Promise.resolve(10);
+          if (where?.OR || where?.source === 'FREE' || where?.registrationType === RegistrationType.FREE) return Promise.resolve(0);
           return Promise.resolve(15);
         }),
         findMany: jest.fn().mockResolvedValue([
@@ -103,6 +104,10 @@ describe('Commercial Orders Grouping & Filters Tests', () => {
             ],
           },
         ]),
+      },
+      attendee: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
