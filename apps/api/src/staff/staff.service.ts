@@ -8,7 +8,16 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffDto, UpdateStaffDto } from './dto/create-staff.dto';
 import { AssignGateDto } from './dto/assign-gate.dto';
-import { UserRole } from '@ongc/shared-types';
+import {
+  UserRole,
+  E_PASS_ADMIN_PAGE_PERMISSIONS,
+  EMPLOYEE_ADMIN_PAGE_PERMISSIONS,
+  validatePermissionsForRole,
+} from '@ongc/shared-types';
+import {
+  USER_PAGE_PERMISSIONS_SETTING_PREFIX,
+  fetchUserPagePermissions,
+} from '../common/security/user-permissions.util';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -1129,6 +1138,96 @@ export class StaffService {
     });
 
     return { message: `Password for '${user.name}' has been reset successfully.` };
+  }
+
+  async getPagePermissions(userId: bigint) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Staff user #${userId} not found.`);
+    }
+
+    const roleUpper = (user.role || '').toUpperCase();
+    const isCommercialAdmin = roleUpper === UserRole.COMMERCIAL_ADMIN;
+    const isEmployeeAdmin = roleUpper === UserRole.EMPLOYEE_ADMIN;
+
+    const availablePermissions = isCommercialAdmin
+      ? E_PASS_ADMIN_PAGE_PERMISSIONS
+      : isEmployeeAdmin
+      ? EMPLOYEE_ADMIN_PAGE_PERMISSIONS
+      : [];
+
+    const settingKey = `${USER_PAGE_PERMISSIONS_SETTING_PREFIX}${userId.toString()}`;
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: settingKey },
+    });
+
+    const isDefault = !setting || !setting.value;
+    const assignedPermissions = await fetchUserPagePermissions(this.prisma, userId, user.role);
+
+    return {
+      userId: user.id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      domain: isCommercialAdmin ? 'commercial' : isEmployeeAdmin ? 'employee' : 'global',
+      isManageable: isCommercialAdmin || isEmployeeAdmin,
+      availablePermissions,
+      assignedPermissions,
+      isDefault,
+    };
+  }
+
+  async updatePagePermissions(userId: bigint, permissions: string[], currentUser?: any) {
+    if (currentUser?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only a Super Admin can configure staff page access permissions.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Staff user #${userId} not found.`);
+    }
+
+    const roleUpper = (user.role || '').toUpperCase();
+    if (roleUpper !== UserRole.COMMERCIAL_ADMIN && roleUpper !== UserRole.EMPLOYEE_ADMIN) {
+      throw new BadRequestException(
+        `Page access configuration is only applicable to E-Pass Admin and Employee Admin roles (target is ${user.role}).`,
+      );
+    }
+
+    // Strict domain validation: Reject any cross-domain keys
+    const validation = validatePermissionsForRole(roleUpper, permissions);
+    if (!validation.valid) {
+      const domainName = roleUpper === UserRole.COMMERCIAL_ADMIN ? 'E-Pass Admin' : 'Employee Admin';
+      throw new BadRequestException(
+        `Cross-domain permission cannot be assigned to ${domainName}: ${validation.invalidKeys.join(', ')}.`,
+      );
+    }
+
+    const settingKey = `${USER_PAGE_PERMISSIONS_SETTING_PREFIX}${userId.toString()}`;
+    await this.prisma.setting.upsert({
+      where: { key: settingKey },
+      create: {
+        key: settingKey,
+        value: JSON.stringify(permissions),
+      },
+      update: {
+        value: JSON.stringify(permissions),
+      },
+    });
+
+    return {
+      success: true,
+      userId: user.id.toString(),
+      role: user.role,
+      assignedPermissions: permissions,
+      message: `Page permissions for '${user.name}' updated successfully.`,
+    };
   }
 
   private mapStaffUser(u: any, lastActivityAt: Date | null) {

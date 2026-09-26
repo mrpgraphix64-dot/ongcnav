@@ -23,6 +23,7 @@ import { AttendeesService } from './attendees.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePagePermission } from '../common/decorators/page-permission.decorator';
 import { UserRole, AttendeeStatus } from '@ongc/shared-types';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -31,6 +32,7 @@ import * as fs from 'fs';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.SUPER_ADMIN, UserRole.EMPLOYEE_ADMIN, UserRole.REGISTRATION_STAFF)
+@RequirePagePermission('employee.attendees', 'employee.family_passes')
 @Controller('admin/attendees')
 export class AttendeesController {
   constructor(private readonly attendeesService: AttendeesService) {}
@@ -68,13 +70,16 @@ export class AttendeesController {
   @ApiOperation({ summary: 'Search attendees by name, phone, ticket number or CPF' })
   async search(
     @Query('q') q: string,
+    @Req() req: Request,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    const userRole = (req as any).user?.role;
     return this.attendeesService.search(
       q || '',
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
+      userRole,
     );
   }
 
@@ -96,7 +101,9 @@ export class AttendeesController {
     @Query('status') status: string,
     @Query('category') category: string,
     @Res() res: Response,
+    @Req() req: Request,
   ) {
+    const userRole = (req as any).user?.role;
     const rawIds = Array.isArray(idsParam)
       ? idsParam
       : idsParam
@@ -104,12 +111,15 @@ export class AttendeesController {
       : [];
     const ids = rawIds.map((id) => BigInt(id));
 
-    const result = await this.attendeesService.bulkExport({
-      ids: ids.length > 0 ? ids : undefined,
-      search,
-      status,
-      category,
-    });
+    const result = await this.attendeesService.bulkExport(
+      {
+        ids: ids.length > 0 ? ids : undefined,
+        search,
+        status,
+        category,
+      },
+      userRole,
+    );
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
@@ -143,6 +153,7 @@ export class AttendeesController {
 
   @Post('bulk/validate')
   @UseInterceptors(FileInterceptor('csv_file'))
+  @RequirePagePermission('employee.bulk_upload')
   @ApiOperation({ summary: 'Dry-run validation pass for bulk attendee CSV upload' })
   async validateBulkCsv(
     @UploadedFile() file?: Express.Multer.File,
@@ -169,6 +180,7 @@ export class AttendeesController {
 
   @Post('bulk/import')
   @UseInterceptors(FileInterceptor('csv_file'))
+  @RequirePagePermission('employee.bulk_upload')
   @ApiOperation({ summary: 'Import validated CSV rows and issue tickets' })
   async importBulkCsv(
     @UploadedFile() file?: Express.Multer.File,
@@ -200,8 +212,9 @@ export class AttendeesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get attendee details by ID' })
-  async findOne(@Param('id') id: string) {
-    return this.attendeesService.findOne(BigInt(id));
+  async findOne(@Param('id') id: string, @Req() req: Request) {
+    const userRole = (req as any).user?.role;
+    return this.attendeesService.findOne(BigInt(id), userRole);
   }
 
   @Put(':id')

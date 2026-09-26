@@ -5,6 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { PasswordResetService } from './password-reset.service';
 import { getRequiredJwtSecret } from '../common/security/jwt-secret.util';
+import { fetchUserPagePermissions } from '../common/security/user-permissions.util';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -56,6 +57,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User account is inactive or not found.');
     }
 
+    const pagePermissions = await fetchUserPagePermissions(this.prisma, user.id, user.role);
+
     return {
       id: user.id,
       staffId: user.staffId,
@@ -64,6 +67,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: user.role,
       isActive: user.isActive,
       assignedGates: user.gateUsers.map((gu) => gu.gate),
+      pagePermissions,
     };
   }
 }

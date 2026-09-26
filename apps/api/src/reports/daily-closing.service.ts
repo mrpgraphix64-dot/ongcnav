@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CheckinStatus, IncidentStatus } from '@ongc/shared-types';
+import { CheckinStatus, IncidentStatus, UserRole, RegistrationType } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 
 export function sanitizeCsvValue(value: any): string {
@@ -32,13 +32,20 @@ export class DailyClosingService {
     return setting?.value || this.getTodayIst();
   }
 
-  async generateDailyClosingReport(date?: string) {
+  async generateDailyClosingReport(date?: string, userRole?: string) {
+    if (userRole === UserRole.COMMERCIAL_ADMIN) {
+      throw new ForbiddenException('Daily Closing access is restricted to Employee/Global Administration.');
+    }
+    const isEmployeeAdmin = userRole === UserRole.EMPLOYEE_ADMIN;
+
     const activeDate = await this.getActiveEventDate();
     const selectedDate = date || activeDate;
 
     // 1. Core Attendee & Booking Counts
-    const totalRegistered = await this.prisma.attendee.count();
+    const attendeeWhere: any = isEmployeeAdmin ? { registrationType: RegistrationType.EMPLOYEE } : {};
+    const totalRegistered = await this.prisma.attendee.count({ where: attendeeWhere });
     const allAttendees = await this.prisma.attendee.findMany({
+      where: attendeeWhere,
       include: { employee: true },
     });
 
@@ -51,12 +58,14 @@ export class DailyClosingService {
     }).length;
 
     // 2. Active Check-in Counts
+    const checkinWhere: any = {
+      eventDate: selectedDate,
+      status: CheckinStatus.SUCCESS as any,
+      isLoadTest: false,
+      ...(isEmployeeAdmin ? { attendee: { registrationType: RegistrationType.EMPLOYEE } } : {}),
+    };
     const checkedInCount = await this.prisma.dailyCheckin.count({
-      where: {
-        eventDate: selectedDate,
-        status: CheckinStatus.SUCCESS as any,
-        isLoadTest: false,
-      },
+      where: checkinWhere,
     });
 
     const pendingCount = Math.max(0, bookedForDate - checkedInCount);
@@ -65,11 +74,7 @@ export class DailyClosingService {
 
     // 3. Peak Hour Calculation (Asia/Kolkata)
     const checkins = await this.prisma.dailyCheckin.findMany({
-      where: {
-        eventDate: selectedDate,
-        status: CheckinStatus.SUCCESS as any,
-        isLoadTest: false,
-      },
+      where: checkinWhere,
       select: { checkinTime: true },
     });
 
@@ -348,7 +353,12 @@ export class DailyClosingService {
     };
   }
 
-  async exportDailyClosingCsv(date?: string): Promise<string> {
+  async exportDailyClosingCsv(date?: string, userRole?: string): Promise<string> {
+    if (userRole === UserRole.COMMERCIAL_ADMIN) {
+      throw new ForbiddenException('Daily Closing access is restricted to Employee/Global Administration.');
+    }
+    const isEmployeeAdmin = userRole === UserRole.EMPLOYEE_ADMIN;
+
     const activeDate = await this.getActiveEventDate();
     const selectedDate = date || activeDate;
 
@@ -356,6 +366,7 @@ export class DailyClosingService {
       where: {
         eventDate: selectedDate,
         isLoadTest: false,
+        ...(isEmployeeAdmin ? { attendee: { registrationType: RegistrationType.EMPLOYEE } } : {}),
       },
       include: {
         attendee: {

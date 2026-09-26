@@ -268,15 +268,17 @@ export default function OperationsDashboardPage() {
               </>
             )}
 
-            {/* PRIMARY ACTION: Live Scanner (Distinct Highlight) */}
-            <Link
-              href="/scanner"
-              className="relative group flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-maroon via-maroon-dark to-maroon text-white text-xs sm:text-sm font-bold border-2 border-gold/60 hover:border-gold hover:shadow-lg transition-all transform hover:-translate-y-0.5"
-            >
-              <span className="w-2 h-2 rounded-full bg-gold animate-ping" />
-              <ScanLine className="w-4 h-4 text-gold-light group-hover:rotate-6 transition-transform" />
-              <span className="font-outfit tracking-wide">LIVE SCANNER</span>
-            </Link>
+            {/* PRIMARY ACTION: Live Scanner (Only for Operational / Super Admin roles) */}
+            {!isCommercialAdmin && userRole !== 'EMPLOYEE_ADMIN' && (
+              <Link
+                href="/scanner"
+                className="relative group flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-maroon via-maroon-dark to-maroon text-white text-xs sm:text-sm font-bold border-2 border-gold/60 hover:border-gold hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+              >
+                <span className="w-2 h-2 rounded-full bg-gold animate-ping" />
+                <ScanLine className="w-4 h-4 text-gold-light group-hover:rotate-6 transition-transform" />
+                <span className="font-outfit tracking-wide">LIVE SCANNER</span>
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -401,10 +403,16 @@ export default function OperationsDashboardPage() {
           </div>
           <div className="mt-4 pt-3 border-t border-stone-100">
             <Link
-              href="/scanner"
+              href={
+                isCommercialAdmin
+                  ? '/admin/commercial/orders'
+                  : userRole === 'EMPLOYEE_ADMIN'
+                  ? '/admin/attendees'
+                  : '/scanner'
+              }
               className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 hover:text-rose-800 group"
             >
-              <span>View Scan Logs</span>
+              <span>{isCommercialAdmin ? 'View Commercial Audit' : userRole === 'EMPLOYEE_ADMIN' ? 'View Attendees' : 'View Scan Logs'}</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
@@ -432,38 +440,55 @@ export default function OperationsDashboardPage() {
             <span className="font-outfit font-black text-maroon text-base">
               {stats.totalGateCheckinsToday.toLocaleString()}
             </span>
-            <Link
-              href="/admin/gates"
-              className="ml-2 text-xs font-bold text-maroon hover:underline hidden sm:inline"
-            >
-              Manage Gates &rarr;
-            </Link>
+            {isSuperOrEventAdmin && (
+              <Link
+                href="/admin/gates"
+                className="ml-2 text-xs font-bold text-maroon hover:underline hidden sm:inline"
+              >
+                Manage Gates &rarr;
+              </Link>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3 lg:gap-4">
           {stats.gatesActivity.length > 0 ? (
-            stats.gatesActivity.map((ga) => (
-              <Link
-                key={ga.id}
-                href="/admin/gates"
-                className="p-3 sm:p-3.5 lg:p-4 rounded-xl bg-cream-soft border border-stone-200/60 hover:border-gold hover:bg-white transition-all text-center group block shadow-2xs"
-              >
-                <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-maroon text-gold-light font-outfit">
-                  {ga.code || 'GATE'}
-                </span>
-                <div className="font-outfit font-bold text-sm text-ink group-hover:text-maroon transition-colors truncate mt-1">
-                  {ga.name}
+            stats.gatesActivity.map((ga) => {
+              const cardContent = (
+                <>
+                  <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-maroon text-gold-light font-outfit">
+                    {ga.code || 'GATE'}
+                  </span>
+                  <div className="font-outfit font-bold text-sm text-ink group-hover:text-maroon transition-colors truncate mt-1">
+                    {ga.name}
+                  </div>
+                  <div className="text-[10px] text-ink-soft mb-1 capitalize">
+                    {ga.type.toLowerCase()} Entry
+                  </div>
+                  <div className="font-outfit font-black text-xl text-maroon">
+                    {ga.count.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-ink-soft">check-ins</div>
+                </>
+              );
+
+              return isSuperOrEventAdmin ? (
+                <Link
+                  key={ga.id}
+                  href="/admin/gates"
+                  className="p-3 sm:p-3.5 lg:p-4 rounded-xl bg-cream-soft border border-stone-200/60 hover:border-gold hover:bg-white transition-all text-center group block shadow-2xs"
+                >
+                  {cardContent}
+                </Link>
+              ) : (
+                <div
+                  key={ga.id}
+                  className="p-3 sm:p-3.5 lg:p-4 rounded-xl bg-cream-soft border border-stone-200/60 text-center block shadow-2xs"
+                >
+                  {cardContent}
                 </div>
-                <div className="text-[10px] text-ink-soft mb-1 capitalize">
-                  {ga.type.toLowerCase()} Entry
-                </div>
-                <div className="font-outfit font-black text-xl text-maroon">
-                  {ga.count.toLocaleString()}
-                </div>
-                <div className="text-[10px] text-ink-soft">check-ins</div>
-              </Link>
-            ))
+              );
+            })
           ) : (
             <div className="col-span-full py-6 text-center text-xs text-ink-soft">
               No active gates configured.

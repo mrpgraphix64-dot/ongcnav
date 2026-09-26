@@ -506,9 +506,20 @@ export class AttendeesService {
   /**
    * Search attendees by name, phone, ticket number or CPF
    */
-  async search(query: string, page = 1, limit = 20) {
+  async search(query: string, page = 1, limit = 20, userRole?: string) {
+    if (
+      userRole === UserRole.COMMERCIAL_ADMIN ||
+      userRole === UserRole.COMMERCIAL_AGENT ||
+      userRole === UserRole.COMMERCIAL_SUB_AGENT ||
+      userRole === UserRole.EVENT_ADMIN
+    ) {
+      throw new ForbiddenException(`${userRole} is not permitted to search employee attendees.`);
+    }
+
     const q = query.trim();
     const skip = (page - 1) * limit;
+    const isEmployeeOnly =
+      userRole === UserRole.EMPLOYEE_ADMIN || userRole === UserRole.REGISTRATION_STAFF;
 
     const where: any = {
       OR: [
@@ -532,6 +543,12 @@ export class AttendeesService {
         },
       ],
     };
+
+    if (isEmployeeOnly) {
+      where.orderId = null;
+      where.employeeId = { not: null };
+      where.registrationType = RegistrationType.EMPLOYEE;
+    }
 
     const [total, attendees] = await Promise.all([
       this.prisma.attendee.count({ where }),
@@ -592,7 +609,16 @@ export class AttendeesService {
     };
   }
 
-  async findOne(id: bigint) {
+  async findOne(id: bigint, userRole?: string) {
+    if (
+      userRole === UserRole.COMMERCIAL_ADMIN ||
+      userRole === UserRole.COMMERCIAL_AGENT ||
+      userRole === UserRole.COMMERCIAL_SUB_AGENT ||
+      userRole === UserRole.EVENT_ADMIN
+    ) {
+      throw new ForbiddenException(`${userRole} is not permitted to access attendee details.`);
+    }
+
     const attendee = await this.prisma.attendee.findUnique({
       where: { id },
       include: {
@@ -607,6 +633,10 @@ export class AttendeesService {
     });
 
     if (!attendee) {
+      throw new NotFoundException(`Attendee with ID ${id} not found`);
+    }
+
+    if (userRole === UserRole.EMPLOYEE_ADMIN && attendee.orderId != null) {
       throw new NotFoundException(`Attendee with ID ${id} not found`);
     }
 
@@ -1250,13 +1280,33 @@ export class AttendeesService {
     };
   }
 
-  async bulkExport(query: {
-    ids?: bigint[];
-    search?: string;
-    status?: string;
-    category?: string;
-  }): Promise<{ csv: string; filename: string }> {
+  async bulkExport(
+    query: {
+      ids?: bigint[];
+      search?: string;
+      status?: string;
+      category?: string;
+    },
+    userRole?: string,
+  ): Promise<{ csv: string; filename: string }> {
+    if (
+      userRole === UserRole.COMMERCIAL_ADMIN ||
+      userRole === UserRole.COMMERCIAL_AGENT ||
+      userRole === UserRole.COMMERCIAL_SUB_AGENT ||
+      userRole === UserRole.EVENT_ADMIN
+    ) {
+      throw new ForbiddenException(`${userRole} is not permitted to export employee attendees.`);
+    }
+
+    const isEmployeeOnly =
+      userRole === UserRole.EMPLOYEE_ADMIN || userRole === UserRole.REGISTRATION_STAFF;
+
     const where: any = {};
+    if (isEmployeeOnly) {
+      where.orderId = null;
+      where.employeeId = { not: null };
+      where.registrationType = RegistrationType.EMPLOYEE;
+    }
     if (query.ids && query.ids.length > 0) {
       where.id = { in: query.ids };
     } else {

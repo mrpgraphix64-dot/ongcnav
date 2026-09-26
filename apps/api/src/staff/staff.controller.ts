@@ -136,4 +136,23 @@ export class StaffController {
     const user = (req as any).user;
     return this.staffService.resetPassword(BigInt(id), user, body.password);
   }
+
+  @Get(':id/page-permissions')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get domain page access permissions for a staff member (Super Admin only)' })
+  async getPagePermissions(@Param('id') id: string) {
+    return this.staffService.getPagePermissions(BigInt(id));
+  }
+
+  @Put(':id/page-permissions')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Update domain page access permissions for a staff member (Super Admin only)' })
+  async updatePagePermissions(
+    @Param('id') id: string,
+    @Body() body: { permissions: string[] },
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    return this.staffService.updatePagePermissions(BigInt(id), body?.permissions || [], user);
+  }
 }

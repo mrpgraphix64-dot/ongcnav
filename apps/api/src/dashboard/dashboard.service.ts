@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventControlService } from '../event-control/event-control.service';
-import { CheckinStatus } from '@ongc/shared-types';
+import { CheckinStatus, UserRole } from '@ongc/shared-types';
 
 @Injectable()
 export class DashboardService {
@@ -12,29 +12,55 @@ export class DashboardService {
     private readonly eventControlService: EventControlService,
   ) {}
 
-  async getLiveStats() {
+  async getLiveStats(user?: { role?: string }) {
     const today = await this.eventControlService.getActiveEventDate();
+    const roleUpper = (user?.role || '').toUpperCase();
+    const isCommercialAdmin = roleUpper === UserRole.COMMERCIAL_ADMIN;
+    const isEmployeeAdmin = roleUpper === UserRole.EMPLOYEE_ADMIN;
 
-    // 1. Total attendees (Registered Employees + Family Members)
-    const totalAttendees = await this.prisma.attendee.count();
+    // Domain condition for attendee queries
+    const attendeeDomainWhere: any = isCommercialAdmin
+      ? { registrationType: 'COMMERCIAL' }
+      : isEmployeeAdmin
+      ? { registrationType: 'EMPLOYEE' }
+      : {};
 
-    // 2. Today's successful check-ins
+    const checkinDomainWhere: any = isCommercialAdmin
+      ? { attendee: { registrationType: 'COMMERCIAL' } }
+      : isEmployeeAdmin
+      ? { attendee: { registrationType: 'EMPLOYEE' } }
+      : {};
+
+    const scanLogDomainWhere: any = isCommercialAdmin
+      ? { attendee: { registrationType: 'COMMERCIAL' } }
+      : isEmployeeAdmin
+      ? { attendee: { registrationType: 'EMPLOYEE' } }
+      : {};
+
+    // 1. Total attendees (Domain-isolated)
+    const totalAttendees = await this.prisma.attendee.count({
+      where: attendeeDomainWhere,
+    });
+
+    // 2. Today's successful check-ins (Domain-isolated)
     const checkedInCount = await this.prisma.dailyCheckin.count({
       where: {
         eventDate: today,
         status: CheckinStatus.SUCCESS as any,
         isLoadTest: false,
+        ...checkinDomainWhere,
       },
     });
 
     // 3. Pending arrivals
     const pendingCount = Math.max(0, totalAttendees - checkedInCount);
 
-    // 4. Duplicate scan attempts (supporting both Laravel 'duplicate' and NestJS 'ALREADY_CHECKED_IN')
+    // 4. Duplicate scan attempts (Domain-isolated)
     const duplicateAttemptsCount = await this.prisma.scanLog.count({
       where: {
         result: { in: ['duplicate', 'ALREADY_CHECKED_IN'] },
         isLoadTest: false,
+        ...scanLogDomainWhere,
       },
     });
 
@@ -44,7 +70,7 @@ export class DashboardService {
         ? Number(((checkedInCount / totalAttendees) * 100).toFixed(1))
         : 0;
 
-    // 6. Active gates and today's activity per gate
+    // 6. Active gates and today's activity per gate (Domain-isolated checkins)
     const gates = await this.prisma.gate.findMany({
       where: { status: 'ACTIVE' },
       orderBy: { id: 'asc' },
@@ -56,6 +82,7 @@ export class DashboardService {
         eventDate: today,
         status: CheckinStatus.SUCCESS as any,
         isLoadTest: false,
+        ...checkinDomainWhere,
       },
       _count: { id: true },
     });
@@ -81,12 +108,13 @@ export class DashboardService {
       0,
     );
 
-    // 7. Recent check-ins (latest 6)
+    // 7. Recent check-ins (latest 6, Domain-isolated)
     let recent = await this.prisma.dailyCheckin.findMany({
       where: {
         eventDate: today,
         status: CheckinStatus.SUCCESS as any,
         isLoadTest: false,
+        ...checkinDomainWhere,
       },
       orderBy: { checkinTime: 'desc' },
       take: 6,
@@ -95,18 +123,22 @@ export class DashboardService {
           include: {
             employee: true,
             familyMember: true,
+            order: {
+              select: { customerName: true, ticketType: true },
+            },
           },
         },
         gate: true,
       },
     });
 
-    // If no scans recorded today yet, show latest recorded scans across the event
+    // If no scans recorded today yet, show latest recorded scans for this domain
     if (recent.length === 0) {
       recent = await this.prisma.dailyCheckin.findMany({
         where: {
           status: CheckinStatus.SUCCESS as any,
           isLoadTest: false,
+          ...checkinDomainWhere,
         },
         orderBy: { checkinTime: 'desc' },
         take: 6,
@@ -115,6 +147,9 @@ export class DashboardService {
             include: {
               employee: true,
               familyMember: true,
+              order: {
+                select: { customerName: true, ticketType: true },
+              },
             },
           },
           gate: true,
@@ -123,16 +158,31 @@ export class DashboardService {
     }
 
     const recentCheckIns = recent.map((c) => {
-      const name =
-        c.attendee?.familyMember?.name ||
-        c.attendee?.employee?.name ||
-        c.attendee?.name ||
-        'Attendee';
-      const category = c.attendee?.familyMember
-        ? `FAMILY (${c.attendee.familyMember.relation})`
-        : c.attendee?.employee
-          ? 'EMPLOYEE'
-          : (c.attendee?.category?.toUpperCase() || 'GENERAL');
+      let name = 'Attendee';
+      let category = 'GENERAL';
+
+      if (isCommercialAdmin) {
+        name = c.attendee?.name || c.attendee?.order?.customerName || 'E-Pass Holder';
+        category = (c.attendee?.category || c.attendee?.order?.ticketType || 'COMMERCIAL PASS').toUpperCase();
+      } else if (isEmployeeAdmin) {
+        name = c.attendee?.familyMember?.name || c.attendee?.employee?.name || c.attendee?.name || 'Staff Attendee';
+        category = c.attendee?.familyMember
+          ? `FAMILY (${c.attendee.familyMember.relation})`
+          : 'EMPLOYEE';
+      } else {
+        name =
+          c.attendee?.familyMember?.name ||
+          c.attendee?.employee?.name ||
+          c.attendee?.order?.customerName ||
+          c.attendee?.name ||
+          'Attendee';
+        category = c.attendee?.familyMember
+          ? `FAMILY (${c.attendee.familyMember.relation})`
+          : c.attendee?.employee
+            ? 'EMPLOYEE'
+            : (c.attendee?.category?.toUpperCase() || 'GENERAL');
+      }
+
       const timeStr = new Date(c.checkinTime).toLocaleTimeString('en-US', {
         timeZone: 'Asia/Kolkata',
         hour: 'numeric',
@@ -152,8 +202,54 @@ export class DashboardService {
 
     const statusObj = await this.eventControlService.getStatus();
 
+    // 8. Domain-specific metrics enrichment
+    let commercialStats: any = undefined;
+    let employeeStats: any = undefined;
+
+    if (isCommercialAdmin || (!isCommercialAdmin && !isEmployeeAdmin)) {
+      const [totalCommercialOrders, paidOrders, totalRevenuePaise, agentOrdersCount, availableAllocationAgg] = await Promise.all([
+        this.prisma.commercialOrder.count(),
+        this.prisma.commercialOrder.count({ where: { orderStatus: 'PAID' } }),
+        this.prisma.commercialOrder.aggregate({
+          where: { orderStatus: 'PAID' },
+          _sum: { amountPaise: true },
+        }),
+        this.prisma.commercialOrder.count({ where: { source: 'AGENT' } }),
+        this.prisma.agentAllocation.aggregate({
+          _sum: { allocatedQuantity: true, bookedQuantity: true },
+        }),
+      ]);
+
+      const allocatedTotal = availableAllocationAgg._sum.allocatedQuantity || 0;
+      const bookedTotal = availableAllocationAgg._sum.bookedQuantity || 0;
+      const availableInventory = Math.max(0, allocatedTotal - bookedTotal);
+
+      commercialStats = {
+        commercialSalesInr: (totalRevenuePaise._sum.amountPaise || 0) / 100,
+        totalOrdersCount: totalCommercialOrders,
+        paidOrdersCount: paidOrders,
+        totalCommercialPasses: totalAttendees,
+        agentSalesCount: agentOrdersCount,
+        availableInventory,
+      };
+    }
+
+    if (isEmployeeAdmin || (!isCommercialAdmin && !isEmployeeAdmin)) {
+      const [totalEmployees, totalFamilyMembers] = await Promise.all([
+        this.prisma.employee.count(),
+        this.prisma.familyMember.count(),
+      ]);
+
+      employeeStats = {
+        totalEmployees,
+        totalFamilyMembers,
+        employeePassesCount: totalAttendees,
+      };
+    }
+
     return {
       today,
+      domain: isCommercialAdmin ? 'commercial' : isEmployeeAdmin ? 'employee' : 'global',
       totalAttendees,
       checkedInCount,
       pendingCount,
@@ -165,6 +261,8 @@ export class DashboardService {
       eventStatus: statusObj.eventStatus,
       scanningEnabled: statusObj.scanningEnabled,
       emergencyStopped: statusObj.emergencyStopped,
+      ...(commercialStats ? { commercialStats } : {}),
+      ...(employeeStats ? { employeeStats } : {}),
     };
   }
 }

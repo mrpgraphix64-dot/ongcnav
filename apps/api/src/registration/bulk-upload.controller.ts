@@ -15,12 +15,14 @@ import { AttendeesService } from './attendees.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePagePermission } from '../common/decorators/page-permission.decorator';
 import { UserRole } from '@ongc/shared-types';
 
 @ApiTags('Admin Bulk Upload')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.SUPER_ADMIN, UserRole.EMPLOYEE_ADMIN, UserRole.REGISTRATION_STAFF)
+@RequirePagePermission('employee.bulk_upload')
 @Controller('admin/bulk-upload')
 export class BulkUploadController {
   constructor(private readonly attendeesService: AttendeesService) {}

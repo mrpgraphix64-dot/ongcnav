@@ -18,6 +18,7 @@ import { ResendTicketEmailDto } from './dto/resend-ticket-email.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePagePermission } from '../common/decorators/page-permission.decorator';
 import { UserRole } from '@ongc/shared-types';
 
 @ApiTags('Commercial Passes & Ticketing')
@@ -71,6 +72,7 @@ export class CommercialController {
 @ApiTags('Admin Commercial Audit')
 @Controller('admin/commercial')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePagePermission('commercial.orders')
 @ApiBearerAuth()
 export class CommercialAdminController {
   constructor(private readonly commercialService: CommercialService) {}

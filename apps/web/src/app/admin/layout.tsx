@@ -28,6 +28,8 @@ import {
   Headphones,
   ShieldAlert,
   ArrowLeft,
+  Ticket,
+  Layers,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
@@ -36,6 +38,7 @@ import {
   subscribeToAuthSync,
   isAgentRole,
 } from '@/lib/auth-session';
+import { isRoutePermittedForRole } from '@ongc/shared-types';
 
 interface AdminUser {
   id?: string;
@@ -44,6 +47,7 @@ interface AdminUser {
   email?: string;
   role?: string;
   assignedGates?: any[];
+  pagePermissions?: string[];
 }
 
 interface NavItem {
@@ -54,123 +58,229 @@ interface NavItem {
   isSectionHeader?: string;
 }
 
-// Canonical Laravel navigation items
+// Dedicated navigation for E-Pass Admin (COMMERCIAL_ADMIN) - Zero employee items
+const COMMERCIAL_ADMIN_NAV_ITEMS: NavItem[] = [
+  {
+    label: 'Dashboard',
+    href: '/admin',
+    icon: LayoutDashboard,
+    roles: ['COMMERCIAL_ADMIN'],
+  },
+  {
+    label: 'E-Pass Orders',
+    href: '/admin/commercial/orders',
+    icon: CalendarCheck,
+    roles: ['COMMERCIAL_ADMIN'],
+    isSectionHeader: 'E-PASS',
+  },
+  {
+    label: 'Customers & Passes',
+    href: '/admin/commercial/customers',
+    icon: Users,
+    roles: ['COMMERCIAL_ADMIN'],
+  },
+  {
+    label: 'Agents',
+    href: '/admin/commercial/agents',
+    icon: Shield,
+    roles: ['COMMERCIAL_ADMIN'],
+  },
+  {
+    label: 'Inventory & Quotas',
+    href: '/admin/commercial/inventory',
+    icon: Layers,
+    roles: ['COMMERCIAL_ADMIN'],
+  },
+  {
+    label: 'Allocations',
+    href: '/admin/commercial/allocations',
+    icon: Ticket,
+    roles: ['COMMERCIAL_ADMIN'],
+  },
+  {
+    label: 'Commercial Reports',
+    href: '/admin/commercial/reports',
+    icon: BarChart3,
+    roles: ['COMMERCIAL_ADMIN'],
+  },
+  {
+    label: 'Ticket Delivery',
+    href: '/admin/commercial/tickets',
+    icon: ExternalLink,
+    roles: ['COMMERCIAL_ADMIN'],
+  },
+];
+
+// Dedicated navigation for Employee Admin (EMPLOYEE_ADMIN) - Zero commercial items
+const EMPLOYEE_ADMIN_NAV_ITEMS: NavItem[] = [
+  {
+    label: 'Dashboard',
+    href: '/admin',
+    icon: LayoutDashboard,
+    roles: ['EMPLOYEE_ADMIN'],
+  },
+  {
+    label: 'Employee Registrations',
+    href: '/admin/attendees',
+    icon: Users,
+    roles: ['EMPLOYEE_ADMIN'],
+    isSectionHeader: 'EMPLOYEES',
+  },
+  {
+    label: 'Bulk Upload',
+    href: '/admin/bulk-upload',
+    icon: UploadCloud,
+    roles: ['EMPLOYEE_ADMIN'],
+  },
+  {
+    label: 'Help Desk Overrides',
+    href: '/admin/helpdesk',
+    icon: LifeBuoy,
+    roles: ['EMPLOYEE_ADMIN'],
+  },
+  {
+    label: 'Daily Closing',
+    href: '/admin/daily-closing',
+    icon: CalendarCheck,
+    roles: ['EMPLOYEE_ADMIN'],
+  },
+  {
+    label: 'Reports & Export',
+    href: '/admin/reports',
+    icon: BarChart3,
+    roles: ['EMPLOYEE_ADMIN'],
+  },
+];
+
+// Global navigation for Super Admin and unified roles
 const ALL_NAV_ITEMS: NavItem[] = [
-  // 1. Event Control (Super Admin, Event Admin)
+  // GLOBAL
   {
     label: 'Event Control',
     href: '/admin/event-control',
     icon: Gauge,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
+    isSectionHeader: 'GLOBAL',
   },
-  // 2. Dashboard (Super Admin, Event Admin, Gate Manager, Commercial Admin, Employee Admin)
   {
     label: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
-    roles: [
-      'SUPER_ADMIN',
-      'ADMIN',
-      'EVENT_ADMIN',
-      'GATE_MANAGER',
-      'COMMERCIAL_ADMIN',
-      'EMPLOYEE_ADMIN',
-      'HELP_DESK',
-      'REPORT_VIEWER',
-    ],
+    roles: ['SUPER_ADMIN', 'ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
   },
-  // 3. Gates (Super Admin, Event Admin, Gate Manager)
   {
     label: 'Gates',
     href: '/admin/gates',
     icon: DoorOpen,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
   },
-  // 4. Staff Management (Super Admin, Event Admin)
   {
     label: 'Staff Management',
     href: '/admin/staff',
     icon: Shield,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
   },
-  // 5. Attendees & Passes (Super Admin, Employee Admin, Registration Staff ONLY - employee-only)
-  {
-    label: 'Attendees & Passes',
-    href: '/admin/attendees',
-    icon: Users,
-    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'REGISTRATION_STAFF'],
-  },
-  // 6. Bulk Upload (Super Admin, Employee Admin, Registration Staff ONLY - employee-only)
-  {
-    label: 'Bulk Upload',
-    href: '/admin/bulk-upload',
-    icon: UploadCloud,
-    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'REGISTRATION_STAFF'],
-  },
-  // E-Pass Orders (Super Admin, Commercial Admin)
-  {
-    label: 'E-Pass Orders',
-    href: '/admin/commercial/orders',
-    icon: CalendarCheck,
-    roles: ['SUPER_ADMIN', 'COMMERCIAL_ADMIN'],
-  },
-  // E-Pass Agents (Super Admin, Commercial Admin)
-  {
-    label: 'Agents',
-    href: '/admin/commercial/agents',
-    icon: Shield,
-    roles: ['SUPER_ADMIN', 'COMMERCIAL_ADMIN'],
-  },
-  // E-Pass Agent Portal (Commercial Agent, Commercial Sub Agent)
-  {
-    label: 'E-Pass Agent Portal',
-    href: '/agent',
-    icon: Calendar,
-    roles: ['COMMERCIAL_AGENT', 'COMMERCIAL_SUB_AGENT'],
-  },
-  // 7. Help Desk Overrides (Super Admin, Employee Admin, Event Admin, Gate Manager, Registration Staff)
-  {
-    label: 'Help Desk Overrides',
-    href: '/admin/helpdesk',
-    icon: LifeBuoy,
-    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REGISTRATION_STAFF'],
-  },
-  // 8. Turnstile Scanner (Super Admin, Event Admin, Gate Manager)
-  {
-    label: 'Turnstile Scanner',
-    href: '/scanner',
-    icon: ScanLine,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
-  },
-  // 9. Incident Response (Super Admin, Event Admin, Gate Manager)
-  {
-    label: 'Incident Response',
-    href: '/admin/incidents',
-    icon: AlertTriangle,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
-  },
-  // 10. Daily Closing (Super Admin, Event Admin, Gate Manager, Report Viewer)
-  {
-    label: 'Daily Closing',
-    href: '/admin/daily-closing',
-    icon: CalendarCheck,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
-  },
-  // 11. Reports & Export (Super Admin, Event Admin, Gate Manager, Report Viewer)
-  {
-    label: 'Reports & Export',
-    href: '/admin/reports',
-    icon: BarChart3,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
-  },
-  // 12. Settings (Super Admin, Event Admin)
   {
     label: 'Settings',
     href: '/admin/settings',
     icon: Settings,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
   },
-  // 13. Traffic Test Lab (Super Admin, Event Admin)
+
+  // EMPLOYEES
+  {
+    label: 'Attendees & Passes',
+    href: '/admin/attendees',
+    icon: Users,
+    roles: ['SUPER_ADMIN', 'REGISTRATION_STAFF'],
+    isSectionHeader: 'EMPLOYEES',
+  },
+  {
+    label: 'Bulk Upload',
+    href: '/admin/bulk-upload',
+    icon: UploadCloud,
+    roles: ['SUPER_ADMIN', 'REGISTRATION_STAFF'],
+  },
+  {
+    label: 'Help Desk Overrides',
+    href: '/admin/helpdesk',
+    icon: LifeBuoy,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REGISTRATION_STAFF'],
+  },
+  {
+    label: 'Daily Closing',
+    href: '/admin/daily-closing',
+    icon: CalendarCheck,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
+  },
+  {
+    label: 'Reports & Export',
+    href: '/admin/reports',
+    icon: BarChart3,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
+  },
+
+  // E-PASS
+  {
+    label: 'E-Pass Orders',
+    href: '/admin/commercial/orders',
+    icon: CalendarCheck,
+    roles: ['SUPER_ADMIN'],
+    isSectionHeader: 'E-PASS',
+  },
+  {
+    label: 'Customers & Passes',
+    href: '/admin/commercial/customers',
+    icon: Users,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    label: 'Agents',
+    href: '/admin/commercial/agents',
+    icon: Shield,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    label: 'Inventory & Quotas',
+    href: '/admin/commercial/inventory',
+    icon: Layers,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    label: 'Allocations',
+    href: '/admin/commercial/allocations',
+    icon: Ticket,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    label: 'Commercial Reports',
+    href: '/admin/commercial/reports',
+    icon: BarChart3,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    label: 'Ticket Delivery',
+    href: '/admin/commercial/tickets',
+    icon: ExternalLink,
+    roles: ['SUPER_ADMIN'],
+  },
+
+  // OPERATIONS
+  {
+    label: 'Turnstile Scanner',
+    href: '/scanner',
+    icon: ScanLine,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
+    isSectionHeader: 'OPERATIONS',
+  },
+  {
+    label: 'Incident Response',
+    href: '/admin/incidents',
+    icon: AlertTriangle,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
+  },
+
+  // TEST LAB
   {
     label: 'Traffic Test Lab',
     href: '/admin/traffic-test',
@@ -219,8 +329,20 @@ function normalizeRole(role?: string): string {
   return r;
 }
 
-function getPageMeta(pathname: string): { title: string; subtitle: string } {
+function getPageMeta(pathname: string, userRole?: string): { title: string; subtitle: string } {
   if (pathname === '/admin' || pathname === '/admin/') {
+    if (userRole === 'COMMERCIAL_ADMIN') {
+      return {
+        title: 'E-Pass Administration Dashboard',
+        subtitle: 'Commercial ticket sales, revenue audit, and agent allocation overview.',
+      };
+    }
+    if (userRole === 'EMPLOYEE_ADMIN') {
+      return {
+        title: 'Employee Administration Dashboard',
+        subtitle: 'Employee passes, family registrations, and venue check-in monitoring.',
+      };
+    }
     return {
       title: 'Dashboard Overview',
       subtitle: 'Real-time registration, ticket verification, and gate access management.',
@@ -298,9 +420,39 @@ function getPageMeta(pathname: string): { title: string; subtitle: string } {
       subtitle: 'Audit public and agent ticket sales, payment verification, and pass delivery.',
     };
   }
+  if (pathname.startsWith('/admin/commercial/inventory')) {
+    return {
+      title: 'Inventory & Quotas',
+      subtitle: 'Commercial pass quotas and issuance tracking across all categories.',
+    };
+  }
+  if (pathname.startsWith('/admin/commercial/allocations')) {
+    return {
+      title: 'Agent Allocations',
+      subtitle: 'Authorized agent allocations, sold counts, and available inventory.',
+    };
+  }
+  if (pathname.startsWith('/admin/commercial/customers')) {
+    return {
+      title: 'Commercial Customers',
+      subtitle: 'Buyer directory and commercial ticket recipients.',
+    };
+  }
+  if (pathname.startsWith('/admin/commercial/reports')) {
+    return {
+      title: 'Commercial Reports',
+      subtitle: 'Commercial ticket sales, revenue audit, and operational admissions reporting.',
+    };
+  }
+  if (pathname.startsWith('/admin/commercial/tickets')) {
+    return {
+      title: 'Ticket Delivery',
+      subtitle: 'Search commercial passes and resend confirmation emails.',
+    };
+  }
   if (pathname.startsWith('/admin/commercial/agents')) {
     return {
-      title: 'Agents',
+      title: 'Agents Directory',
       subtitle: 'Agent directory, master inventory allocations, and sub-agent network oversight.',
     };
   }
@@ -487,46 +639,35 @@ export default function AdminLayout({
   const normalizedRole = normalizeRole(user?.role);
   const isScannerStaff = normalizedRole === 'SCANNER_STAFF';
 
-  const visibleNavItems = isScannerStaff
-    ? SCANNER_STAFF_NAV_ITEMS
-    : ALL_NAV_ITEMS.filter((item) => item.roles.includes(normalizedRole));
-
-  // Role-based route authorization check: match exact route first, then most specific sub-route prefix
-  const isAuthorized = (() => {
-    if (!user) return true; // allow initial paint while validating
-    if (normalizedRole === 'SUPER_ADMIN') return true;
-
-    // 1. Exact match first
-    const exactNav = ALL_NAV_ITEMS.find((item) => item.href === pathname);
-    if (exactNav) {
-      return exactNav.roles.includes(normalizedRole);
+  const visibleNavItems = (() => {
+    if (isScannerStaff) return SCANNER_STAFF_NAV_ITEMS;
+    if (normalizedRole === 'COMMERCIAL_ADMIN') {
+      return COMMERCIAL_ADMIN_NAV_ITEMS.filter((item) =>
+        isRoutePermittedForRole(item.href, normalizedRole, user?.pagePermissions),
+      );
     }
-
-    // 2. Specific sub-route prefix match (excluding '/admin' root so '/admin' doesn't swallow all subroutes)
-    const prefixNav = [...ALL_NAV_ITEMS]
-      .filter((item) => item.href !== '/admin' && pathname.startsWith(`${item.href}/`))
-      .sort((a, b) => b.href.length - a.href.length)[0];
-
-    if (prefixNav) {
-      return prefixNav.roles.includes(normalizedRole);
+    if (normalizedRole === 'EMPLOYEE_ADMIN') {
+      return EMPLOYEE_ADMIN_NAV_ITEMS.filter((item) =>
+        isRoutePermittedForRole(item.href, normalizedRole, user?.pagePermissions),
+      );
     }
-
-    // 3. Fallback for root /admin
-    if (pathname === '/admin' || pathname === '/admin/') {
-      const rootNav = ALL_NAV_ITEMS.find((item) => item.href === '/admin');
-      return rootNav ? rootNav.roles.includes(normalizedRole) : true;
-    }
-
-    return true;
+    return ALL_NAV_ITEMS.filter((item) => item.roles.includes(normalizedRole));
   })();
 
-  const pageMeta = getPageMeta(pathname);
+  // Role-based route authorization check enforced via centralized shared policy
+  const isAuthorized = (() => {
+    if (!user) return true; // allow initial paint while validating
+    return isRoutePermittedForRole(pathname, normalizedRole, user?.pagePermissions);
+  })();
+
+  const pageMeta = getPageMeta(pathname, normalizedRole);
   const userInitials = (user?.name || user?.email || 'Admin')
     .slice(0, 2)
     .toUpperCase();
 
   const roleBadgeLabel = (() => {
     if (normalizedRole === 'COMMERCIAL_ADMIN') return 'E-Pass Admin';
+    if (normalizedRole === 'EMPLOYEE_ADMIN') return 'Employee Admin';
     if (normalizedRole === 'COMMERCIAL_AGENT') return 'E-Pass Agent';
     if (normalizedRole === 'COMMERCIAL_SUB_AGENT') return 'E-Pass Sub-Agent';
     return normalizedRole.replace(/_/g, ' ');
@@ -608,10 +749,18 @@ export default function AdminLayout({
             </div>
             <div className="min-w-0">
               <div className="font-outfit font-bold text-[14px] leading-tight text-ink">
-                ONGC Navratri
+                {normalizedRole === 'COMMERCIAL_ADMIN'
+                  ? 'E-Pass Admin'
+                  : normalizedRole === 'EMPLOYEE_ADMIN'
+                  ? 'Employee Admin'
+                  : 'ONGC Navratri'}
               </div>
               <div className="text-[11px] font-semibold text-maroon tracking-wide">
-                2026 &bull; Entry Portal
+                {normalizedRole === 'COMMERCIAL_ADMIN'
+                  ? 'Commercial Sales'
+                  : normalizedRole === 'EMPLOYEE_ADMIN'
+                  ? 'Staff & Family'
+                  : '2026 \u2022 Entry Portal'}
               </div>
             </div>
           </Link>
@@ -728,9 +877,21 @@ export default function AdminLayout({
 
                 <div className="min-w-0">
                   <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-maroon font-outfit">
-                    <span>ONGC NAVRATRI</span>
+                    <span>
+                      {normalizedRole === 'COMMERCIAL_ADMIN'
+                        ? 'E-PASS ADMINISTRATION'
+                        : normalizedRole === 'EMPLOYEE_ADMIN'
+                        ? 'EMPLOYEE ADMINISTRATION'
+                        : 'ONGC NAVRATRI'}
+                    </span>
                     <span className="text-stone-300">&bull;</span>
-                    <span className="text-ink-soft">ENTRY CONTROL PORTAL</span>
+                    <span className="text-ink-soft">
+                      {normalizedRole === 'COMMERCIAL_ADMIN'
+                        ? 'COMMERCIAL SALES & ADMISSIONS'
+                        : normalizedRole === 'EMPLOYEE_ADMIN'
+                        ? 'REGISTRATION & PASS CONTROL'
+                        : 'ENTRY CONTROL PORTAL'}
+                    </span>
                   </div>
                   <h1 className="font-outfit font-bold text-lg sm:text-xl text-ink truncate leading-tight">
                     {pageMeta.title}

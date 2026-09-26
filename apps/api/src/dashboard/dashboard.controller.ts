@@ -1,5 +1,6 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Request } from 'express';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -28,7 +29,8 @@ export class DashboardController {
   )
   @ApiOperation({ summary: 'Get real-time operational dashboard stats & live metrics' })
   @ApiResponse({ status: 200, description: 'Live operational stats returned successfully' })
-  async getLiveStats() {
-    return this.dashboardService.getLiveStats();
+  async getLiveStats(@Req() req: Request) {
+    const user = (req as any).user;
+    return this.dashboardService.getLiveStats(user);
   }
 }

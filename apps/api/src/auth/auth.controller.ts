@@ -97,6 +97,7 @@ export class AuthController {
         email: req.user.email,
         role: req.user.role,
         assignedGates: req.user.assignedGates,
+        pagePermissions: req.user.pagePermissions || [],
       },
     };
   }

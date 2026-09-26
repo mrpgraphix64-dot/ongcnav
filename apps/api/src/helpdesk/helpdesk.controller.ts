@@ -15,11 +15,13 @@ import { ManualCheckinDto, VoidCheckinDto } from './dto/helpdesk.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePagePermission } from '../common/decorators/page-permission.decorator';
 import { UserRole } from '@ongc/shared-types';
 
 @ApiTags('Admin Help Desk')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequirePagePermission('employee.operations')
 @Controller(['admin/helpdesk', 'admin/help-desk'])
 export class HelpDeskController {
   constructor(private readonly helpdeskService: HelpDeskService) {}
@@ -33,6 +35,7 @@ export class HelpDeskController {
     UserRole.REGISTRATION_STAFF,
     UserRole.HELP_DESK,
     UserRole.SCANNER_STAFF,
+    UserRole.EMPLOYEE_ADMIN,
   )
   @ApiOperation({ summary: 'Quick search for attendees, passes, or CPF records' })
   async search(@Query('q') q: string, @Req() req: Request) {
@@ -49,6 +52,7 @@ export class HelpDeskController {
     UserRole.REGISTRATION_STAFF,
     UserRole.HELP_DESK,
     UserRole.SCANNER_STAFF,
+    UserRole.EMPLOYEE_ADMIN,
   )
   @ApiOperation({ summary: 'Manually check-in an attendee with mandatory justification' })
   async manualCheckin(@Body() dto: ManualCheckinDto, @Req() req: Request) {
@@ -57,7 +61,7 @@ export class HelpDeskController {
   }
 
   @Post(['void-checkin', 'checkin/:id/void'])
-  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE_ADMIN)
   @ApiOperation({ summary: 'Void an erroneous check-in record preserving full audit logs (Super/Event Admin only)' })
   async voidCheckin(
     @Param('id') paramId: string | undefined,

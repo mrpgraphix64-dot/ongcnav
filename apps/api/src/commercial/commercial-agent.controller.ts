@@ -19,6 +19,7 @@ import { AgentOfflineBookingDto } from './dto/agent-offline-booking.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePagePermission } from '../common/decorators/page-permission.decorator';
 import { UserRole } from '@ongc/shared-types';
 
 @ApiTags('Commercial Agent Operations')
@@ -141,6 +142,7 @@ export class CommercialAgentController {
 @Controller('admin/commercial')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.SUPER_ADMIN, UserRole.COMMERCIAL_ADMIN)
+@RequirePagePermission('commercial.agents', 'commercial.allocations')
 @ApiBearerAuth()
 export class CommercialAgentAdminController {
   constructor(private readonly agentService: CommercialAgentService) {}

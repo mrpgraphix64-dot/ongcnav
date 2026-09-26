@@ -1,7 +1,8 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { UserRole } from '@ongc/shared-types';
+import { UserRole, getDefaultPermissionsForRole } from '@ongc/shared-types';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { PAGE_PERMISSION_KEY } from '../decorators/page-permission.decorator';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -13,7 +14,13 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (!requiredRoles || requiredRoles.length === 0) {
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PAGE_PERMISSION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // If neither roles nor page permissions are restricted on this endpoint, allow access
+    if ((!requiredRoles || requiredRoles.length === 0) && (!requiredPermissions || requiredPermissions.length === 0)) {
       return true;
     }
 
@@ -29,11 +36,28 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    const hasRole = requiredRoles.includes(user.role);
-    if (!hasRole) {
-      throw new ForbiddenException(
-        `Unauthorized: Your role (${user.role}) does not have permission to perform this action.`,
-      );
+    // Check Role-level permissions if defined
+    if (requiredRoles && requiredRoles.length > 0) {
+      const hasRole = requiredRoles.includes(user.role);
+      if (!hasRole) {
+        throw new ForbiddenException(
+          `Unauthorized: Your role (${user.role}) does not have permission to perform this action.`,
+        );
+      }
+    }
+
+    // Check Page-level permissions if defined and user is domain admin (COMMERCIAL_ADMIN or EMPLOYEE_ADMIN)
+    if (requiredPermissions && requiredPermissions.length > 0) {
+      const roleUpper = (user.role || '').toUpperCase();
+      if (roleUpper === UserRole.COMMERCIAL_ADMIN || roleUpper === UserRole.EMPLOYEE_ADMIN) {
+        const userPermissions: string[] = user.pagePermissions ?? getDefaultPermissionsForRole(roleUpper);
+        const hasPermission = requiredPermissions.some((perm) => userPermissions.includes(perm));
+        if (!hasPermission) {
+          throw new ForbiddenException(
+            `Access Denied: Missing required page permission (${requiredPermissions.join(', ')}).`,
+          );
+        }
+      }
     }
 
     return true;

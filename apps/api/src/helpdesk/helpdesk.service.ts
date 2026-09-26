@@ -41,7 +41,10 @@ export class HelpDeskService {
     }
 
     const roleUpper = (userRole || '').toUpperCase();
-    const canViewCpf = ['SUPER_ADMIN', 'EVENT_ADMIN', 'ADMIN', 'REGISTRATION_STAFF', 'HELP_DESK'].includes(roleUpper);
+    if (roleUpper === 'COMMERCIAL_ADMIN') {
+      throw new ForbiddenException('Help Desk access is restricted to Employee Administration.');
+    }
+    const canViewCpf = ['SUPER_ADMIN', 'EVENT_ADMIN', 'ADMIN', 'REGISTRATION_STAFF', 'HELP_DESK', 'EMPLOYEE_ADMIN'].includes(roleUpper);
 
     const orConditions: any[] = [
       { ticketNumber: { contains: q, mode: 'insensitive' } },
@@ -56,12 +59,17 @@ export class HelpDeskService {
       orConditions.push({ employee: { cpf: { contains: q, mode: 'insensitive' } } });
     }
 
+    const whereClause: any = { OR: orConditions };
+    if (roleUpper === 'EMPLOYEE_ADMIN') {
+      whereClause.registrationType = 'EMPLOYEE';
+    }
+
     const activeDateSetting = await this.getSetting('active_event_date', 'event_control.active_event_date');
     const activeDate = activeDateSetting || this.getTodayIst();
 
     const [attendees, gates] = await Promise.all([
       this.prisma.attendee.findMany({
-        where: { OR: orConditions },
+        where: whereClause,
         take: 25,
         orderBy: { id: 'desc' },
         include: {

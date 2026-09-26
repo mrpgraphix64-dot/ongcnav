@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { fetchUserPagePermissions } from '../common/security/user-permissions.util';
+import { getDefaultPermissionsForRole } from '@ongc/shared-types';
 
 @Injectable()
 export class AuthService {
@@ -76,6 +78,7 @@ export class AuthService {
           name: 'Portal Administrator',
           role: 'SUPER_ADMIN',
           assignedGates: [],
+          pagePermissions: getDefaultPermissionsForRole('SUPER_ADMIN'),
         },
       };
     }
@@ -83,7 +86,7 @@ export class AuthService {
     throw new UnauthorizedException('Invalid credentials. Enter your registered Staff Email or Staff ID.');
   }
 
-  private generateTokenResponse(user: any) {
+  private async generateTokenResponse(user: any) {
     const payload = {
       sub: user.id.toString(),
       staffId: user.staffId,
@@ -93,6 +96,7 @@ export class AuthService {
     };
 
     const token = this.jwtService.sign(payload);
+    const pagePermissions = await fetchUserPagePermissions(this.prisma, user.id, user.role);
 
     return {
       accessToken: token,
@@ -103,6 +107,7 @@ export class AuthService {
         name: user.name,
         role: user.role,
         assignedGates: user.gateUsers ? user.gateUsers.map((gu: any) => gu.gate) : [],
+        pagePermissions,
       },
     };
   }

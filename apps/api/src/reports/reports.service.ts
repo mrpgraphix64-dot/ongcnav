@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CheckinStatus } from '@ongc/shared-types';
+import { CheckinStatus, UserRole, RegistrationType } from '@ongc/shared-types';
 import { sanitizeCsvValue } from './daily-closing.service';
 
 export interface ReportFilters {
@@ -24,9 +24,18 @@ export class ReportsService {
     });
   }
 
-  async buildReport(filters?: ReportFilters) {
+  async buildReport(filters?: ReportFilters, userRole?: string) {
     const attendeeWhere: any = {};
     const scanLogWhere: any = { isLoadTest: false };
+
+    const roleUpper = (userRole || '').toUpperCase();
+    if (roleUpper === 'COMMERCIAL_ADMIN') {
+      attendeeWhere.registrationType = 'COMMERCIAL';
+      scanLogWhere.attendee = { registrationType: 'COMMERCIAL' };
+    } else if (roleUpper === 'EMPLOYEE_ADMIN') {
+      attendeeWhere.registrationType = 'EMPLOYEE';
+      scanLogWhere.attendee = { registrationType: 'EMPLOYEE' };
+    }
 
     if (filters?.gate && filters.gate !== 'all') {
       const g = filters.gate;
@@ -279,9 +288,9 @@ export class ReportsService {
     };
   }
 
-  async getReportsPageData(filters?: ReportFilters) {
+  async getReportsPageData(filters?: ReportFilters, userRole?: string) {
     const [report, gates, staffList] = await Promise.all([
-      this.buildReport(filters),
+      this.buildReport(filters, userRole),
       this.prisma.gate.findMany({
         orderBy: { gateNumber: 'asc' },
         select: { id: true, name: true, gateNumber: true },
@@ -305,8 +314,8 @@ export class ReportsService {
     };
   }
 
-  async exportCsv(filters?: ReportFilters, requestedSections?: string[]): Promise<string> {
-    const report = await this.buildReport(filters);
+  async exportCsv(filters?: ReportFilters, requestedSections?: string[], userRole?: string): Promise<string> {
+    const report = await this.buildReport(filters, userRole);
     const sections = requestedSections || [
       'categories',
       'attendees',
@@ -346,7 +355,16 @@ export class ReportsService {
         'Gate',
         'Checked In At (IST)',
       ]);
+      const roleUpper = (userRole || '').toUpperCase();
+      const attendeeExportWhere: any = {};
+      if (roleUpper === 'COMMERCIAL_ADMIN') {
+        attendeeExportWhere.registrationType = 'COMMERCIAL';
+      } else if (roleUpper === 'EMPLOYEE_ADMIN') {
+        attendeeExportWhere.registrationType = 'EMPLOYEE';
+      }
+
       const attendees = await this.prisma.attendee.findMany({
+        where: attendeeExportWhere,
         take: 2000,
         orderBy: { id: 'asc' },
         include: {
@@ -446,8 +464,8 @@ export class ReportsService {
   }
 
   // Dashboard summary compatibility method
-  async getSummary(date?: string) {
-    const res = await this.getReportsPageData({ event_date: date });
+  async getSummary(date?: string, userRole?: string) {
+    const res = await this.getReportsPageData({ event_date: date }, userRole);
     return {
       targetDate: date || this.getTodayIst(),
       totalRegisteredPasses: res.totalAttendees,
@@ -464,9 +482,20 @@ export class ReportsService {
     };
   }
 
-  async getCheckinsCsvData(date: string) {
+  async getCheckinsCsvData(date: string, userRole?: string) {
+    const attendeeWhere: any = {};
+    if (userRole === UserRole.COMMERCIAL_ADMIN) {
+      attendeeWhere.registrationType = RegistrationType.COMMERCIAL;
+    } else if (userRole === UserRole.EMPLOYEE_ADMIN) {
+      attendeeWhere.registrationType = RegistrationType.EMPLOYEE;
+    }
+
     const checkins = await this.prisma.dailyCheckin.findMany({
-      where: { eventDate: date, isLoadTest: false },
+      where: {
+        eventDate: date,
+        isLoadTest: false,
+        ...(Object.keys(attendeeWhere).length > 0 ? { attendee: attendeeWhere } : {}),
+      },
       include: {
         attendee: { include: { employee: true, familyMember: true } },
         gate: true,
@@ -480,11 +509,11 @@ export class ReportsService {
       Name: c.attendee?.name || '',
       Relation: c.attendee?.familyMember ? 'Family' : (c.attendee?.employee ? 'Employee' : 'Commercial'),
       RegistrationType: c.attendee?.registrationType || 'EMPLOYEE',
-      CPF: c.attendee?.employee?.cpf || '',
+      CPF: userRole === UserRole.COMMERCIAL_ADMIN ? '' : (c.attendee?.employee?.cpf || ''),
       Phone: c.attendee?.mobile || '',
-      Designation: c.attendee?.employee?.designation || '',
-      Department: c.attendee?.employee?.department || '',
-      EmployeeCategory: c.attendee?.employee?.employeeCategory || '',
+      Designation: userRole === UserRole.COMMERCIAL_ADMIN ? '' : (c.attendee?.employee?.designation || ''),
+      Department: userRole === UserRole.COMMERCIAL_ADMIN ? '' : (c.attendee?.employee?.department || ''),
+      EmployeeCategory: userRole === UserRole.COMMERCIAL_ADMIN ? '' : (c.attendee?.employee?.employeeCategory || ''),
       Gate: c.gate?.name || '',
       ScannedBy: c.scannedBy?.name || '',
       EventDate: c.eventDate,

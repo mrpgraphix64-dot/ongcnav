@@ -23,6 +23,7 @@ import {
   Hash,
   Shield,
   Trash2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser, setStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
@@ -166,12 +167,27 @@ export default function AdminStaffPage() {
   const [resettingPwd, setResettingPwd] = useState(false);
   const [resetPwdError, setResetPwdError] = useState<string | null>(null);
 
+  // Manage Page Access Modal State
+  const [showPageAccessModal, setShowPageAccessModal] = useState(false);
+  const [pageAccessStaff, setPageAccessStaff] = useState<StaffRecord | null>(null);
+  const [pageAccessLoading, setPageAccessLoading] = useState(false);
+  const [pageAccessSaving, setPageAccessSaving] = useState(false);
+  const [pageAccessError, setPageAccessError] = useState<string | null>(null);
+  const [availablePermissions, setAvailablePermissions] = useState<
+    Array<{ key: string; label: string; description: string; domain: string; routes: string[] }>
+  >([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [isDefaultPermissions, setIsDefaultPermissions] = useState(true);
+
   // Handle ESC key to dismiss any active modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showBulkDeleteModal) {
           setShowBulkDeleteModal(false);
+        } else if (showPageAccessModal) {
+          setShowPageAccessModal(false);
+          setPageAccessError(null);
         } else if (staffToDelete) {
           setStaffToDelete(null);
           setStaffDeleteError(null);
@@ -191,7 +207,7 @@ export default function AdminStaffPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showBulkDeleteModal, staffToDelete, staffToToggle, staffToResetPwd, showEditModal, showCreateModal]);
+  }, [showBulkDeleteModal, showPageAccessModal, staffToDelete, staffToToggle, staffToResetPwd, showEditModal, showCreateModal]);
 
   const loadData = useCallback(async () => {
     try {
@@ -497,6 +513,54 @@ export default function AdminStaffPage() {
     }
   };
 
+  // Manage Page Access Handlers
+  const openPageAccessModal = async (staff: StaffRecord) => {
+    setPageAccessStaff(staff);
+    setShowPageAccessModal(true);
+    setPageAccessLoading(true);
+    setPageAccessError(null);
+    try {
+      const res = await fetchApi<any>(`/admin/staff/${staff.id}/page-permissions`);
+      if (res) {
+        setAvailablePermissions(res.availablePermissions || []);
+        setSelectedPermissions(res.assignedPermissions || []);
+        setIsDefaultPermissions(Boolean(res.isDefault));
+      }
+    } catch (err: any) {
+      setPageAccessError(err.message || 'Failed to load page access permissions.');
+    } finally {
+      setPageAccessLoading(false);
+    }
+  };
+
+  const togglePermission = (key: string) => {
+    setSelectedPermissions((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const handleSavePagePermissions = async () => {
+    if (!pageAccessStaff) return;
+    setPageAccessSaving(true);
+    setPageAccessError(null);
+    try {
+      await fetchApi(`/admin/staff/${pageAccessStaff.id}/page-permissions`, {
+        method: 'PUT',
+        body: JSON.stringify({ permissions: selectedPermissions }),
+      });
+      setMsg({
+        text: `Page access permissions for '${pageAccessStaff.name}' saved successfully.`,
+        type: 'success',
+      });
+      setShowPageAccessModal(false);
+      loadData();
+    } catch (err: any) {
+      setPageAccessError(err.message || 'Failed to update page access permissions.');
+    } finally {
+      setPageAccessSaving(false);
+    }
+  };
+
   // Format timestamp
   const formatTimeAgo = (isoString?: string | null) => {
     if (!isoString) return 'No activity yet';
@@ -667,8 +731,12 @@ export default function AdminStaffPage() {
                     </div>
                   )}
                   <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
-                    <span>Domain: <strong className="text-stone-700">E-Pass</strong></span>
+                    <span>Domain: <strong className="text-stone-700">E-Pass (Commercial)</strong></span>
                     <span>Last active: {formatTimeAgo(ePassAdmin.last_activity_at)}</span>
+                  </div>
+                  <div className="text-[10px] bg-stone-50 p-2 rounded border border-stone-100 space-y-0.5 mt-1">
+                    <div className="text-emerald-700 font-semibold">Allowed: /admin, /admin/commercial/* (Desk Role — Scanner Excluded)</div>
+                    <div className="text-rose-600 font-medium">Restricted: Employee Passes, CPF, Family, Bulk Upload, Help Desk, Daily Closing, Global Settings</div>
                   </div>
                 </div>
 
@@ -678,6 +746,14 @@ export default function AdminStaffPage() {
                     E-Pass Admin already exists
                   </span>
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openPageAccessModal(ePassAdmin)}
+                      className="px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-semibold text-xs transition-colors flex items-center gap-1 shadow-2xs"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Page Access</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => openEditModal(ePassAdmin)}
@@ -773,8 +849,12 @@ export default function AdminStaffPage() {
                     </div>
                   )}
                   <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
-                    <span>Domain: <strong className="text-stone-700">Employee</strong></span>
+                    <span>Domain: <strong className="text-stone-700">Employee Registrations</strong></span>
                     <span>Last active: {formatTimeAgo(employeeAdmin.last_activity_at)}</span>
+                  </div>
+                  <div className="text-[10px] bg-stone-50 p-2 rounded border border-stone-100 space-y-0.5 mt-1">
+                    <div className="text-emerald-700 font-semibold">Allowed: /admin, /admin/attendees, /admin/bulk-upload, /admin/helpdesk, /admin/daily-closing, /admin/reports (Desk Role — Scanner Excluded)</div>
+                    <div className="text-rose-600 font-medium">Restricted: Commercial Orders, Agents, Allocations, Inventory, Razorpay Data, Global Settings</div>
                   </div>
                 </div>
 
@@ -784,6 +864,14 @@ export default function AdminStaffPage() {
                     Employee Admin already exists
                   </span>
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openPageAccessModal(employeeAdmin)}
+                      className="px-2.5 py-1 rounded-lg border border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100 font-semibold text-xs transition-colors flex items-center gap-1 shadow-2xs"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-blue-700" />
+                      <span>Page Access</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => openEditModal(employeeAdmin)}
@@ -1085,6 +1173,18 @@ export default function AdminStaffPage() {
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
+
+                          {/* Manage Page Access for Domain Admins */}
+                          {(staff.role === 'COMMERCIAL_ADMIN' || staff.role === 'EMPLOYEE_ADMIN') && (
+                            <button
+                              onClick={() => openPageAccessModal(staff)}
+                              type="button"
+                              className="p-1.5 rounded-lg text-amber-600 hover:text-amber-800 hover:bg-amber-50 transition-colors"
+                              title="Manage Domain Page Access"
+                            >
+                              <SlidersHorizontal className="w-4 h-4" />
+                            </button>
+                          )}
 
                           {/* Reset Password */}
                           <button
@@ -2021,6 +2121,208 @@ export default function AdminStaffPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MANAGE PAGE ACCESS MODAL */}
+      {mounted && showPageAccessModal && pageAccessStaff && createPortal(
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto bg-stone-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !pageAccessSaving) {
+              setShowPageAccessModal(false);
+              setPageAccessError(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 sm:space-y-5 border border-stone-200 shadow-2xl my-auto animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-outfit font-bold text-lg text-stone-900 leading-tight">
+                    Manage Page Access
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    {pageAccessStaff.name} &bull;{' '}
+                    <span className="font-semibold text-stone-700">
+                      {ROLES_MAP[pageAccessStaff.role] || pageAccessStaff.role}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPageAccessModal(false);
+                  setPageAccessError(null);
+                }}
+                disabled={pageAccessSaving}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg hover:bg-stone-100 transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Error banner */}
+            {pageAccessError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2 shrink-0">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{pageAccessError}</span>
+              </div>
+            )}
+
+            {/* Domain Security Notice */}
+            <div className="p-3 bg-[#FAF7F2] border border-stone-200 rounded-xl text-xs text-stone-700 shrink-0 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-stone-900 flex items-center gap-1.5 font-outfit uppercase tracking-wider text-[11px]">
+                  <Shield className="w-3.5 h-3.5 text-[#7A1113]" />
+                  Domain: {pageAccessStaff.role === 'COMMERCIAL_ADMIN' ? 'E-Pass (Commercial)' : 'Employee Registrations'}
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  Strict Domain Boundary
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-500 leading-relaxed">
+                {pageAccessStaff.role === 'COMMERCIAL_ADMIN'
+                  ? 'Permitted pages are strictly isolated to the E-Pass domain. Cross-domain assignment of Employee registrations, CSV bulk uploads, or Global system settings is permanently forbidden by backend policy.'
+                  : 'Permitted pages are strictly isolated to the Employee domain. Cross-domain assignment of Commercial orders, Razorpay audit, agent inventory, or Global system settings is permanently forbidden by backend policy.'}
+              </p>
+            </div>
+
+            {/* Content Area */}
+            {pageAccessLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2">
+                <RefreshCw className="w-6 h-6 animate-spin text-[#7A1113]" />
+                <span className="text-xs text-stone-500 font-medium">Loading page permissions...</span>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                {/* Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-stone-100 text-xs">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPermissions(availablePermissions.map((p) => p.key))}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 font-semibold transition-colors shadow-2xs"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPermissions([])}
+                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 font-semibold transition-colors shadow-2xs"
+                    >
+                      Deselect All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPermissions(availablePermissions.map((p) => p.key))}
+                      className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 font-semibold transition-colors shadow-2xs"
+                    >
+                      Reset to Defaults
+                    </button>
+                  </div>
+                  <span className="text-stone-500 font-medium">
+                    <strong className="text-stone-900">{selectedPermissions.length}</strong> of{' '}
+                    {availablePermissions.length} pages enabled
+                  </span>
+                </div>
+
+                {/* Grouped Permission Checkboxes */}
+                <div className="space-y-3">
+                  <h4 className="text-[11px] font-black uppercase tracking-wider text-stone-500 font-outfit">
+                    {pageAccessStaff.role === 'COMMERCIAL_ADMIN' ? 'E-Pass Admin Pages' : 'Employee Admin Pages'}
+                  </h4>
+
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {availablePermissions.map((perm) => {
+                      const isChecked = selectedPermissions.includes(perm.key);
+                      return (
+                        <label
+                          key={perm.key}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 select-none ${
+                            isChecked
+                              ? 'bg-amber-50/50 border-amber-300 shadow-2xs'
+                              : 'bg-white border-stone-200 hover:border-stone-300 opacity-70 hover:opacity-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => togglePermission(perm.key)}
+                            className="mt-0.5 rounded border-stone-300 text-[#7A1113] focus:ring-[#7A1113] cursor-pointer"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-xs text-stone-900 font-outfit">
+                                {perm.label}
+                              </span>
+                              <span className="text-[10px] font-mono text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded">
+                                {perm.key}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">
+                              {perm.description}
+                            </p>
+                            {perm.routes && perm.routes.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {perm.routes.map((route) => (
+                                  <span
+                                    key={route}
+                                    className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200"
+                                  >
+                                    {route}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPageAccessModal(false);
+                  setPageAccessError(null);
+                }}
+                disabled={pageAccessSaving}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePagePermissions}
+                disabled={pageAccessSaving || pageAccessLoading}
+                className="px-5 py-2.5 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {pageAccessSaving ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving Permissions...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Save Page Permissions</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>,
         document.body

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { setStoredAuthUser } from '@/lib/auth-session';
+import { isRoutePermittedForRole } from '@ongc/shared-types';
 import PasswordInput from '@/components/PasswordInput';
 
 function AdminLoginForm() {
@@ -28,7 +29,6 @@ function AdminLoginForm() {
     if (e) e.preventDefault();
     setError(null);
     setLoading(true);
-
     try {
       const res = await fetchApi('/auth/login', {
         method: 'POST',
@@ -47,7 +47,7 @@ function AdminLoginForm() {
         router.push('/agent');
       } else if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
         router.push('/scanner');
-      } else if (redirectUrl && redirectUrl.startsWith('/admin')) {
+      } else if (redirectUrl && redirectUrl.startsWith('/admin') && isRoutePermittedForRole(redirectUrl, role)) {
         router.push(redirectUrl);
       } else {
         router.push('/admin');

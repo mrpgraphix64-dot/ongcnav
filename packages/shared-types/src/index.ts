@@ -270,3 +270,5 @@ export type OfficialEventDate = (typeof OFFICIAL_EVENT_DATES)[number];
 export function isOfficialEventDate(date: string): date is OfficialEventDate {
   return (OFFICIAL_EVENT_DATES as readonly string[]).includes(date);
 }
+
+export * from './admin-page-access';
