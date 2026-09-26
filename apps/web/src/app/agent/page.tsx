@@ -515,9 +515,20 @@ export default function CommercialAgentPortal() {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {errorMsg && (
-          <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <span>{errorMsg}</span>
+          <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
+              <span>{errorMsg}</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-xs font-semibold shrink-0">
+              <Link href="/admin/login" className="text-maroon hover:underline">
+                Sign In
+              </Link>
+              <span className="text-stone-300">&bull;</span>
+              <Link href="/forgot-password" className="text-maroon hover:underline">
+                Forgot Password?
+              </Link>
+            </div>
           </div>
         )}
 

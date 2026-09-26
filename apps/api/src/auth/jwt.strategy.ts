@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { PasswordResetService } from './password-reset.service';
 import { getRequiredJwtSecret } from '../common/security/jwt-secret.util';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly passwordResetService: PasswordResetService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
@@ -24,6 +26,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     if (!payload || !payload.sub) {
       throw new UnauthorizedException();
+    }
+
+    if (payload.purpose === 'password_reset') {
+      throw new UnauthorizedException(
+        'Password reset authorization tokens cannot authenticate application APIs.',
+      );
+    }
+
+    const isRevoked = await this.passwordResetService.isTokenRevoked(payload.sub, payload.iat);
+    if (isRevoked) {
+      throw new UnauthorizedException(
+        'Session expired due to a recent password reset. Please sign in again.',
+      );
     }
 
     const user = await this.prisma.user.findUnique({

@@ -59,7 +59,7 @@ describe('CommercialService', () => {
       sendEmail: jest.fn().mockResolvedValue({ success: true }),
       sendCommercialTicketEmail: jest.fn().mockResolvedValue({ success: true }),
       isLiveMailConfigured: jest.fn().mockReturnValue(true),
-      getMailboxAddress: jest.fn().mockReturnValue('tickets@ongcnavratri.tech'),
+      getMailboxAddress: jest.fn().mockReturnValue('ticket@ongcnavratri.tech'),
     };
 
     razorpay = {

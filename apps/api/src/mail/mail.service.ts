@@ -22,7 +22,7 @@ export class MailService {
   constructor(private readonly configService: ConfigService) {
     this.apiKey = (this.configService.get<string>('HOSTINGER_MAIL_API_KEY') || '').trim();
     this.mailbox = (
-      this.configService.get<string>('HOSTINGER_MAILBOX') || 'tickets@ongcnavratri.tech'
+      this.configService.get<string>('HOSTINGER_MAILBOX') || 'ticket@ongcnavratri.tech'
     ).trim();
     this.baseUrl = (
       this.configService.get<string>('HOSTINGER_MAIL_API_BASE_URL') || 'https://api.mail.hostinger.com'
@@ -181,7 +181,7 @@ export class MailService {
       // Hostinger Mail API returns 204 No Content on successful message dispatch
       if (response.status === 204 || response.ok) {
         const masked = this.maskEmail(recipients[0]);
-        this.logger.log(`Transactional ticket email successfully dispatched to ${masked}.`);
+        this.logger.log(`Transactional email successfully dispatched to ${masked}.`);
         return { success: true };
       }
 
@@ -532,9 +532,126 @@ Need assistance? Contact us at: ${this.mailbox}
   }
 
   /**
+   * Sends the official password reset OTP email
+   */
+  async sendPasswordResetOtpEmail(to: string, otp: string): Promise<MailSendResult> {
+    const textContent = `
+Hello,
+
+We received a request to reset your ONGC Navratri account password.
+
+Your password reset OTP is:
+
+${otp}
+
+This OTP expires in 10 minutes.
+
+Do not share this OTP with anyone.
+
+If you did not request a password reset, you can safely ignore this email.
+
+Regards,
+ONGC Navratri Team
+    `.trim();
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Your ONGC Navratri Account Password Reset OTP</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #FAF6EF; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #2A1810;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FAF6EF; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 540px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
+          <!-- HEADER -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #7A1930 0%, #5A0F21 100%); padding: 28px 24px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
+              <div style="font-size: 11px; font-weight: bold; letter-spacing: 2px; color: #F5E6B3; text-transform: uppercase;">
+                Oil and Natural Gas Corporation Ltd.
+              </div>
+              <h1 style="margin: 6px 0 0 0; font-size: 22px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.5px;">
+                ONGC NAVRATRI 2026
+              </h1>
+              <p style="margin: 4px 0 0 0; font-size: 13px; color: #F5E6B3;">
+                Account Security &bull; Entry Control Portal
+              </p>
+            </td>
+          </tr>
+
+          <!-- BODY -->
+          <tr>
+            <td style="padding: 28px 24px;">
+              <p style="font-size: 15px; margin: 0 0 14px 0; color: #2A1810; font-weight: 600;">
+                Hello,
+              </p>
+              <p style="font-size: 14px; line-height: 1.6; color: #4A3B32; margin: 0 0 20px 0;">
+                We received a request to reset your ONGC Navratri account password.
+              </p>
+
+              <!-- OTP CARD -->
+              <div style="background: linear-gradient(145deg, #FAF5F0 0%, #F5EFEB 100%); border: 2px dashed #D4AF37; border-radius: 14px; padding: 24px 16px; margin: 0 0 20px 0; text-align: center;">
+                <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #7A1930; margin-bottom: 8px;">
+                  Your Password Reset OTP
+                </div>
+                <div style="font-family: 'Courier New', Courier, monospace; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #5A0F21; padding: 6px 0;">
+                  ${this.escapeHtml(otp)}
+                </div>
+                <div style="font-size: 12px; font-weight: 600; color: #92400E; margin-top: 8px;">
+                  &#x23F1; This OTP expires in <strong>10 minutes</strong>
+                </div>
+              </div>
+
+              <!-- NOTICE -->
+              <div style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 10px; padding: 12px 16px; margin: 0 0 20px 0; font-size: 13px; color: #92400E; font-weight: 500; line-height: 1.5;">
+                &#x1F512; <strong>Security Notice:</strong> Do not share this OTP with anyone. ONGC staff will never ask for your OTP or password.
+              </div>
+
+              <p style="font-size: 13px; line-height: 1.6; color: #6E5C50; margin: 0 0 20px 0;">
+                If you did not request a password reset, you can safely ignore this email. Your current password remains active and secure.
+              </p>
+
+              <p style="font-size: 14px; margin: 0; color: #2A1810;">
+                Regards,<br>
+                <strong>ONGC Navratri Team</strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color: #2A1810; padding: 20px; text-align: center; color: #E5D5BA; font-size: 11px; line-height: 1.5;">
+              <p style="margin: 0 0 4px 0; font-weight: bold; color: #FFFFFF;">
+                ONGC Navratri 2026 Organizing Committee
+              </p>
+              <p style="margin: 0; color: #A69080;">
+                This is an automated transactional security message. Please do not reply directly to this email.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim();
+
+    return this.sendEmail({
+      to,
+      subject: 'Your ONGC Navratri Account Password Reset OTP',
+      html: htmlContent,
+      text: textContent,
+      displayName: 'ONGC Navratri 2026',
+    });
+  }
+
+  /**
    * Helper to safely mask customer email for logs (e.g. j***e@example.com)
    */
-  private maskEmail(email: string): string {
+  maskEmail(email: string): string {
     if (!email) return '***';
     const parts = email.split('@');
     if (parts.length !== 2) return '***@***';

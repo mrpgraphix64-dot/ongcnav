@@ -18,7 +18,7 @@ describe('MailService (Hostinger Mail API)', () => {
 
   describe('When HOSTINGER_MAIL_API_KEY is configured', () => {
     const mockApiKey = 'mock_hostinger_api_key_test_token';
-    const mockMailbox = 'tickets@ongcnavratri.tech';
+    const mockMailbox = 'ticket@ongcnavratri.tech';
     const mockBaseUrl = 'https://api.mail.hostinger.com';
 
     beforeEach(async () => {
@@ -63,7 +63,7 @@ describe('MailService (Hostinger Mail API)', () => {
             mailboxes: [
               {
                 resourceId: 'AC_TEST_MAILBOX_1',
-                address: 'tickets@ongcnavratri.tech',
+                address: 'ticket@ongcnavratri.tech',
               },
             ],
           },
@@ -141,7 +141,7 @@ describe('MailService (Hostinger Mail API)', () => {
         status: 200,
         json: async () => ({
           data: {
-            mailboxes: [{ resourceId: 'AC_TEST_MAILBOX_1', address: 'tickets@ongcnavratri.tech' }],
+            mailboxes: [{ resourceId: 'AC_TEST_MAILBOX_1', address: 'ticket@ongcnavratri.tech' }],
           },
         }),
       });
@@ -201,7 +201,7 @@ describe('MailService (Hostinger Mail API)', () => {
         status: 200,
         json: async () => ({
           data: {
-            mailboxes: [{ resourceId: 'AC_TEST_1', address: 'tickets@ongcnavratri.tech' }],
+            mailboxes: [{ resourceId: 'AC_TEST_1', address: 'ticket@ongcnavratri.tech' }],
           },
         }),
       });
@@ -240,6 +240,49 @@ describe('MailService (Hostinger Mail API)', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('timed out');
+    });
+
+    it('sends password reset OTP email with required text and formatting', async () => {
+      const mockFetch = jest.fn();
+      global.fetch = mockFetch;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            mailboxes: [{ resourceId: 'AC_TEST_MAILBOX_1', address: 'ticket@ongcnavratri.tech' }],
+          },
+        }),
+      });
+
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 204 });
+
+      const result = await service.sendPasswordResetOtpEmail('admin@ongc.co.in', '654321');
+
+      expect(result.success).toBe(true);
+      const [, sendOptions] = mockFetch.mock.calls[1];
+      const body = JSON.parse(sendOptions.body);
+
+      expect(body.to).toEqual(['admin@ongc.co.in']);
+      expect(body.subject).toBe('Your ONGC Navratri Account Password Reset OTP');
+      expect(body.html).toContain('654321');
+      expect(body.html).toContain('This OTP expires in');
+      expect(body.html).toContain('10 minutes');
+      expect(body.html).toContain('Do not share this OTP with anyone.');
+      expect(body.html).toContain('ONGC Navratri Team');
+      expect(body.text).toContain('Hello,');
+      expect(body.text).toContain('We received a request to reset your ONGC Navratri account password.');
+      expect(body.text).toContain('654321');
+      expect(body.text).toContain('This OTP expires in 10 minutes.');
+      expect(body.text).toContain('Do not share this OTP with anyone.');
+      expect(body.text).toContain('If you did not request a password reset, you can safely ignore this email.');
+      expect(body.text).toContain('ONGC Navratri Team');
+
+      // Verify no sensitive internal fields exist
+      expect(body.html).not.toContain('SUPER_ADMIN');
+      expect(body.html).not.toContain('staffId');
+      expect(body.html).not.toContain('agentId');
     });
   });
 
@@ -312,7 +355,7 @@ describe('MailService (Hostinger Mail API)', () => {
             useValue: {
               get: jest.fn((key: string) => {
                 if (key === 'HOSTINGER_MAIL_API_KEY') return secretKey;
-                if (key === 'HOSTINGER_MAILBOX') return 'tickets@ongcnavratri.tech';
+                if (key === 'HOSTINGER_MAILBOX') return 'ticket@ongcnavratri.tech';
                 return undefined;
               }),
             },

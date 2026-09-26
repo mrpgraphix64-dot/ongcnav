@@ -43,6 +43,8 @@ export default function AdminLoginPage() {
       const role = String(res?.user?.role || '').toUpperCase();
       if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
         router.push('/scanner');
+      } else if (role === 'COMMERCIAL_AGENT' || role === 'COMMERCIAL_SUB_AGENT') {
+        router.push('/agent');
       } else {
         router.push('/admin');
       }
@@ -134,9 +136,17 @@ export default function AdminLoginPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-ink-soft mb-1.5">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-ink-soft">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-semibold text-maroon hover:text-maroon-dark transition-colors"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input
