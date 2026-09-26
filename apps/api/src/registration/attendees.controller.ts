@@ -138,7 +138,7 @@ export class AttendeesController {
   async bulkDestroy(@Body('ids') rawIds: (string | number)[], @Req() req?: Request) {
     const user = req ? (req as any).user : undefined;
     const ids = (rawIds || []).map((id) => BigInt(id));
-    return this.attendeesService.bulkDestroy(ids, user?.role);
+    return this.attendeesService.bulkDestroy(ids, user);
   }
 
   @Post('bulk/validate')
@@ -241,7 +241,7 @@ export class AttendeesController {
   @ApiOperation({ summary: 'Delete a single attendee' })
   async destroy(@Param('id') id: string, @Req() req?: Request) {
     const user = req ? (req as any).user : undefined;
-    return this.attendeesService.destroy(BigInt(id), user?.role);
+    return this.attendeesService.destroy(BigInt(id), user);
   }
 
   @Get('employees/:id/photo')

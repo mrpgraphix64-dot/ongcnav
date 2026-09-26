@@ -1,8 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AttendeesService } from './attendees.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendeeStatus, EmployeeCategory, RegistrationType } from '@ongc/shared-types';
+import { AttendeeStatus, EmployeeCategory, OrderStatus, PaymentStatus, RegistrationType, UserRole } from '@ongc/shared-types';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  isAdminTestDataDeleteEnabled,
+  isStagingTestOrder,
+} from '../commercial/commercial-test-payment.util';
 
 describe('AttendeesService Parity & Functional Tests', () => {
   let service: AttendeesService;
@@ -75,6 +79,8 @@ describe('AttendeesService Parity & Functional Tests', () => {
       commercialOrder: {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
+        delete: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       attendee: {
         groupBy: jest.fn().mockResolvedValue([]),
@@ -118,9 +124,23 @@ describe('AttendeesService Parity & Functional Tests', () => {
         ),
         delete: jest.fn().mockResolvedValue(mockAttendee),
         deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       dailyCheckin: {
         count: jest.fn().mockResolvedValue(5),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      scanLog: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      auditLog: {
+        create: jest.fn().mockResolvedValue({ id: BigInt(1) }),
+      },
+      paymentWebhookEvent: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      allocationEvent: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       $transaction: jest.fn().mockImplementation(async (cb) => {
         if (typeof cb === 'function') return cb(prisma);
@@ -454,6 +474,338 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
       const res = await service.index({ page: 1, limit: 10 });
       expect(res.primaryAttendees).toHaveLength(1);
       expect(res.primaryAttendees[0].email).toBeFalsy();
+    });
+  });
+
+  describe('Temporary SUPER_ADMIN Test-Data Deletion & Safety Mode', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalFlag = process.env.ADMIN_TEST_DATA_DELETE_ENABLED;
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalNodeEnv;
+      process.env.ADMIN_TEST_DATA_DELETE_ENABLED = originalFlag;
+      jest.clearAllMocks();
+    });
+
+    describe('Security Helpers & Classification', () => {
+      it('isAdminTestDataDeleteEnabled enforces strict production failsafe', () => {
+        expect(isAdminTestDataDeleteEnabled('production', 'true')).toBe(false);
+        expect(isAdminTestDataDeleteEnabled('staging', 'false')).toBe(false);
+        expect(isAdminTestDataDeleteEnabled('staging', 'true')).toBe(true);
+        expect(isAdminTestDataDeleteEnabled('development', 'true')).toBe(true);
+        expect(isAdminTestDataDeleteEnabled('test', 'true')).toBe(true);
+      });
+
+      it('isStagingTestAttendee strictly rejects employee and real passes', () => {
+        const employeeAtt = {
+          id: BigInt(10),
+          registrationType: RegistrationType.EMPLOYEE,
+          employeeId: BigInt(5),
+          order: null,
+        };
+        expect(service.isStagingTestAttendee(employeeAtt)).toBe(false);
+
+        const familyAtt = {
+          id: BigInt(11),
+          registrationType: RegistrationType.COMMERCIAL,
+          familyMemberId: BigInt(7),
+          order: null,
+        };
+        expect(service.isStagingTestAttendee(familyAtt)).toBe(false);
+
+        const realCommercialAtt = {
+          id: BigInt(12),
+          registrationType: RegistrationType.COMMERCIAL,
+          order: {
+            id: BigInt(100),
+            orderNumber: 'ORD-REAL-001',
+            orderStatus: OrderStatus.PAID,
+            paymentStatus: PaymentStatus.CAPTURED,
+            razorpayPaymentId: 'pay_live_real_12345',
+            metadata: {},
+          },
+        };
+        expect(service.isStagingTestAttendee(realCommercialAtt)).toBe(false);
+
+        const testCommercialAtt = {
+          id: BigInt(13),
+          registrationType: RegistrationType.COMMERCIAL,
+          order: {
+            id: BigInt(101),
+            orderNumber: 'ORD-TEST-001',
+            orderStatus: OrderStatus.PAID,
+            paymentStatus: PaymentStatus.CAPTURED,
+            razorpayPaymentId: 'TEST_PAY_12345',
+            metadata: { isTestPayment: true, testMode: 'STAGING_TEST_PAYMENT' },
+          },
+        };
+        expect(service.isStagingTestAttendee(testCommercialAtt)).toBe(true);
+      });
+    });
+
+    describe('Single Attendee Deletion (destroy)', () => {
+      const mockTestOrder = {
+        id: BigInt(700),
+        orderNumber: 'ORD-TEST-700',
+        orderStatus: OrderStatus.PAID,
+        paymentStatus: PaymentStatus.CAPTURED,
+        razorpayOrderId: 'TEST_ORD_700',
+        razorpayPaymentId: 'TEST_PAY_700',
+        metadata: { isTestPayment: true },
+        amountPaise: 10000,
+        quantity: 1,
+        ticketType: 'DAILY',
+        customerName: 'Test Buyer',
+        customerMobile: '9988776655',
+        customerEmail: 'test@example.com',
+      };
+
+      const mockTestAttendee = {
+        id: BigInt(701),
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Test Buyer',
+        mobile: '9988776655',
+        email: 'test@example.com',
+        ticketNumber: 'TK-TEST-701',
+        qrCodeToken: 'test-token-do-not-log-raw',
+        category: 'Daily Pass',
+        orderId: BigInt(700),
+        employeeId: null,
+        familyMemberId: null,
+        status: AttendeeStatus.ACTIVE,
+        dailyCheckins: [{ id: BigInt(1) }],
+        scanLogs: [{ id: BigInt(2) }],
+        order: mockTestOrder,
+      };
+
+      it('allows SUPER_ADMIN to permanently delete a staging test attendee with cascade cleanup and safe audit log', async () => {
+        process.env.NODE_ENV = 'staging';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'true';
+
+        prisma.attendee.findUnique.mockResolvedValueOnce(mockTestAttendee);
+        prisma.attendee.count.mockResolvedValueOnce(0); // 0 remaining attendees for order 700
+
+        const res = await service.destroy(BigInt(701), { id: BigInt(99), role: UserRole.SUPER_ADMIN });
+
+        expect(res.success).toBe(true);
+        expect(res.action).toBe('deleted');
+        expect(res.isTestCleanup).toBe(true);
+
+        // Verify cascade deletion of checkins and scans for this attendee
+        expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+          where: { attendeeId: BigInt(701) },
+        });
+        expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({
+          where: { attendeeId: BigInt(701) },
+        });
+        expect(prisma.attendee.delete).toHaveBeenCalledWith({
+          where: { id: BigInt(701) },
+        });
+
+        // Verify order cleanup when 0 attendees remain
+        expect(prisma.commercialOrder.delete).toHaveBeenCalledWith({
+          where: { id: BigInt(700) },
+        });
+
+        // Verify safe audit log
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              action: 'TEST_ATTENDEE_DELETED',
+              details: expect.objectContaining({
+                attendeeId: '701',
+                ticketNumber: 'TK-TEST-701',
+                orderNumber: 'ORD-TEST-700',
+              }),
+            }),
+          }),
+        );
+
+        // Verify NO raw QR code tokens in audit log
+        const auditCallArg = prisma.auditLog.create.mock.calls[0][0];
+        expect(auditCallArg.data.details).not.toHaveProperty('qrCodeToken');
+        expect(JSON.stringify(auditCallArg.data.details)).not.toContain('test-token-do-not-log-raw');
+      });
+
+      it('preserves sibling passes on the test order if other passes remain', async () => {
+        process.env.NODE_ENV = 'staging';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'true';
+
+        prisma.attendee.findUnique.mockResolvedValueOnce(mockTestAttendee);
+        // Sibling safety: 2 attendees remain for this order!
+        prisma.attendee.count.mockResolvedValueOnce(2);
+
+        const res = await service.destroy(BigInt(701), { id: BigInt(99), role: UserRole.SUPER_ADMIN });
+
+        expect(res.success).toBe(true);
+        expect(prisma.attendee.delete).toHaveBeenCalledWith({ where: { id: BigInt(701) } });
+        // Order must NOT be deleted because siblings remain
+        expect(prisma.commercialOrder.delete).not.toHaveBeenCalled();
+      });
+
+      it('never deletes employee attendee via test bypass even if SUPER_ADMIN and flag is true', async () => {
+        process.env.NODE_ENV = 'staging';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'true';
+
+        const employeeWithCheckin = {
+          id: BigInt(801),
+          registrationType: RegistrationType.EMPLOYEE,
+          name: 'Employee John',
+          ticketNumber: 'TK-EMP-801',
+          employeeId: BigInt(50),
+          familyMemberId: null,
+          dailyCheckins: [{ id: BigInt(1) }],
+          scanLogs: [],
+          order: null,
+        };
+
+        prisma.attendee.findUnique.mockResolvedValueOnce(employeeWithCheckin);
+
+        // For employee with historical checkin, SUPER_ADMIN revokes to preserve history, never permanently deletes
+        const res = await service.destroy(BigInt(801), { id: BigInt(99), role: UserRole.SUPER_ADMIN });
+
+        expect(res.action).toBe('revoked');
+        expect(prisma.attendee.update).toHaveBeenCalledWith({
+          where: { id: BigInt(801) },
+          data: { status: AttendeeStatus.REVOKED },
+        });
+        expect(prisma.attendee.delete).not.toHaveBeenCalled();
+      });
+
+      it('rejects deletion of protected records for non-SUPER_ADMIN', async () => {
+        process.env.NODE_ENV = 'staging';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'true';
+
+        prisma.attendee.findUnique.mockResolvedValueOnce(mockTestAttendee);
+
+        await expect(
+          service.destroy(BigInt(701), { id: BigInt(88), role: UserRole.EMPLOYEE_ADMIN }),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('Bulk Attendee Deletion (bulkDestroy)', () => {
+      const testOrder = {
+        id: BigInt(900),
+        orderNumber: 'ORD-TEST-900',
+        orderStatus: OrderStatus.PAID,
+        paymentStatus: PaymentStatus.CAPTURED,
+        razorpayPaymentId: 'TEST_PAY_900',
+        metadata: { isTestPayment: true },
+      };
+
+      const testAtt1 = {
+        id: BigInt(901),
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Test Pass 1',
+        ticketNumber: 'TK-TEST-901',
+        qrCodeToken: 'secret-token-901',
+        orderId: BigInt(900),
+        order: testOrder,
+        dailyCheckins: [{ id: BigInt(1) }],
+        scanLogs: [{ id: BigInt(2) }],
+      };
+
+      const testAtt2 = {
+        id: BigInt(902),
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Test Pass 2',
+        ticketNumber: 'TK-TEST-902',
+        qrCodeToken: 'secret-token-902',
+        orderId: BigInt(900),
+        order: testOrder,
+        dailyCheckins: [],
+        scanLogs: [],
+      };
+
+      const realOrder = {
+        id: BigInt(950),
+        orderNumber: 'ORD-REAL-950',
+        orderStatus: OrderStatus.PAID,
+        paymentStatus: PaymentStatus.CAPTURED,
+        razorpayPaymentId: 'pay_live_950',
+        metadata: {},
+      };
+
+      const realPaidAtt = {
+        id: BigInt(951),
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Real Customer',
+        ticketNumber: 'TK-REAL-951',
+        qrCodeToken: 'secret-token-951',
+        orderId: BigInt(950),
+        order: realOrder,
+        dailyCheckins: [{ id: BigInt(3) }],
+        scanLogs: [],
+      };
+
+      const employeeAtt = {
+        id: BigInt(960),
+        registrationType: RegistrationType.EMPLOYEE,
+        name: 'Staff Member',
+        ticketNumber: 'TK-EMP-960',
+        employeeId: BigInt(70),
+        familyMemberId: null,
+        order: null,
+        dailyCheckins: [{ id: BigInt(4) }],
+        scanLogs: [],
+      };
+
+      it('bulk deletes test passes while preserving real customer and staff records completely untouched', async () => {
+        process.env.NODE_ENV = 'staging';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'true';
+
+        prisma.attendee.findMany.mockResolvedValueOnce([testAtt1, testAtt2, realPaidAtt, employeeAtt]);
+        prisma.attendee.count.mockResolvedValue(0); // All passes of testOrder 900 are deleted
+
+        const res = await service.bulkDestroy(
+          [BigInt(901), BigInt(902), BigInt(951), BigInt(960)],
+          { id: BigInt(99), role: UserRole.SUPER_ADMIN },
+        );
+
+        expect(res.success).toBe(true);
+        expect(res.totalSelected).toBe(4);
+        expect(res.testDeletedCount).toBe(2);
+        expect(res.deletedCount).toBe(2);
+        expect(res.protectedCount).toBe(2);
+
+        // Verify test passes deleted
+        expect(prisma.attendee.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: [BigInt(901), BigInt(902)] } },
+        });
+
+        // Verify cascade checkins/scans deleted for test passes only
+        expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+          where: { attendeeId: { in: [BigInt(901), BigInt(902)] } },
+        });
+
+        // Real customer and employee records must NEVER be updated or revoked during staging test cleanup
+        expect(prisma.attendee.updateMany).not.toHaveBeenCalled();
+
+        // Protected tickets must be reported clearly in the result
+        expect(res.protectedTickets).toHaveLength(2);
+        expect(res.protectedTickets[0].ticketNumber).toBe('TK-REAL-951');
+        expect(res.protectedTickets[1].ticketNumber).toBe('TK-EMP-960');
+      });
+
+      it('in production or with flag false, test bypass does NOT run and preserves safety', async () => {
+        process.env.NODE_ENV = 'production';
+        process.env.ADMIN_TEST_DATA_DELETE_ENABLED = 'false';
+
+        prisma.attendee.findMany.mockResolvedValueOnce([testAtt1]);
+
+        const res = await service.bulkDestroy([BigInt(901)], {
+          id: BigInt(99),
+          role: UserRole.SUPER_ADMIN,
+        });
+
+        // When test delete is NOT active, testAtt1 is treated as protected due to checkin history
+        expect(prisma.attendee.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.attendee.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: [BigInt(901)] } },
+          data: { status: AttendeeStatus.REVOKED },
+        });
+      });
     });
   });
 });

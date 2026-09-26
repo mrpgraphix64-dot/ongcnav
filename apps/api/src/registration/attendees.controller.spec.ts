@@ -164,6 +164,8 @@ describe('AttendeesController & RBAC Parity Tests', () => {
         success: true,
         totalSelected: 2,
         deletedCount: 2,
+        testDeletedCount: 0,
+        normalDeletedCount: 2,
         protectedCount: 0,
         deletedTickets: ['10', '20'],
         protectedTickets: [],

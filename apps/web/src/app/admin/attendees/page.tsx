@@ -57,6 +57,7 @@ interface CommercialOrderData {
   paymentStatus: string;
   selectedDates: string[];
   paidAt?: string | null;
+  isTestPayment?: boolean;
 }
 
 interface AttendeeItem {
@@ -80,6 +81,7 @@ interface AttendeeItem {
   family_tickets?: AttendeeItem[];
   qr_svg?: string;
   isCommercialOrder?: boolean;
+  isTestPayment?: boolean;
   order_id?: string | null;
   order?: CommercialOrderData | null;
   passes?: AttendeeItem[];
@@ -243,6 +245,68 @@ export default function AdminAttendeesPage() {
     }
     return ids;
   }, [primaryAttendees]);
+
+  // Flat lookup map of all rendered passes/attendees by ID
+  const allRenderedAttendees = useMemo(() => {
+    const map = new Map<string, AttendeeItem>();
+    for (const p of primaryAttendees) {
+      map.set(p.id, p);
+      if (p.passes) {
+        for (const pass of p.passes) {
+          map.set(pass.id, pass);
+        }
+      }
+      if (p.family_tickets) {
+        for (const fam of p.family_tickets) {
+          map.set(fam.id, fam);
+        }
+      }
+    }
+    return map;
+  }, [primaryAttendees]);
+
+  // Dynamic analysis of current selection
+  const selectionAnalysis = useMemo(() => {
+    let testPassCount = 0;
+    let protectedCount = 0;
+    let otherCount = 0;
+
+    for (const id of selectedIds) {
+      const item = allRenderedAttendees.get(id);
+      if (!item) continue;
+
+      const isTest =
+        item.isTestPayment === true ||
+        item.order?.isTestPayment === true ||
+        item.order?.orderNumber?.includes('TEST') ||
+        item.ticketNumber?.includes('TEST');
+
+      const isStaffOrProtected =
+        item.employee_id != null ||
+        item.employee != null ||
+        item.category === 'ONGC STAFF' ||
+        item.category === 'FAMILY MEMBER' ||
+        (!isTest && item.order && item.order.orderStatus === 'PAID') ||
+        (!isTest && (item.checked_in_at || item.status === 'checked_in'));
+
+      if (isTest) {
+        testPassCount++;
+      } else if (isStaffOrProtected) {
+        protectedCount++;
+      } else {
+        otherCount++;
+      }
+    }
+
+    return {
+      total: selectedIds.length,
+      testPassCount,
+      protectedCount,
+      otherCount,
+      hasTest: testPassCount > 0,
+      allTest: selectedIds.length > 0 && testPassCount === selectedIds.length,
+    };
+  }, [selectedIds, allRenderedAttendees]);
 
   const allSelected = pageIds.length > 0 && selectedIds.length === pageIds.length;
 
@@ -487,9 +551,10 @@ export default function AdminAttendeesPage() {
 
       {/* Action Bar & Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* ROW 1: Search & Primary Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Search Input */}
-          <div className="relative flex-1 w-full">
+          <div className="relative flex-1 w-full min-w-0">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
@@ -499,15 +564,15 @@ export default function AdminAttendeesPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-200 text-xs text-stone-800 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] transition-all"
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-start sm:justify-end shrink-0">
             <button
               onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-xs"
             >
               <UserPlus className="w-3.5 h-3.5 text-amber-300" />
               <span>Quick Add</span>
@@ -533,16 +598,17 @@ export default function AdminAttendeesPage() {
               onClick={loadData}
               disabled={loading}
               title="Refresh"
-              className="p-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50"
+              className="p-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* Filters and Grouping Controls */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-stone-100 text-xs">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+        {/* ROW 2: Filters, Grouping Controls, and Highlighted Selection Bar */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-3 border-t border-stone-100 text-xs">
+          {/* Left: Filters & Grouping */}
+          <div className="flex items-center gap-2.5 flex-wrap">
             {/* Status Filter */}
             <select
               value={statusFilter}
@@ -550,7 +616,7 @@ export default function AdminAttendeesPage() {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 bg-white"
+              className="px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 bg-white hover:border-stone-300 focus:outline-none focus:ring-1 focus:ring-[#7A1113]"
             >
               <option value="all">All Status</option>
               <option value="active">Active / Pending</option>
@@ -566,7 +632,7 @@ export default function AdminAttendeesPage() {
                 setCategoryFilter(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 bg-white"
+              className="px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 bg-white hover:border-stone-300 focus:outline-none focus:ring-1 focus:ring-[#7A1113]"
             >
               <option value="all">All Categories</option>
               <option value="General">General</option>
@@ -580,60 +646,73 @@ export default function AdminAttendeesPage() {
               <option value="MANDLI">Mandli Pass</option>
               <option value="ANY_DAY">Any Day Pass</option>
             </select>
-          </div>
-
-          {/* Grouping toggles & Bulk bar */}
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            {selectedIds.length > 0 && (
-              <div className="flex items-center gap-2 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200 text-amber-900 text-xs font-bold">
-                <span>{selectedIds.length} Selected</span>
-                <button
-                  onClick={handleBulkRegenerate}
-                  disabled={bulkBusy}
-                  className="hover:underline text-[#7A1113]"
-                >
-                  Regen QR
-                </button>
-                <span>&bull;</span>
-                <button
-                  onClick={openBulkDeleteModal}
-                  disabled={bulkBusy}
-                  className="hover:underline text-rose-600"
-                >
-                  Delete
-                </button>
-              </div>
-            )}
 
             <button
               onClick={() => setGroupByRegistration(!groupByRegistration)}
               className={`px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
                 groupByRegistration
                   ? 'bg-[#FAF7F2] border-stone-300 text-[#7A1113]'
-                  : 'bg-white border-stone-200 text-stone-600'
+                  : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
               }`}
             >
               {groupByRegistration ? 'Grouped by Registration' : 'Flat List'}
             </button>
 
             {groupByRegistration && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 text-stone-400">
                 <button
                   onClick={expandAll}
-                  className="px-2 py-1 text-stone-500 hover:text-stone-900 font-semibold"
+                  className="px-1.5 py-1 text-stone-500 hover:text-stone-900 font-semibold"
                 >
                   Expand All
                 </button>
-                <span className="text-stone-300">/</span>
+                <span>/</span>
                 <button
                   onClick={collapseAll}
-                  className="px-2 py-1 text-stone-500 hover:text-stone-900 font-semibold"
+                  className="px-1.5 py-1 text-stone-500 hover:text-stone-900 font-semibold"
                 >
                   Collapse All
                 </button>
               </div>
             )}
           </div>
+
+          {/* Right: Highlighted Compact Selection Bar when passes are selected */}
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-2 bg-amber-50/90 border border-amber-200/90 px-3 py-1.5 rounded-xl shadow-xs flex-wrap sm:flex-nowrap">
+              <span className="bg-amber-200/80 text-amber-950 font-bold px-2 py-0.5 rounded-md text-[11px] whitespace-nowrap">
+                {selectedIds.length} Selected
+              </span>
+
+              <button
+                onClick={handleBulkRegenerate}
+                disabled={bulkBusy}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-[#7A1113] hover:bg-amber-100/70 transition-colors whitespace-nowrap"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Regen QR</span>
+              </button>
+
+              <button
+                onClick={openBulkDeleteModal}
+                disabled={bulkBusy}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-700 hover:bg-rose-100/70 transition-colors whitespace-nowrap"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{selectionAnalysis.hasTest ? 'Delete Test Passes' : 'Delete Passes'}</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedIds([])}
+                disabled={bulkBusy}
+                title="Clear Selection"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-stone-500 hover:text-stone-800 hover:bg-amber-100/50 transition-colors whitespace-nowrap"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Clear Selection</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1396,48 +1475,72 @@ export default function AdminAttendeesPage() {
       )}
 
       {/* CUSTOM SINGLE ATTENDEE DELETE CONFIRMATION MODAL */}
-      {attendeeToDelete && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
-              </div>
-              <div>
-                <h3 className="font-outfit font-bold text-lg text-stone-900">
-                  Delete Attendee?
-                </h3>
-                <span className="text-xs text-stone-500">
-                  {attendeeToDelete.name}
-                </span>
-              </div>
-            </div>
+      {attendeeToDelete && (() => {
+        const item = allRenderedAttendees.get(attendeeToDelete.id);
+        const isTest =
+          item?.isTestPayment === true ||
+          item?.order?.isTestPayment === true ||
+          item?.order?.orderNumber?.includes('TEST') ||
+          item?.ticketNumber?.includes('TEST');
 
-            <p className="text-xs text-stone-600 leading-relaxed">
-              Are you sure you want to delete attendee <strong>&ldquo;{attendeeToDelete.name}&rdquo;</strong>? This action will revoke their QR ticket and entry passes. This cannot be undone.
-            </p>
+        return (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl">
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="font-outfit font-bold text-lg text-stone-900">
+                    {isTest ? 'Delete Test Pass?' : 'Delete Attendee?'}
+                  </h3>
+                  <span className="text-xs text-stone-500">
+                    {attendeeToDelete.name}
+                  </span>
+                </div>
+              </div>
 
-            <div className="pt-2 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setAttendeeToDelete(null)}
-                disabled={deleteLoading}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteAttendee}
-                disabled={deleteLoading}
-                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
-              >
-                {deleteLoading ? 'Deleting...' : 'Confirm Delete'}
-              </button>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                {isTest ? (
+                  <>
+                    Are you sure you want to permanently delete staging test pass{' '}
+                    <strong>&ldquo;{attendeeToDelete.name}&rdquo;</strong>? This will remove its associated test scan
+                    and check-in records. This cannot be undone.
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete attendee <strong>&ldquo;{attendeeToDelete.name}&rdquo;</strong>?
+                    This action will revoke their QR ticket and entry passes. This cannot be undone.
+                  </>
+                )}
+              </p>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAttendeeToDelete(null)}
+                  disabled={deleteLoading}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteAttendee}
+                  disabled={deleteLoading}
+                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                >
+                  {deleteLoading
+                    ? 'Deleting...'
+                    : isTest
+                    ? 'Delete Test Pass'
+                    : 'Confirm Delete'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* CUSTOM BULK ATTENDEE DELETE CONFIRMATION MODAL */}
       {showBulkDeleteModal && (
@@ -1449,16 +1552,70 @@ export default function AdminAttendeesPage() {
               </div>
               <div>
                 <h3 className="font-outfit font-bold text-lg text-stone-900">
-                  Delete {selectedIds.length} Attendee(s)?
+                  {selectionAnalysis.allTest
+                    ? `Delete ${selectedIds.length} Test Pass${selectedIds.length === 1 ? '' : 'es'}?`
+                    : selectionAnalysis.hasTest
+                    ? `Delete Selected Passes (${selectionAnalysis.testPassCount} Test)`
+                    : `Delete ${selectedIds.length} Attendee${selectedIds.length === 1 ? '' : 's'}?`}
                 </h3>
                 <span className="text-xs text-stone-500">
-                  Irreversible bulk deletion
+                  {selectionAnalysis.hasTest
+                    ? 'Staging test data cleanup'
+                    : 'Irreversible bulk deletion'}
                 </span>
               </div>
             </div>
 
+            {/* Analysis Breakdown Box */}
+            <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200/80 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-stone-700 font-medium">
+                <span>Total Selected:</span>
+                <span className="font-bold text-stone-900">{selectedIds.length}</span>
+              </div>
+              {selectionAnalysis.testPassCount > 0 && (
+                <div className="flex justify-between items-center text-emerald-700 font-medium">
+                  <span>Eligible Test Passes:</span>
+                  <span className="font-bold bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded">
+                    {selectionAnalysis.testPassCount}
+                  </span>
+                </div>
+              )}
+              {selectionAnalysis.protectedCount > 0 && (
+                <div className="flex justify-between items-center text-amber-700 font-medium">
+                  <span>Protected (Real / Staff):</span>
+                  <span className="font-bold bg-amber-100/80 text-amber-800 px-2 py-0.5 rounded">
+                    {selectionAnalysis.protectedCount}
+                  </span>
+                </div>
+              )}
+              {selectionAnalysis.otherCount > 0 && (
+                <div className="flex justify-between items-center text-stone-600 font-medium">
+                  <span>Other Passes:</span>
+                  <span className="font-bold text-stone-800">
+                    {selectionAnalysis.otherCount}
+                  </span>
+                </div>
+              )}
+            </div>
+
             <p className="text-xs text-stone-600 leading-relaxed">
-              Are you sure you want to permanently delete the <strong>{selectedIds.length}</strong> selected attendee(s)? This will revoke all their issued entry passes. This cannot be undone.
+              {selectionAnalysis.hasTest ? (
+                <>
+                  You are about to permanently delete{' '}
+                  <strong>{selectionAnalysis.testPassCount}</strong> staging test pass(es) along with their test scan
+                  and check-in records.
+                  {selectionAnalysis.protectedCount > 0 && (
+                    <span className="block mt-1.5 text-amber-800 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200/70">
+                      Note: {selectionAnalysis.protectedCount} protected real/employee pass(es) will remain preserved untouched.
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  Are you sure you want to permanently delete the <strong>{selectedIds.length}</strong> selected attendee(s)?
+                  This will revoke their entry passes. This cannot be undone.
+                </>
+              )}
             </p>
 
             <div className="pt-2 flex items-center justify-end gap-3">
@@ -1476,7 +1633,13 @@ export default function AdminAttendeesPage() {
                 disabled={bulkBusy}
                 className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
               >
-                {bulkBusy ? 'Deleting...' : `Delete ${selectedIds.length} Attendee(s)`}
+                {bulkBusy
+                  ? 'Deleting...'
+                  : selectionAnalysis.allTest
+                  ? `Delete ${selectedIds.length} Test Pass${selectedIds.length === 1 ? '' : 'es'}`
+                  : selectionAnalysis.hasTest
+                  ? `Delete ${selectionAnalysis.testPassCount} Test Pass${selectionAnalysis.testPassCount === 1 ? '' : 'es'}`
+                  : `Delete ${selectedIds.length} Attendee(s)`}
               </button>
             </div>
           </div>

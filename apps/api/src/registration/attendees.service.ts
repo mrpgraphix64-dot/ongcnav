@@ -8,8 +8,12 @@ import {
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendeeStatus, OrderStatus, PaymentStatus, UserRole } from '@ongc/shared-types';
+import { AttendeeStatus, OrderStatus, PaymentStatus, RegistrationType, UserRole } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
+import {
+  isAdminTestDataDeleteEnabled,
+  isStagingTestOrder,
+} from '../commercial/commercial-test-payment.util';
 
 const VALID_CATEGORIES = ['General', 'VIP', 'VVIP', 'ONGC STAFF', 'FAMILY MEMBER'];
 
@@ -246,6 +250,9 @@ export class AttendeesService {
               orderStatus: true,
               paymentStatus: true,
               paidAt: true,
+              metadata: true,
+              razorpayOrderId: true,
+              razorpayPaymentId: true,
             },
           },
           dailyCheckins: {
@@ -333,6 +340,7 @@ export class AttendeesService {
 
         // 1. Commercial Order Booking Group
         if (p.orderId && p.order) {
+          const isTestPayment = isStagingTestOrder(p.order);
           const rawPasses = orderPassesMap.get(p.orderId.toString()) || [p];
           const formattedPasses = await Promise.all(
             rawPasses.map(async (pass) => {
@@ -360,6 +368,7 @@ export class AttendeesService {
                 gate: passCheckin?.gate?.name || null,
                 qr_svg: passQrSvg,
                 order_id: p.orderId!.toString(),
+                isTestPayment,
               };
             }),
           );
@@ -387,6 +396,7 @@ export class AttendeesService {
             employee_id: null,
             employee: null,
             isCommercialOrder: true,
+            isTestPayment,
             order_id: p.order.id.toString(),
             order: {
               id: p.order.id.toString(),
@@ -403,6 +413,7 @@ export class AttendeesService {
               paymentStatus: p.order.paymentStatus,
               selectedDates: p.order.selectedDates,
               paidAt: p.order.paidAt ? p.order.paidAt.toISOString() : null,
+              isTestPayment,
             },
             passes: formattedPasses,
             family_tickets: formattedPasses,
@@ -841,11 +852,132 @@ export class AttendeesService {
     };
   }
 
-  async destroy(id: bigint, userRole?: string) {
-    const attendee = await this.findOne(id);
-    const protectionReason = await this.getAttendeeProtectionReason(id);
+  private isTestDataDeleteEnabled(): boolean {
+    return isAdminTestDataDeleteEnabled();
+  }
+
+  isStagingTestAttendee(attendee: any): boolean {
+    if (!attendee) return false;
+    // Real employee records or employee family members are NEVER test attendees
+    if (
+      attendee.registrationType === RegistrationType.EMPLOYEE ||
+      attendee.employeeId != null ||
+      attendee.familyMemberId != null
+    ) {
+      return false;
+    }
+
+    // Must be associated with an order that is an explicitly marked staging test order
+    if (attendee.order) {
+      return isStagingTestOrder(attendee.order);
+    }
+
+    return false;
+  }
+
+  async destroy(id: bigint, user?: { id?: bigint | string; role?: string } | string) {
+    const attendee = await this.prisma.attendee.findUnique({
+      where: { id },
+      include: {
+        employee: { select: { id: true } },
+        familyMember: { select: { id: true } },
+        dailyCheckins: { select: { id: true } },
+        scanLogs: { select: { id: true } },
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            orderStatus: true,
+            paymentStatus: true,
+            razorpayOrderId: true,
+            razorpayPaymentId: true,
+            metadata: true,
+            amountPaise: true,
+            quantity: true,
+            ticketType: true,
+            customerName: true,
+            customerMobile: true,
+            customerEmail: true,
+          },
+        },
+      },
+    });
+
+    if (!attendee) {
+      throw new NotFoundException(`Attendee with ID ${id} not found`);
+    }
+
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
+    const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
+    const isTest = this.isStagingTestAttendee(attendee);
+
+    // TEMPORARY SUPER_ADMIN TEST-DATA DELETE MODE
+    if (testDeleteActive && isTest) {
+      await this.prisma.$transaction(async (tx: any) => {
+        // 1. Audit log with safe metadata (no QR tokens, no secrets)
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: 'TEST_ATTENDEE_DELETED',
+            details: {
+              attendeeId: attendee.id.toString(),
+              attendeeName: attendee.name,
+              ticketNumber: attendee.ticketNumber,
+              registrationType: attendee.registrationType,
+              category: attendee.category,
+              orderId: attendee.orderId ? attendee.orderId.toString() : null,
+              orderNumber: attendee.order?.orderNumber || null,
+              razorpayPaymentId: attendee.order?.razorpayPaymentId || null,
+              checkinsRemoved: attendee.dailyCheckins?.length || 0,
+              scansRemoved: attendee.scanLogs?.length || 0,
+              reason: 'Staging test attendee cleanup by SUPER_ADMIN',
+            },
+          },
+        });
+
+        // 2. Cascade cleanup of check-in and scan records for this attendee
+        await tx.dailyCheckin.deleteMany({
+          where: { attendeeId: attendee.id },
+        });
+        await tx.scanLog.deleteMany({
+          where: { attendeeId: attendee.id },
+        });
+
+        // 3. Delete attendee
+        await tx.attendee.delete({ where: { id: attendee.id } });
+
+        // 4. Sibling safety: if this was the last remaining attendee of an eligible test order, also clean up the test order
+        if (attendee.orderId && isStagingTestOrder(attendee.order)) {
+          const remainingCount = await tx.attendee.count({
+            where: { orderId: attendee.orderId },
+          });
+          if (remainingCount === 0) {
+            await tx.paymentWebhookEvent.deleteMany({
+              where: { orderId: attendee.orderId },
+            });
+            await tx.allocationEvent.deleteMany({
+              where: { orderId: attendee.orderId },
+            });
+            await tx.commercialOrder.delete({
+              where: { id: attendee.orderId },
+            });
+          }
+        }
+      });
+
+      return {
+        success: true,
+        action: 'deleted',
+        isTestCleanup: true,
+        message: `Staging test attendee '${attendee.name || attendee.ticketNumber}' permanently deleted along with test check-in and scan history.`,
+      };
+    }
+
+    const protectionReason = this.getAttendeeProtectionReasonFromRecord(attendee);
     if (protectionReason) {
-      if (userRole === UserRole.SUPER_ADMIN) {
+      if (isSuperAdmin) {
         await this.prisma.attendee.update({
           where: { id },
           data: { status: AttendeeStatus.REVOKED },
@@ -853,47 +985,69 @@ export class AttendeesService {
         return {
           success: true,
           action: 'revoked',
-          message: `Attendee '${attendee.name}' has historical entry or financial records and was revoked to preserve audit history.`,
+          message: `Attendee '${attendee.name || attendee.ticketNumber}' has historical entry or financial records and was revoked to preserve audit history.`,
         };
       }
       throw new BadRequestException(
-        `Attendee '${attendee.name}' cannot be deleted because ${protectionReason}.`,
+        `Attendee '${attendee.name || attendee.ticketNumber}' cannot be deleted because ${protectionReason}.`,
       );
     }
     await this.prisma.attendee.delete({ where: { id } });
     return {
       success: true,
       action: 'deleted',
-      message: `Attendee ${attendee.name} deleted.`,
+      message: `Attendee ${attendee.name || attendee.ticketNumber} deleted.`,
     };
   }
 
-  async bulkDestroy(ids: bigint[], userRole?: string) {
+  async bulkDestroy(ids: bigint[], user?: { id?: bigint | string; role?: string } | string) {
     if (!ids || ids.length === 0) {
       throw new BadRequestException('No attendee IDs provided');
     }
 
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
     const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
 
     const attendees = await this.prisma.attendee.findMany({
       where: { id: { in: ids } },
       include: {
         dailyCheckins: { select: { id: true } },
         scanLogs: { select: { id: true } },
+        employee: { select: { id: true } },
+        familyMember: { select: { id: true } },
         order: {
           select: {
+            id: true,
+            orderNumber: true,
             orderStatus: true,
             paymentStatus: true,
+            razorpayOrderId: true,
             razorpayPaymentId: true,
+            metadata: true,
+            amountPaise: true,
+            quantity: true,
+            ticketType: true,
+            customerName: true,
+            customerMobile: true,
+            customerEmail: true,
           },
         },
       },
     });
 
-    const deletableIds: bigint[] = [];
+    const eligibleTestAttendees: typeof attendees = [];
+    const deletableAttendees: typeof attendees = [];
     const protectedTickets: Array<{ id: string; name: string; ticketNumber: string; reason: string }> = [];
 
     for (const att of attendees) {
+      const isTest = this.isStagingTestAttendee(att);
+      if (testDeleteActive && isTest) {
+        eligibleTestAttendees.push(att);
+        continue;
+      }
+
       let reason: string | null = null;
       if (att.dailyCheckins && att.dailyCheckins.length > 0) {
         reason = 'it contains checked-in passes or entry records';
@@ -916,17 +1070,85 @@ export class AttendeesService {
           reason,
         });
       } else {
-        deletableIds.push(att.id);
+        deletableAttendees.push(att);
       }
     }
 
+    const testAttendeeIds = eligibleTestAttendees.map((a) => a.id);
+    const deletableIds = deletableAttendees.map((a) => a.id);
     const protectedIds = protectedTickets.map((p) => BigInt(p.id));
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
+      // 1. Process eligible test attendees (cascade cleanup + safe audit logs)
+      for (const testAtt of eligibleTestAttendees) {
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: 'TEST_ATTENDEE_DELETED',
+            details: {
+              attendeeId: testAtt.id.toString(),
+              attendeeName: testAtt.name,
+              ticketNumber: testAtt.ticketNumber,
+              registrationType: testAtt.registrationType,
+              category: testAtt.category,
+              orderId: testAtt.orderId ? testAtt.orderId.toString() : null,
+              orderNumber: testAtt.order?.orderNumber || null,
+              razorpayPaymentId: testAtt.order?.razorpayPaymentId || null,
+              checkinsRemoved: testAtt.dailyCheckins?.length || 0,
+              scansRemoved: testAtt.scanLogs?.length || 0,
+              reason: 'Staging test attendee bulk cleanup by SUPER_ADMIN',
+            },
+          },
+        });
+      }
+
+      if (testAttendeeIds.length > 0) {
+        await tx.dailyCheckin.deleteMany({
+          where: { attendeeId: { in: testAttendeeIds } },
+        });
+        await tx.scanLog.deleteMany({
+          where: { attendeeId: { in: testAttendeeIds } },
+        });
+        await tx.attendee.deleteMany({
+          where: { id: { in: testAttendeeIds } },
+        });
+
+        // Sibling safety: check affected test orders
+        const affectedOrderIds = Array.from(
+          new Set(
+            eligibleTestAttendees
+              .filter((a) => a.orderId && isStagingTestOrder(a.order))
+              .map((a) => a.orderId as bigint),
+          ),
+        );
+
+        for (const orderId of affectedOrderIds) {
+          const remainingCount = await tx.attendee.count({
+            where: { orderId },
+          });
+          if (remainingCount === 0) {
+            await tx.paymentWebhookEvent.deleteMany({
+              where: { orderId },
+            });
+            await tx.allocationEvent.deleteMany({
+              where: { orderId },
+            });
+            await tx.commercialOrder.delete({
+              where: { id: orderId },
+            });
+          }
+        }
+      }
+
+      // 2. Regular unprotected deletable attendees
       if (deletableIds.length > 0) {
         await tx.attendee.deleteMany({ where: { id: { in: deletableIds } } });
       }
-      if (isSuperAdmin && protectedIds.length > 0) {
+
+      // 3. Protected real attendees
+      // In test delete mode: protected real tickets/orders are NEVER modified or revoked.
+      // In non-test mode with SUPER_ADMIN: legacy behavior revokes them for audit trail preservation.
+      if (!testDeleteActive && isSuperAdmin && protectedIds.length > 0) {
         await tx.attendee.updateMany({
           where: { id: { in: protectedIds } },
           data: { status: AttendeeStatus.REVOKED },
@@ -934,37 +1156,65 @@ export class AttendeesService {
       }
     });
 
-    const deletedCount = deletableIds.length;
+    const testDeletedCount = eligibleTestAttendees.length;
+    const normalDeletedCount = deletableAttendees.length;
     const protectedCount = protectedTickets.length;
+    const totalDeletedCount = testDeletedCount + normalDeletedCount;
 
     let message = '';
-    if (deletedCount > 0 && protectedCount === 0) {
-      message = `Successfully deleted ${deletedCount} attendee(s).`;
-    } else if (deletedCount > 0 && protectedCount > 0) {
-      if (isSuperAdmin) {
-        message = `Deleted ${deletedCount} attendee(s). ${protectedCount} record(s) with check-in or payment history were revoked to preserve audit trails.`;
-      } else {
-        message = `Deleted ${deletedCount} attendee(s). ${protectedCount} record(s) could not be deleted because they contain check-in, scan, or payment records.`;
+    if (testDeletedCount > 0) {
+      message = `Permanently deleted ${testDeletedCount} staging test pass(es).`;
+      if (normalDeletedCount > 0) {
+        message += ` Deleted ${normalDeletedCount} other attendee(s).`;
+      }
+      if (protectedCount > 0) {
+        message += ` ${protectedCount} protected real record(s) were preserved untouched.`;
+      }
+    } else if (normalDeletedCount > 0) {
+      message = `Successfully deleted ${normalDeletedCount} attendee(s).`;
+      if (protectedCount > 0) {
+        message += ` ${protectedCount} protected record(s) could not be deleted and were preserved.`;
       }
     } else {
-      if (isSuperAdmin) {
+      if (!testDeleteActive && isSuperAdmin) {
         message = `All ${protectedCount} selected attendee(s) have check-in or payment records and were revoked to preserve audit trails.`;
       } else {
-        message = `None of the selected attendees could be deleted. All ${protectedCount} record(s) contain financial or entry records.`;
+        message = `None of the selected attendees could be deleted. All ${protectedCount} record(s) are protected real or entry records.`;
       }
     }
 
     return {
       success: true,
       totalSelected: ids.length,
-      deletedCount: isSuperAdmin ? deletedCount + protectedCount : deletedCount,
-      protectedCount: isSuperAdmin ? 0 : protectedCount,
-      deletedTickets: isSuperAdmin
-        ? [...deletableIds, ...protectedIds].map((id) => id.toString())
-        : deletableIds.map((id) => id.toString()),
-      protectedTickets: isSuperAdmin ? [] : protectedTickets,
+      deletedCount: (!testDeleteActive && isSuperAdmin) ? totalDeletedCount + protectedCount : totalDeletedCount,
+      testDeletedCount,
+      normalDeletedCount,
+      protectedCount: (!testDeleteActive && isSuperAdmin) ? 0 : protectedCount,
+      deletedTickets: (!testDeleteActive && isSuperAdmin)
+        ? [...testAttendeeIds, ...deletableIds, ...protectedIds].map((id) => id.toString())
+        : [...testAttendeeIds, ...deletableIds].map((id) => id.toString()),
+      protectedTickets: (!testDeleteActive && isSuperAdmin) ? [] : protectedTickets,
       message,
     };
+  }
+
+  getAttendeeProtectionReasonFromRecord(att: any): string | null {
+    if (!att) return null;
+    if (att.dailyCheckins && att.dailyCheckins.length > 0) {
+      return 'it contains checked-in passes or entry records';
+    }
+    if (att.scanLogs && att.scanLogs.length > 0) {
+      return 'it contains scan audit logs';
+    }
+    if (
+      att.order &&
+      (att.order.orderStatus === OrderStatus.PAID ||
+        att.order.paymentStatus === PaymentStatus.CAPTURED ||
+        att.order.razorpayPaymentId)
+    ) {
+      return 'it belongs to a confirmed/paid transaction';
+    }
+    return null;
   }
 
   private async getAttendeeProtectionReason(id: bigint): Promise<string | null> {
@@ -982,22 +1232,7 @@ export class AttendeesService {
         },
       },
     });
-    if (!att) return null;
-    if (att.dailyCheckins && att.dailyCheckins.length > 0) {
-      return 'it contains checked-in passes or entry records';
-    }
-    if (att.scanLogs && att.scanLogs.length > 0) {
-      return 'it contains scan audit logs';
-    }
-    if (
-      att.order &&
-      (att.order.orderStatus === OrderStatus.PAID ||
-        att.order.paymentStatus === PaymentStatus.CAPTURED ||
-        att.order.razorpayPaymentId)
-    ) {
-      return 'it belongs to a confirmed/paid transaction';
-    }
-    return null;
+    return this.getAttendeeProtectionReasonFromRecord(att);
   }
 
   async getQrImageBuffer(id: bigint): Promise<{ buffer: Buffer; filename: string }> {
