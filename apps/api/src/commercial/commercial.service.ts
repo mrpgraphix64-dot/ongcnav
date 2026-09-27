@@ -33,6 +33,10 @@ import {
   PaymentStatus,
   RegistrationType,
   UserRole,
+  SETTING_SUPER_ADMIN_FULL_POWER,
+  isSuperAdminFullPowerActive,
+  AUDIT_FULL_POWER_ORDER_DELETED,
+  AUDIT_FULL_POWER_ORDERS_BULK_DELETED,
 } from '@ongc/shared-types';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
@@ -75,6 +79,19 @@ export class CommercialService {
       this.configService?.get<string>('ADMIN_TEST_DATA_DELETE_ENABLED') ||
       process.env.ADMIN_TEST_DATA_DELETE_ENABLED;
     return isAdminTestDataDeleteEnabled(nodeEnv, testDeleteEnv);
+  }
+
+  private async isFullPowerActive(userRole?: string | null): Promise<boolean> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: SETTING_SUPER_ADMIN_FULL_POWER },
+      });
+      const nodeEnv =
+        this.configService?.get<string>('NODE_ENV') || process.env.NODE_ENV;
+      return isSuperAdminFullPowerActive(userRole, setting?.value, nodeEnv);
+    } catch {
+      return false;
+    }
   }
 
   generateSecureQrToken(): string {
@@ -1366,10 +1383,81 @@ export class CommercialService {
     }
 
     const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const fullPowerActive = await this.isFullPowerActive(userRole);
     const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
     const isTest = isStagingTestOrder(order);
 
-    // TEMPORARY SUPER_ADMIN TEST-DATA DELETE MODE
+    // 1. SUPER_ADMIN FULL POWER DESTRUCTIVE MODE (Non-production only)
+    if (fullPowerActive) {
+      const attendeeIds = (order.attendees || []).map((a: any) => a.id);
+      const ticketNumbers = (order.attendees || []).map((a: any) => a.ticketNumber);
+
+      await this.prisma.$transaction(async (tx: any) => {
+        // Audit log with safe metadata
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: AUDIT_FULL_POWER_ORDER_DELETED,
+            details: {
+              orderId: order.id.toString(),
+              orderNumber: order.orderNumber,
+              customerName: order.customerName,
+              customerMobile: order.customerMobile,
+              customerEmail: order.customerEmail,
+              amountInr: order.amountPaise ? order.amountPaise / 100 : 0,
+              ticketType: order.ticketType,
+              quantity: order.quantity,
+              razorpayOrderId: order.razorpayOrderId,
+              razorpayPaymentId: order.razorpayPaymentId,
+              attendeeCount: attendeeIds.length,
+              ticketNumbers,
+              fullPowerActive: true,
+              reason: 'Permanent commercial order deletion under SUPER_ADMIN Full Power',
+            },
+          },
+        });
+
+        // Cascade delete attendee checkins and scan logs
+        if (attendeeIds.length > 0) {
+          await tx.dailyCheckin.deleteMany({
+            where: { attendeeId: { in: attendeeIds } },
+          });
+          await tx.scanLog.deleteMany({
+            where: { attendeeId: { in: attendeeIds } },
+          });
+        }
+
+        // Delete webhook events and allocation events
+        await tx.paymentWebhookEvent.deleteMany({
+          where: { orderId: order.id },
+        });
+        await tx.allocationEvent.deleteMany({
+          where: { orderId: order.id },
+        });
+
+        // Delete attendees
+        if (attendeeIds.length > 0) {
+          await tx.attendee.deleteMany({
+            where: { orderId: order.id },
+          });
+        }
+
+        // Delete order itself
+        await tx.commercialOrder.delete({
+          where: { id: order.id },
+        });
+      });
+
+      return {
+        success: true,
+        action: 'deleted',
+        fullPower: true,
+        message: `Order ${order.orderNumber} and all associated records permanently deleted under Full Power mode.`,
+        orderNumber: order.orderNumber,
+      };
+    }
+
+    // 2. TEMPORARY SUPER_ADMIN TEST-DATA DELETE MODE
     if (testDeleteActive && isTest) {
       const attendeeIds = (order.attendees || []).map((a: any) => a.id);
       const ticketNumbers = (order.attendees || []).map((a: any) => a.ticketNumber);
@@ -1498,6 +1586,7 @@ export class CommercialService {
     const userRole = typeof user === 'string' ? user : user?.role;
     const userId = typeof user === 'object' && user !== null ? user.id : undefined;
     const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const fullPowerActive = await this.isFullPowerActive(userRole);
     const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
 
     const orderIds = rawOrderIds
@@ -1527,6 +1616,68 @@ export class CommercialService {
         allocationEvents: { select: { id: true } },
       },
     });
+
+    // 1. SUPER_ADMIN FULL POWER DESTRUCTIVE MODE (Non-production only)
+    if (fullPowerActive) {
+      const allAttendeeIds = orders.flatMap((o) => (o.attendees || []).map((a: any) => a.id));
+      const allTicketNumbers = orders.flatMap((o) => (o.attendees || []).map((a: any) => a.ticketNumber));
+      const deletedOrderIds = orders.map((o) => o.id);
+
+      await this.prisma.$transaction(async (tx: any) => {
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: AUDIT_FULL_POWER_ORDERS_BULK_DELETED,
+            details: {
+              totalOrders: orders.length,
+              orderIds: orders.map((o) => o.id.toString()),
+              orderNumbers: orders.map((o) => o.orderNumber),
+              ticketNumbers: allTicketNumbers,
+              totalAttendees: allAttendeeIds.length,
+              fullPowerActive: true,
+              reason: 'Bulk commercial order deletion under SUPER_ADMIN Full Power',
+            },
+          },
+        });
+
+        if (allAttendeeIds.length > 0) {
+          await tx.dailyCheckin.deleteMany({
+            where: { attendeeId: { in: allAttendeeIds } },
+          });
+          await tx.scanLog.deleteMany({
+            where: { attendeeId: { in: allAttendeeIds } },
+          });
+        }
+
+        await tx.paymentWebhookEvent.deleteMany({
+          where: { orderId: { in: deletedOrderIds } },
+        });
+        await tx.allocationEvent.deleteMany({
+          where: { orderId: { in: deletedOrderIds } },
+        });
+
+        if (allAttendeeIds.length > 0) {
+          await tx.attendee.deleteMany({
+            where: { orderId: { in: deletedOrderIds } },
+          });
+        }
+
+        await tx.commercialOrder.deleteMany({
+          where: { id: { in: deletedOrderIds } },
+        });
+      });
+
+      return {
+        totalSelected: rawOrderIds.length,
+        deletedCount: orders.length,
+        testDeletedCount: 0,
+        protectedCount: 0,
+        fullPower: true,
+        deletedOrders: orders.map((o) => ({ id: o.id.toString(), orderNumber: o.orderNumber, fullPower: true })),
+        protectedOrders: [],
+        message: `Permanently deleted ${orders.length} commercial order(s) under Full Power mode.`,
+      };
+    }
 
     const eligibleTestOrders: typeof orders = [];
     const protectedOrders: { id: string; orderNumber: string; reason: string }[] = [];

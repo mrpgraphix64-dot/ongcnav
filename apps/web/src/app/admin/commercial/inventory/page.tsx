@@ -23,8 +23,19 @@ export default function CommercialInventoryPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetchApi('/commercial/admin/summary');
-      setData(res);
+      const res = await fetchApi('/admin/commercial/orders?limit=1');
+      setData({
+        totalPassesIssued: res?.summary?.totalPasses ?? 0,
+        totalRevenue: res?.summary?.totalSalesInr ?? 0,
+        paidOrdersCount: res?.summary?.totalOrders ?? res?.total ?? 0,
+        activeAgentsCount: res?.summary?.agentOrdersCount ?? 0,
+        breakdown: {
+          COMMERCIAL_DAILY: res?.summary?.publicPassesCount ?? 0,
+          COMMERCIAL_SEASON: res?.summary?.agentPassesCount ?? 0,
+          COMMERCIAL_MANDLI: res?.summary?.freePassesCount ?? 0,
+          COMMERCIAL_ANY_DAY: 0,
+        },
+      });
     } catch (err: any) {
       setError(err?.message || 'Failed to load inventory data');
     } finally {

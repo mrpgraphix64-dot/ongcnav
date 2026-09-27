@@ -6,6 +6,7 @@ import Script from 'next/script';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
 import TicketGuidelines from '@/components/TicketGuidelines';
+import MaintenanceNotice from '@/components/MaintenanceNotice';
 import {
   Ticket,
   CheckCircle2,
@@ -611,6 +612,7 @@ export default function BookPassPage() {
       <PublicHeader />
 
       <main className="flex-1">
+        <MaintenanceNotice pageType="booking">
         {confirmedPasses.length > 0 ? (
           /* REDESIGNED DIGITAL TICKET CONFIRMATION EXPERIENCE */
           <div className="max-w-3xl mx-auto pt-6 sm:pt-10 pb-16 px-4 sm:px-6 space-y-8">
@@ -1477,6 +1479,7 @@ export default function BookPassPage() {
           )}
         </div>
         )}
+        </MaintenanceNotice>
       </main>
 
       <PublicFooter />

@@ -36,7 +36,8 @@ describe('SettingsController', () => {
   });
 
   it('should get settings via index', async () => {
-    const result = await controller.index();
+    const req = { user: { id: '1', role: 'SUPER_ADMIN' } } as any;
+    const result = await controller.index(req);
     expect(result).toBeDefined();
     expect(service.getAllSettings).toHaveBeenCalled();
   });

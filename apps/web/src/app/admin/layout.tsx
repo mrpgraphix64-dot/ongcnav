@@ -30,6 +30,7 @@ import {
   ArrowLeft,
   Ticket,
   Layers,
+  Zap,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
@@ -38,6 +39,7 @@ import {
   subscribeToAuthSync,
   isAgentRole,
 } from '@/lib/auth-session';
+import { SuperAdminPowerBanner } from '@/components/admin/SuperAdminPowerBanner';
 import { isRoutePermittedForRole } from '@ongc/shared-types';
 
 interface AdminUser {
@@ -503,6 +505,7 @@ export default function AdminLayout({
   const [scanningEnabled, setScanningEnabled] = useState<boolean | null>(null);
   const [emergencyStopped, setEmergencyStopped] = useState<boolean | null>(null);
 
+
   // Fetch real authenticated user profile
   useEffect(() => {
     let isMounted = true;
@@ -607,6 +610,7 @@ export default function AdminLayout({
       clearInterval(interval);
     };
   }, []);
+
 
   const handleLogout = async () => {
     try {
@@ -862,6 +866,9 @@ export default function AdminLayout({
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-cream">
+          {/* Persistent System Banners */}
+          <SuperAdminPowerBanner userRole={user?.role} />
+
           {/* Top Bar Header */}
           <header className="shrink-0 z-30 bg-cream/95 backdrop-blur-sm border-b border-stone-200/70">
             <div className="px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">

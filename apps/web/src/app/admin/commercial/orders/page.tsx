@@ -32,9 +32,11 @@ import {
   Gift,
   AlertTriangle,
   X,
+  Zap,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser } from '@/lib/auth-session';
+import { fetchSuperAdminSettings, subscribeToSuperAdminSync } from '@/lib/super-admin-state';
 
 interface AttendeePass {
   id: string;
@@ -117,7 +119,12 @@ interface OrdersSummary {
 function isOrderProtected(
   order: OrderRecord,
   isTestDeleteActive: boolean = false,
+  isFullPowerActive: boolean = false,
 ): { isProtected: boolean; isTestOrder: boolean; reason?: string } {
+  if (isFullPowerActive) {
+    return { isProtected: false, isTestOrder: false };
+  }
+
   const isTest = Boolean(
     order.isTestPayment ||
       order.razorpayOrderId?.startsWith('TEST_ORD_') ||
@@ -197,12 +204,40 @@ export default function CommercialOrdersAuditPage() {
   const [testDataDeleteEnabled, setTestDataDeleteEnabled] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  const [fullPowerActive, setFullPowerActive] = useState(false);
+
   useEffect(() => {
     setCurrentUser(getStoredAuthUser());
+
+    let isMounted = true;
+    async function checkFullPower() {
+      try {
+        const state = await fetchSuperAdminSettings();
+        if (isMounted) {
+          setFullPowerActive(Boolean(state?.fullPowerActive));
+        }
+      } catch {
+        if (isMounted) setFullPowerActive(false);
+      }
+    }
+    checkFullPower();
+
+    const unsubscribe = subscribeToSuperAdminSync((synced) => {
+      if (synced) {
+        setFullPowerActive(Boolean(synced.fullPowerActive));
+      } else {
+        checkFullPower();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const isStagingTestCleanupActive = Boolean(
-    testDataDeleteEnabled && currentUser?.role === 'SUPER_ADMIN',
+    (testDataDeleteEnabled || fullPowerActive) && currentUser?.role === 'SUPER_ADMIN',
   );
 
   // Copied feedback
@@ -425,12 +460,18 @@ export default function CommercialOrdersAuditPage() {
       setSelectedOrderIds(new Set());
       setOrdersToDelete([]);
 
-      setActionSuccessMsg(
-        res.message ||
-          `Successfully processed deletion. ${res.deletedCount || 0} deleted, ${
-            res.skippedProtectedCount || 0
-          } protected orders preserved.`
-      );
+      if (fullPowerActive) {
+        setActionSuccessMsg(
+          `Successfully deleted ${res.deletedCount || orderIds.length} order(s) under SUPER_ADMIN Full Power.`
+        );
+      } else {
+        setActionSuccessMsg(
+          res.message ||
+            `Successfully processed deletion. ${res.deletedCount || 0} deleted, ${
+              res.skippedProtectedCount || 0
+            } protected orders preserved.`
+        );
+      }
 
       // Reload fresh data
       loadOrders();
@@ -451,7 +492,7 @@ export default function CommercialOrdersAuditPage() {
     const protectedReasons: string[] = [];
 
     ordersToDelete.forEach((ord) => {
-      const check = isOrderProtected(ord, isStagingTestCleanupActive);
+      const check = isOrderProtected(ord, isStagingTestCleanupActive, fullPowerActive);
       if (check.isTestOrder && isStagingTestCleanupActive) {
         testCount++;
       }
@@ -467,14 +508,15 @@ export default function CommercialOrdersAuditPage() {
 
     return {
       total: ordersToDelete.length,
-      safeCount,
-      protectedCount,
+      safeCount: fullPowerActive ? ordersToDelete.length : safeCount,
+      protectedCount: fullPowerActive ? 0 : protectedCount,
       testCount,
       protectedReasons,
       isAllTestOrders: testCount > 0 && testCount === ordersToDelete.length,
       hasTestOrders: testCount > 0,
+      isFullPower: fullPowerActive,
     };
-  }, [ordersToDelete, isStagingTestCleanupActive]);
+  }, [ordersToDelete, isStagingTestCleanupActive, fullPowerActive]);
 
   const renderOrdersTable = (agentOrders: OrderRecord[], agentName: string) => {
     if (agentOrders.length === 0) {
@@ -1725,10 +1767,12 @@ export default function CommercialOrdersAuditPage() {
               </div>
               <div className="flex-1">
                 <h3 className="font-outfit font-bold text-base text-stone-900">
-                  Confirm Order Deletion
+                  {fullPowerActive ? '⚡ Full Power Order Deletion' : 'Confirm Order Deletion'}
                 </h3>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  Verify order dependency safety before proceeding.
+                  {fullPowerActive
+                    ? 'SUPER_ADMIN Full Power is active. All safeguards are bypassed.'
+                    : 'Verify order dependency safety before proceeding.'}
                 </p>
               </div>
               <button
@@ -1748,42 +1792,57 @@ export default function CommercialOrdersAuditPage() {
                   <span>Total Selected for Deletion:</span>
                   <span className="font-bold font-mono text-stone-900">{deleteAnalysis.total}</span>
                 </div>
-                <div className="flex justify-between items-center text-emerald-700">
-                  <span className="font-semibold">Safe to Delete:</span>
-                  <span className="font-bold font-mono">{deleteAnalysis.safeCount}</span>
-                </div>
                 <div className="flex justify-between items-center text-rose-700">
-                  <span className="font-semibold">Protected (Cannot be deleted):</span>
-                  <span className="font-bold font-mono">{deleteAnalysis.protectedCount}</span>
+                  <span className="font-semibold">{fullPowerActive ? 'Will Permanently Delete:' : 'Safe to Delete:'}</span>
+                  <span className="font-bold font-mono text-rose-900">{deleteAnalysis.safeCount}</span>
+                </div>
+                <div className="flex justify-between items-center text-stone-500">
+                  <span className="font-medium">{fullPowerActive ? 'Protected Records:' : 'Protected (Cannot be deleted):'}</span>
+                  <span className="font-bold font-mono text-stone-700">{deleteAnalysis.protectedCount}</span>
                 </div>
               </div>
 
-              {/* Staging Test Order Special Notice */}
-              {isStagingTestCleanupActive && deleteAnalysis.hasTestOrders && (
-                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-600 text-white">
-                      {deleteAnalysis.testCount === 1 ? 'STAGING TEST ORDER' : 'STAGING TEST ORDERS'}
-                    </span>
+              {/* Full Power Special Notice */}
+              {fullPowerActive ? (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-950 text-xs space-y-1">
+                  <div className="font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 text-rose-800">
+                    <Zap className="w-3.5 h-3.5 text-rose-600 fill-rose-600 shrink-0" />
+                    <span>SUPER_ADMIN FULL POWER IS ACTIVE:</span>
                   </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                    {deleteAnalysis.testCount === 1
-                      ? 'This order is marked as a staging test transaction and can be permanently deleted by SUPER_ADMIN.'
-                      : `${deleteAnalysis.testCount} selected order(s) are marked as staging test transactions and can be permanently deleted by SUPER_ADMIN.`}
+                  <p className="text-[11px] text-rose-900 leading-relaxed font-medium">
+                    Deletion protections are bypassed for this operation. All {deleteAnalysis.total} selected order(s) will be permanently and irreversibly purged from the database, including attendee passes, daily check-in records, scan logs, payment webhooks, and agent allocations. This action is permanent and cannot be undone.
                   </p>
                 </div>
-              )}
+              ) : (
+                <>
+                  {/* Staging Test Order Special Notice */}
+                  {isStagingTestCleanupActive && deleteAnalysis.hasTestOrders && (
+                    <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-600 text-white">
+                          {deleteAnalysis.testCount === 1 ? 'STAGING TEST ORDER' : 'STAGING TEST ORDERS'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                        {deleteAnalysis.testCount === 1
+                          ? 'This order is marked as a staging test transaction and can be permanently deleted by SUPER_ADMIN.'
+                          : `${deleteAnalysis.testCount} selected order(s) are marked as staging test transactions and can be permanently deleted by SUPER_ADMIN.`}
+                      </p>
+                    </div>
+                  )}
 
-              {deleteAnalysis.protectedCount > 0 && (
-                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Protected orders will not be deleted</span>
-                  </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed">
-                    {deleteAnalysis.protectedCount} order(s) are locked because they have captured payments, confirmed paid status, or active check-ins. The system will preserve them automatically.
-                  </p>
-                </div>
+                  {deleteAnalysis.protectedCount > 0 && (
+                    <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <Shield className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Protected orders will not be deleted</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        {deleteAnalysis.protectedCount} order(s) are locked because they have captured payments, confirmed paid status, or active check-ins. The system will preserve them automatically.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               {deleteAnalysis.safeCount === 0 ? (
@@ -1794,7 +1853,7 @@ export default function CommercialOrdersAuditPage() {
                 <p className="text-xs text-stone-600 leading-relaxed">
                   Proceeding will permanently remove{' '}
                   <strong className="text-stone-900 font-bold">{deleteAnalysis.safeCount}</strong>{' '}
-                  {deleteAnalysis.isAllTestOrders ? 'test' : 'unfulfilled/pending'} order(s). This action cannot be reversed.
+                  {fullPowerActive ? 'order(s) under Full Power mode' : deleteAnalysis.isAllTestOrders ? 'test order(s)' : 'unfulfilled/pending order(s)'}. This action cannot be reversed.
                 </p>
               )}
             </div>
@@ -1825,7 +1884,9 @@ export default function CommercialOrdersAuditPage() {
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>
-                      {deleteAnalysis.isAllTestOrders
+                      {fullPowerActive
+                        ? `⚡ Permanently Delete ${deleteAnalysis.total} Order(s)`
+                        : deleteAnalysis.isAllTestOrders
                         ? (deleteAnalysis.testCount === 1 ? 'Delete Test Order' : `Delete ${deleteAnalysis.testCount} Test Orders`)
                         : (deleteAnalysis.safeCount === 1 ? 'Delete 1 Order' : `Delete ${deleteAnalysis.safeCount} Orders`)}
                     </span>

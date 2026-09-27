@@ -26,6 +26,7 @@ import {
   Search,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import MaintenanceNotice from '@/components/MaintenanceNotice';
 
 // ----------------------------------------------------------------------------
 // Event dates for ONGC Navratri 2026.
@@ -617,7 +618,8 @@ export default function EmployeeRegisterPage() {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto py-8 px-4 sm:px-6">
+    <MaintenanceNotice pageType="registration">
+      <div className="w-full max-w-3xl mx-auto py-8 px-4 sm:px-6">
       {/* FLOW HERO HEADER */}
       <div className="text-center mb-6">
         <h1 className="font-cinzel font-extrabold text-2xl sm:text-3xl text-maroon uppercase tracking-wide">
@@ -1143,6 +1145,7 @@ export default function EmployeeRegisterPage() {
           </form>
         </div>
       )}
-    </div>
+      </div>
+    </MaintenanceNotice>
   );
 }

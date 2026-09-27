@@ -23,7 +23,7 @@ export default function CommercialAllocationsPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetchApi('/commercial/agents/admin/agents');
+      const res = await fetchApi('/admin/commercial/agents?limit=100');
       setAgents(Array.isArray(res) ? res : res?.agents || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load agent allocations');

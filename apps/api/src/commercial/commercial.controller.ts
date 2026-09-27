@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequirePagePermission } from '../common/decorators/page-permission.decorator';
+import { PublicMaintenanceGuard } from '../common/guards/public-maintenance.guard';
 import { UserRole } from '@ongc/shared-types';
 
 @ApiTags('Commercial Passes & Ticketing')
@@ -33,6 +34,7 @@ export class CommercialController {
   }
 
   @Post('orders')
+  @UseGuards(PublicMaintenanceGuard)
   @ApiOperation({ summary: 'Create a new pending commercial order and Razorpay order' })
   async createOrder(
     @Body() body: CreateCommercialOrderDto,
@@ -43,6 +45,7 @@ export class CommercialController {
   }
 
   @Post('orders/verify')
+  @UseGuards(PublicMaintenanceGuard)
   @ApiOperation({ summary: 'Verify Razorpay payment signature and issue entry pass' })
   async verifyPayment(@Body() body: VerifyPaymentDto) {
     return this.commercialService.verifyPayment(body);

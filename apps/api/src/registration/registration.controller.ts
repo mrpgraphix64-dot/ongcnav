@@ -15,6 +15,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { RegistrationService } from './registration.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
+import { PublicMaintenanceGuard } from '../common/guards/public-maintenance.guard';
+import { UseGuards } from '@nestjs/common';
 
 // Same private, non-web-served storage model as before — just two
 // directories now (employee vs. family) so filenames can never collide
@@ -53,7 +55,14 @@ function photoFilename(req: any, file: Express.Multer.File, cb: (error: Error | 
 export class RegistrationController {
   constructor(private readonly registrationService: RegistrationService) {}
 
+  @Get('maintenance-status')
+  @ApiOperation({ summary: 'Get current event public maintenance mode status' })
+  async getMaintenanceStatus() {
+    return this.registrationService.getMaintenanceStatus();
+  }
+
   @Post(['register', 'register/employee', 'employee/register'])
+  @UseGuards(PublicMaintenanceGuard)
   @ApiOperation({ summary: 'Register employee with optional family members, each with their own dates and photo' })
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'photo', maxCount: 1 }, ...FAMILY_PHOTO_FIELDS], {

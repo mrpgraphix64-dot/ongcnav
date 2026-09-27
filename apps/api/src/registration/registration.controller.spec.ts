@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RegistrationController } from './registration.controller';
 import { RegistrationService } from './registration.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('RegistrationController', () => {
   let controller: RegistrationController;
@@ -11,11 +12,22 @@ describe('RegistrationController', () => {
       register: jest.fn().mockResolvedValue({ success: true }),
       findTicketByToken: jest.fn(),
       findByCpf: jest.fn(),
+      getMaintenanceStatus: jest.fn().mockResolvedValue({ maintenance: false }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RegistrationController],
-      providers: [{ provide: RegistrationService, useValue: service }],
+      providers: [
+        { provide: RegistrationService, useValue: service },
+        {
+          provide: PrismaService,
+          useValue: {
+            setting: {
+              findUnique: jest.fn().mockResolvedValue(null),
+            },
+          },
+        },
+      ],
     }).compile();
 
     controller = module.get<RegistrationController>(RegistrationController);

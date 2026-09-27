@@ -24,7 +24,7 @@ export default function CommercialCustomersPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetchApi('/commercial/admin/orders?limit=100');
+      const res = await fetchApi('/admin/commercial/orders?limit=100');
       setOrders(res?.orders || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load commercial customer records');
@@ -40,11 +40,12 @@ export default function CommercialCustomersPage() {
   // Aggregate unique customers from commercial orders
   const customersMap = new Map<string, any>();
   for (const o of orders) {
-    const key = o.customerPhone || o.customerEmail || o.customerName || `order-${o.id}`;
+    const phone = o.customerMobile || o.customerPhone;
+    const key = phone || o.customerEmail || o.customerName || `order-${o.id}`;
     if (!customersMap.has(key)) {
       customersMap.set(key, {
         name: o.customerName,
-        phone: o.customerPhone,
+        phone: phone,
         email: o.customerEmail,
         city: o.customerCity,
         ordersCount: 0,
@@ -57,9 +58,15 @@ export default function CommercialCustomersPage() {
     }
     const c = customersMap.get(key);
     c.ordersCount += 1;
-    c.totalPasses += o.items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || (o.passes?.length || 0);
-    if (o.status === 'PAID') {
-      c.totalSpend += Number(o.totalAmount || 0);
+    const passesInOrder =
+      o.passesCount ??
+      o.quantity ??
+      (o.attendees?.length || 0) ??
+      o.items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) ??
+      (o.passes?.length || 0);
+    c.totalPasses += passesInOrder;
+    if (o.orderStatus === 'PAID' || o.status === 'PAID') {
+      c.totalSpend += Number(o.amountInr ?? o.totalAmount ?? 0);
     }
   }
 

@@ -27,8 +27,10 @@ import {
   Mail,
   User,
   ExternalLink,
+  Zap,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { fetchSuperAdminSettings, subscribeToSuperAdminSync } from '@/lib/super-admin-state';
 
 interface EmployeeData {
   id: string;
@@ -145,6 +147,37 @@ export default function AdminAttendeesPage() {
   const [liveStatuses, setLiveStatuses] = useState<
     Record<string, { status: string; gate: string; checked_in_at: string | null }>
   >({});
+
+  // SUPER_ADMIN Full Power status
+  const [fullPowerActive, setFullPowerActive] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function checkFullPower() {
+      try {
+        const state = await fetchSuperAdminSettings();
+        if (isMounted) {
+          setFullPowerActive(Boolean(state?.fullPowerActive));
+        }
+      } catch {
+        if (isMounted) setFullPowerActive(false);
+      }
+    }
+    checkFullPower();
+
+    const unsubscribe = subscribeToSuperAdminSync((synced) => {
+      if (synced) {
+        setFullPowerActive(Boolean(synced.fullPowerActive));
+      } else {
+        checkFullPower();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   // Load Primary Attendees
   const loadData = useCallback(async () => {
@@ -280,6 +313,11 @@ export default function AdminAttendeesPage() {
       const item = allRenderedAttendees.get(id);
       if (!item) continue;
 
+      if (fullPowerActive) {
+        // Under Full Power, all selected passes are eligible for permanent deletion
+        continue;
+      }
+
       const isTest =
         item.classification === 'TEST' ||
         item.isTestPayment === true ||
@@ -309,15 +347,28 @@ export default function AdminAttendeesPage() {
       }
     }
 
+    if (fullPowerActive) {
+      return {
+        total: selectedIds.length,
+        testPassCount: 0,
+        protectedCount: 0,
+        otherCount: 0,
+        willDeleteCount: selectedIds.length,
+        hasTest: false,
+        allTest: false,
+      };
+    }
+
     return {
       total: selectedIds.length,
       testPassCount,
       protectedCount,
       otherCount,
+      willDeleteCount: testPassCount,
       hasTest: testPassCount > 0,
       allTest: selectedIds.length > 0 && testPassCount === selectedIds.length,
     };
-  }, [selectedIds, allRenderedAttendees]);
+  }, [selectedIds, allRenderedAttendees, fullPowerActive]);
 
   const allSelected = pageIds.length > 0 && selectedIds.length === pageIds.length;
 
@@ -411,7 +462,14 @@ export default function AdminAttendeesPage() {
     try {
       setDeleteLoading(true);
       await fetchApi(`/admin/attendees/${attendeeToDelete.id}`, { method: 'DELETE' });
-      setMsg({ text: `Attendee '${attendeeToDelete.name}' deleted successfully.`, type: 'success' });
+      if (fullPowerActive) {
+        setMsg({
+          text: `Successfully deleted pass '${attendeeToDelete.name}' under SUPER_ADMIN Full Power.`,
+          type: 'success',
+        });
+      } else {
+        setMsg({ text: `Attendee '${attendeeToDelete.name}' deleted successfully.`, type: 'success' });
+      }
       setAttendeeToDelete(null);
       loadData();
     } catch (e: any) {
@@ -447,13 +505,21 @@ export default function AdminAttendeesPage() {
 
   const confirmBulkDelete = async () => {
     if (selectedIds.length === 0 || bulkBusy) return;
+    const countToDelete = selectedIds.length;
     try {
       setBulkBusy(true);
       const res = await fetchApi<any>('/admin/attendees/bulk', {
         method: 'DELETE',
         body: JSON.stringify({ ids: selectedIds }),
       });
-      setMsg({ text: res.message || 'Attendees deleted.', type: 'success' });
+      if (fullPowerActive) {
+        setMsg({
+          text: `Successfully deleted ${countToDelete} pass(es) under SUPER_ADMIN Full Power.`,
+          type: 'success',
+        });
+      } else {
+        setMsg({ text: res.message || 'Attendees deleted.', type: 'success' });
+      }
       setSelectedIds([]);
       setShowBulkDeleteModal(false);
       loadData();
@@ -707,10 +773,20 @@ export default function AdminAttendeesPage() {
               <button
                 onClick={openBulkDeleteModal}
                 disabled={bulkBusy}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-700 hover:bg-rose-100/70 transition-colors whitespace-nowrap"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                  fullPowerActive
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs'
+                    : 'text-rose-700 hover:bg-rose-100/70'
+                }`}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>{selectionAnalysis.hasTest ? 'Delete Test Passes' : 'Delete Passes'}</span>
+                <span>
+                  {fullPowerActive
+                    ? `⚡ Full Power Delete (${selectedIds.length})`
+                    : selectionAnalysis.hasTest
+                    ? 'Delete Test Passes'
+                    : 'Delete Passes'}
+                </span>
               </button>
 
               <button
@@ -1503,7 +1579,11 @@ export default function AdminAttendeesPage() {
                 </div>
                 <div>
                   <h3 className="font-outfit font-bold text-lg text-stone-900">
-                    {isTest ? 'Delete Test Pass?' : 'Delete Attendee?'}
+                    {fullPowerActive
+                      ? '⚡ Full Power Delete Attendee?'
+                      : isTest
+                      ? 'Delete Test Pass?'
+                      : 'Delete Attendee?'}
                   </h3>
                   <span className="text-xs text-stone-500">
                     {attendeeToDelete.name}
@@ -1511,20 +1591,44 @@ export default function AdminAttendeesPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-stone-600 leading-relaxed">
-                {isTest ? (
-                  <>
+              <div className="text-xs text-stone-600 leading-relaxed space-y-2">
+                {fullPowerActive ? (
+                  <div className="bg-rose-50 p-3.5 rounded-xl border border-rose-200 text-rose-950 space-y-2">
+                    <div className="flex justify-between items-center text-xs text-stone-700 font-medium">
+                      <span>Total Selected:</span>
+                      <span className="font-bold text-stone-900 font-mono">1</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-rose-700 font-medium">
+                      <span className="font-semibold">Will Permanently Delete:</span>
+                      <span className="font-bold text-rose-900 font-mono">1</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-stone-500 font-medium">
+                      <span>Protected Records:</span>
+                      <span className="font-bold text-stone-700 font-mono">0</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-rose-100/70 border border-rose-200/80 text-rose-900 space-y-1">
+                      <p className="font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 text-rose-800">
+                        <Zap className="w-3.5 h-3.5 text-rose-600 fill-rose-600 shrink-0" />
+                        <span>SUPER_ADMIN FULL POWER IS ACTIVE:</span>
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-rose-900">
+                        Deletion protections are bypassed for this operation. This action is permanent and cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                ) : isTest ? (
+                  <p>
                     Are you sure you want to permanently delete staging test pass{' '}
                     <strong>&ldquo;{attendeeToDelete.name}&rdquo;</strong>? This will remove its associated test scan
                     and check-in records. This cannot be undone.
-                  </>
+                  </p>
                 ) : (
-                  <>
+                  <p>
                     Are you sure you want to delete attendee <strong>&ldquo;{attendeeToDelete.name}&rdquo;</strong>?
                     This action will revoke their QR ticket and entry passes. This cannot be undone.
-                  </>
+                  </p>
                 )}
-              </p>
+              </div>
 
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
@@ -1543,6 +1647,8 @@ export default function AdminAttendeesPage() {
                 >
                   {deleteLoading
                     ? 'Deleting...'
+                    : fullPowerActive
+                    ? '⚡ Permanently Delete (Full Power)'
                     : isTest
                     ? 'Delete Test Pass'
                     : 'Confirm Delete'}
@@ -1563,14 +1669,18 @@ export default function AdminAttendeesPage() {
               </div>
               <div>
                 <h3 className="font-outfit font-bold text-lg text-stone-900">
-                  {selectionAnalysis.allTest
+                  {fullPowerActive
+                    ? `⚡ Full Power Delete ${selectedIds.length} Attendee${selectedIds.length === 1 ? '' : 's'}?`
+                    : selectionAnalysis.allTest
                     ? `Delete ${selectedIds.length} Test Pass${selectedIds.length === 1 ? '' : 'es'}?`
                     : selectionAnalysis.hasTest
                     ? `Delete Selected Passes (${selectionAnalysis.testPassCount} Test)`
                     : `Delete ${selectedIds.length} Attendee${selectedIds.length === 1 ? '' : 's'}?`}
                 </h3>
                 <span className="text-xs text-stone-500">
-                  {selectionAnalysis.hasTest
+                  {fullPowerActive
+                    ? 'Permanent destructive removal of all selected passes'
+                    : selectionAnalysis.hasTest
                     ? 'Staging test data cleanup'
                     : 'Irreversible bulk deletion'}
                 </span>
@@ -1578,39 +1688,69 @@ export default function AdminAttendeesPage() {
             </div>
 
             {/* Analysis Breakdown Box */}
-            <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200/80 space-y-2 text-xs">
-              <div className="flex justify-between items-center text-stone-700 font-medium">
-                <span>Total Selected:</span>
-                <span className="font-bold text-stone-900">{selectedIds.length}</span>
+            {fullPowerActive ? (
+              <div className="bg-rose-50 rounded-xl p-3.5 border border-rose-200 space-y-2.5 text-xs text-rose-950">
+                <div className="flex justify-between items-center text-stone-700 font-medium">
+                  <span>Total Selected:</span>
+                  <span className="font-bold text-stone-900 font-mono">{selectedIds.length}</span>
+                </div>
+                <div className="flex justify-between items-center text-rose-700 font-medium">
+                  <span className="font-semibold">Will Permanently Delete:</span>
+                  <span className="font-bold text-rose-900 font-mono">{selectedIds.length}</span>
+                </div>
+                <div className="flex justify-between items-center text-stone-500 font-medium">
+                  <span>Protected Records:</span>
+                  <span className="font-bold text-stone-700 font-mono">0</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-rose-100/70 border border-rose-200/80 text-rose-900 space-y-1">
+                  <p className="font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 text-rose-800">
+                    <Zap className="w-3.5 h-3.5 text-rose-600 fill-rose-600 shrink-0" />
+                    <span>SUPER_ADMIN FULL POWER IS ACTIVE:</span>
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-rose-900">
+                    Deletion protections are bypassed for this operation. This action is permanent and cannot be undone.
+                  </p>
+                </div>
               </div>
-              {selectionAnalysis.testPassCount > 0 && (
-                <div className="flex justify-between items-center text-emerald-700 font-medium">
-                  <span>Eligible Staging Test Passes:</span>
-                  <span className="font-bold bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded">
-                    {selectionAnalysis.testPassCount}
-                  </span>
+            ) : (
+              <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200/80 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-stone-700 font-medium">
+                  <span>Total Selected:</span>
+                  <span className="font-bold text-stone-900">{selectedIds.length}</span>
                 </div>
-              )}
-              {selectionAnalysis.protectedCount > 0 && (
-                <div className="flex justify-between items-center text-amber-700 font-medium">
-                  <span>Protected Real / Staff:</span>
-                  <span className="font-bold bg-amber-100/80 text-amber-800 px-2 py-0.5 rounded">
-                    {selectionAnalysis.protectedCount}
-                  </span>
-                </div>
-              )}
-              {selectionAnalysis.otherCount > 0 && (
-                <div className="flex justify-between items-center text-stone-600 font-medium">
-                  <span>Other / Protected:</span>
-                  <span className="font-bold text-stone-800">
-                    {selectionAnalysis.otherCount}
-                  </span>
-                </div>
-              )}
-            </div>
+                {selectionAnalysis.testPassCount > 0 && (
+                  <div className="flex justify-between items-center text-emerald-700 font-medium">
+                    <span>Eligible Staging Test Passes:</span>
+                    <span className="font-bold bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded">
+                      {selectionAnalysis.testPassCount}
+                    </span>
+                  </div>
+                )}
+                {selectionAnalysis.protectedCount > 0 && (
+                  <div className="flex justify-between items-center text-amber-700 font-medium">
+                    <span>Protected Real / Staff:</span>
+                    <span className="font-bold bg-amber-100/80 text-amber-800 px-2 py-0.5 rounded">
+                      {selectionAnalysis.protectedCount}
+                    </span>
+                  </div>
+                )}
+                {selectionAnalysis.otherCount > 0 && (
+                  <div className="flex justify-between items-center text-stone-600 font-medium">
+                    <span>Other / Protected:</span>
+                    <span className="font-bold text-stone-800">
+                      {selectionAnalysis.otherCount}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <p className="text-xs text-stone-600 leading-relaxed">
-              {selectionAnalysis.hasTest ? (
+              {fullPowerActive ? (
+                <>
+                  Are you sure you want to permanently delete all <strong>{selectedIds.length}</strong> selected records? This action is immediate and cannot be recovered.
+                </>
+              ) : selectionAnalysis.hasTest ? (
                 <>
                   You are about to permanently delete{' '}
                   <strong>{selectionAnalysis.testPassCount}</strong> staging test pass(es) along with their test scan
@@ -1646,6 +1786,8 @@ export default function AdminAttendeesPage() {
               >
                 {bulkBusy
                   ? 'Deleting...'
+                  : fullPowerActive
+                  ? `⚡ Permanently Delete ${selectedIds.length} Passes`
                   : selectionAnalysis.allTest
                   ? `Delete ${selectedIds.length} Test Pass${selectedIds.length === 1 ? '' : 'es'}`
                   : selectionAnalysis.hasTest

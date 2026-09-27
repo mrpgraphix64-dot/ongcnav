@@ -1,7 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AttendeesService } from './attendees.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendeeStatus, EmployeeCategory, OrderStatus, PaymentStatus, RegistrationType, UserRole } from '@ongc/shared-types';
+import {
+  AttendeeStatus,
+  EmployeeCategory,
+  OrderStatus,
+  PaymentStatus,
+  RegistrationType,
+  UserRole,
+  SETTING_SUPER_ADMIN_FULL_POWER,
+  AUDIT_FULL_POWER_ATTENDEE_DELETED,
+  AUDIT_FULL_POWER_ATTENDEES_BULK_DELETED,
+} from '@ongc/shared-types';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   isAdminTestDataDeleteEnabled,
@@ -141,6 +151,9 @@ describe('AttendeesService Parity & Functional Tests', () => {
       },
       allocationEvent: {
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      setting: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       $transaction: jest.fn().mockImplementation(async (cb) => {
         if (typeof cb === 'function') return cb(prisma);
@@ -954,6 +967,149 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
         expect(res.protectedCount).toBe(2);
         expect(prisma.attendee.deleteMany).not.toHaveBeenCalled();
         expect(prisma.attendee.updateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('SUPER_ADMIN Full Power Destructive Deletion for Attendees', () => {
+      it('permanently deletes an employee pass with check-in records when Full Power is active for SUPER_ADMIN', async () => {
+        process.env.NODE_ENV = 'staging';
+
+        prisma.setting.findUnique.mockResolvedValueOnce({
+          key: SETTING_SUPER_ADMIN_FULL_POWER,
+          value: 'true',
+        });
+
+        const checkedInEmployee = {
+          id: BigInt(701),
+          registrationType: RegistrationType.EMPLOYEE,
+          name: 'Checked In Employee',
+          ticketNumber: 'TK-EMP-701',
+          category: 'ONGC STAFF',
+          employeeId: BigInt(55),
+          dailyCheckins: [{ id: BigInt(1) }],
+          scanLogs: [{ id: BigInt(2) }],
+          orderId: null,
+          order: null,
+        };
+
+        prisma.attendee.findUnique.mockResolvedValueOnce(checkedInEmployee);
+
+        const res = await service.destroy(BigInt(701), {
+          id: BigInt(99),
+          role: UserRole.SUPER_ADMIN,
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.action).toBe('deleted');
+        expect(res.isFullPower).toBe(true);
+
+        expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+          where: { attendeeId: BigInt(701) },
+        });
+        expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({
+          where: { attendeeId: BigInt(701) },
+        });
+        expect(prisma.attendee.delete).toHaveBeenCalledWith({
+          where: { id: BigInt(701) },
+        });
+
+        expect(prisma.auditLog.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            userId: BigInt(99),
+            action: AUDIT_FULL_POWER_ATTENDEE_DELETED,
+            details: expect.objectContaining({
+              attendeeId: '701',
+              ticketNumber: 'TK-EMP-701',
+              fullPowerActive: true,
+            }),
+          }),
+        });
+      });
+
+      it('bulk deletes protected employee and commercial passes when Full Power is active', async () => {
+        process.env.NODE_ENV = 'staging';
+
+        prisma.setting.findUnique.mockResolvedValueOnce({
+          key: SETTING_SUPER_ADMIN_FULL_POWER,
+          value: 'true',
+        });
+
+        const empPass = {
+          id: BigInt(711),
+          ticketNumber: 'TK-EMP-711',
+          dailyCheckins: [{ id: BigInt(1) }],
+          scanLogs: [],
+          orderId: null,
+        };
+        const commPass = {
+          id: BigInt(712),
+          ticketNumber: 'TK-COMM-712',
+          dailyCheckins: [],
+          scanLogs: [],
+          orderId: BigInt(800),
+        };
+
+        prisma.attendee.findMany.mockResolvedValueOnce([empPass, commPass]);
+        prisma.attendee.count.mockResolvedValueOnce(0); // 0 remaining attendees for order 800
+
+        const res = await service.bulkDestroy([BigInt(711), BigInt(712)], {
+          id: BigInt(99),
+          role: UserRole.SUPER_ADMIN,
+        });
+
+        expect(res.deletedCount).toBe(2);
+        expect(res.isFullPower).toBe(true);
+
+        expect(prisma.attendee.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: [BigInt(711), BigInt(712)] } },
+        });
+        expect(prisma.commercialOrder.delete).toHaveBeenCalledWith({
+          where: { id: BigInt(800) },
+        });
+
+        expect(prisma.auditLog.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            userId: BigInt(99),
+            action: AUDIT_FULL_POWER_ATTENDEES_BULK_DELETED,
+            details: expect.objectContaining({
+              deletedCount: 2,
+              fullPowerActive: true,
+            }),
+          }),
+        });
+      });
+
+      it('in production, Full Power is fail-closed and checked-in employee pass cannot be deleted', async () => {
+        process.env.NODE_ENV = 'production';
+
+        prisma.setting.findUnique.mockResolvedValueOnce({
+          key: SETTING_SUPER_ADMIN_FULL_POWER,
+          value: 'true',
+        });
+
+        const checkedInEmployee = {
+          id: BigInt(701),
+          registrationType: RegistrationType.EMPLOYEE,
+          name: 'Checked In Employee',
+          ticketNumber: 'TK-EMP-701',
+          category: 'ONGC STAFF',
+          employeeId: BigInt(55),
+          dailyCheckins: [{ id: BigInt(1) }],
+          scanLogs: [],
+          orderId: null,
+          order: null,
+        };
+
+        prisma.attendee.findUnique.mockResolvedValueOnce(checkedInEmployee);
+
+        const res = await service.destroy(BigInt(701), {
+          id: BigInt(99),
+          role: UserRole.SUPER_ADMIN,
+        });
+
+        // In production, fallback legacy behavior revokes rather than deletes
+        expect(res.action).toBe('revoked');
+        expect(prisma.attendee.delete).not.toHaveBeenCalled();
       });
     });
   });

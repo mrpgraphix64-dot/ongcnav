@@ -271,4 +271,78 @@ export function isOfficialEventDate(date: string): date is OfficialEventDate {
   return (OFFICIAL_EVENT_DATES as readonly string[]).includes(date);
 }
 
+// ---------------------------------------------------------------------------
+// SUPER_ADMIN CONTROL CENTER & SYSTEM SETTINGS
+// ---------------------------------------------------------------------------
+
+export const SETTING_SUPER_ADMIN_FULL_POWER = 'system.super_admin_full_power';
+export const SETTING_MAINTENANCE_MODE = 'system.maintenance_mode';
+
+export const CONFIRMATION_ENABLE_FULL_POWER = 'ENABLE FULL POWER';
+export const CONFIRMATION_ENABLE_MAINTENANCE = 'ENABLE MAINTENANCE';
+
+// Audit Log Action Identifiers
+export const AUDIT_SUPER_ADMIN_FULL_POWER_ENABLED = 'SUPER_ADMIN_FULL_POWER_ENABLED';
+export const AUDIT_SUPER_ADMIN_FULL_POWER_DISABLED = 'SUPER_ADMIN_FULL_POWER_DISABLED';
+export const AUDIT_MAINTENANCE_MODE_ENABLED = 'MAINTENANCE_MODE_ENABLED';
+export const AUDIT_MAINTENANCE_MODE_DISABLED = 'MAINTENANCE_MODE_DISABLED';
+export const AUDIT_FULL_POWER_ATTENDEE_DELETED = 'FULL_POWER_ATTENDEE_DELETED';
+export const AUDIT_FULL_POWER_ATTENDEES_BULK_DELETED = 'FULL_POWER_ATTENDEES_BULK_DELETED';
+export const AUDIT_FULL_POWER_ORDER_DELETED = 'FULL_POWER_ORDER_DELETED';
+export const AUDIT_FULL_POWER_ORDERS_BULK_DELETED = 'FULL_POWER_ORDERS_BULK_DELETED';
+
+/**
+ * Authoritative evaluation of SUPER_ADMIN Full Power mode.
+ *
+ * STRICT PRODUCTION FAILSAFE:
+ * If NODE_ENV is 'production' (or undefined/empty), Full Power is NEVER active under any circumstances.
+ * Only allowed when NODE_ENV is explicitly non-production (staging, development, test, local),
+ * AND the authenticated user's role is SUPER_ADMIN,
+ * AND the persistent setting is explicitly enabled in the database.
+ */
+export function isSuperAdminFullPowerActive(
+  userRole?: string | null,
+  isSettingEnabled?: boolean | string | null,
+  nodeEnv?: string | null,
+): boolean {
+  // 1. Strict production fail-closed check
+  const procEnv = (globalThis as any)?.process?.env?.NODE_ENV;
+  const env = (nodeEnv || (typeof procEnv === 'string' ? procEnv : '') || '')
+    .toLowerCase()
+    .trim();
+
+  if (!env || env === 'production') {
+    return false;
+  }
+
+  const allowedEnvs = ['staging', 'development', 'test', 'local'];
+  if (!allowedEnvs.includes(env)) {
+    return false;
+  }
+
+  // 2. Role check: only SUPER_ADMIN can wield Full Power
+  const role = (userRole || '').toUpperCase().trim();
+  if (role !== UserRole.SUPER_ADMIN) {
+    return false;
+  }
+
+  // 3. Setting value check
+  if (typeof isSettingEnabled === 'boolean') {
+    return isSettingEnabled;
+  }
+  const flag = String(isSettingEnabled || '').toLowerCase().trim();
+  return flag === 'true' || flag === '1';
+}
+
+/**
+ * Checks whether global maintenance mode is enabled.
+ */
+export function isMaintenanceModeActive(isSettingEnabled?: boolean | string | null): boolean {
+  if (typeof isSettingEnabled === 'boolean') {
+    return isSettingEnabled;
+  }
+  const flag = String(isSettingEnabled || '').toLowerCase().trim();
+  return flag === 'true' || flag === '1';
+}
+
 export * from './admin-page-access';

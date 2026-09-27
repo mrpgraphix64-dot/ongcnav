@@ -19,8 +19,14 @@ import {
   Building,
   Clock,
   Sparkles,
+  Zap,
+  Power,
+  ShieldAlert,
+  Wrench,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
+import { subscribeToSuperAdminSync, broadcastSuperAdminSync } from '@/lib/super-admin-state';
 
 type TabType = 'general' | 'event' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger';
 
@@ -32,9 +38,50 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  // Authenticated user & role check
+  const [currentUser, setCurrentUser] = useState<{ id?: string; role?: string; email?: string } | null>(null);
+  const isSuperAdmin = (currentUser?.role || '').toUpperCase() === 'SUPER_ADMIN';
+
+  // Super Admin Control Center state
+  const [superAdminData, setSuperAdminData] = useState<{
+    superAdminFullPower: boolean;
+    fullPowerActive: boolean;
+    isProduction: boolean;
+    nodeEnv: string;
+    maintenanceMode: boolean;
+    adminTestDataDeleteEnabled: boolean;
+  } | null>(null);
+  const [fullPowerModalOpen, setFullPowerModalOpen] = useState(false);
+  const [fullPowerConfirmText, setFullPowerConfirmText] = useState('');
+  const [fullPowerSubmitting, setFullPowerSubmitting] = useState(false);
+  const [fullPowerError, setFullPowerError] = useState<string | null>(null);
+
+  const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
+  const [maintenanceConfirmText, setMaintenanceConfirmText] = useState('');
+  const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
+
   // Danger zone confirmation
   const [dangerConfirm, setDangerConfirm] = useState('');
   const [dangerSubmitting, setDangerSubmitting] = useState(false);
+
+  const loadSuperAdminSettings = async () => {
+    try {
+      const res = await fetchApi<any>('/admin/settings/super-admin');
+      if (res) {
+        setSuperAdminData({
+          superAdminFullPower: Boolean(res.superAdminFullPower),
+          fullPowerActive: Boolean(res.fullPowerActive),
+          isProduction: Boolean(res.isProduction),
+          nodeEnv: String(res.nodeEnv || 'development'),
+          maintenanceMode: Boolean(res.maintenanceMode),
+          adminTestDataDeleteEnabled: Boolean(res.adminTestDataDeleteEnabled),
+        });
+      }
+    } catch {
+      setSuperAdminData(null);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -52,7 +99,50 @@ export default function AdminSettingsPage() {
   };
 
   useEffect(() => {
+    // 1. Synchronous auth profile retrieval from local storage
+    const stored = getStoredAuthUser();
+    if (stored) {
+      setCurrentUser(stored as any);
+      if ((stored.role || '').toUpperCase() === 'SUPER_ADMIN') {
+        loadSuperAdminSettings();
+      }
+    }
+
+    // 2. Authoritative server-side session verification
+    fetchApi('/auth/me')
+      .then((res: any) => {
+        if (res?.user) {
+          setCurrentUser(res.user);
+          if ((res.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
+            loadSuperAdminSettings();
+          }
+        }
+      })
+      .catch(() => {});
+
+    // 3. Cross-tab auth synchronization
+    const unsubscribe = subscribeToAuthSync((event) => {
+      if (event.type === 'LOGIN' && event.user) {
+        setCurrentUser(event.user as any);
+        if ((event.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
+          loadSuperAdminSettings();
+        }
+      } else if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
+        setCurrentUser(null);
+        setSuperAdminData(null);
+      }
+    });
+
+    const unsubscribeSync = subscribeToSuperAdminSync(() => {
+      loadSuperAdminSettings();
+    });
+
     loadSettings();
+
+    return () => {
+      unsubscribe?.();
+      unsubscribeSync?.();
+    };
   }, []);
 
   const handleInputChange = (group: string, field: string, value: any) => {
@@ -639,43 +729,522 @@ export default function AdminSettingsPage() {
 
         {/* 8. Danger Zone */}
         {activeTab === 'danger' && (
-          <div className="space-y-4 max-w-xl">
-            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-sm">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
-                <span>Restricted Administrative Action</span>
-              </div>
-              <p className="text-xs text-rose-800">
-                Purging event data will clear test scan events and simulate a clean slate. Type{' '}
-                <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-rose-300">
-                  RESET
-                </strong>{' '}
-                to authorize.
-              </p>
-            </div>
+          <div className="space-y-6 max-w-3xl">
+            {/* ONLY RENDER SUPER_ADMIN FULL POWER & MAINTENANCE MODE CONTROLS FOR SUPER_ADMIN */}
+            {isSuperAdmin && (
+              <>
+                {/* --------------------------------------------
+                    1. ⚡ SUPER ADMIN FULL POWER CARD
+                   -------------------------------------------- */}
+                <div
+                  className={`p-6 rounded-2xl border transition-all ${
+                    !superAdminData?.isProduction && (superAdminData?.fullPowerActive || superAdminData?.superAdminFullPower)
+                      ? 'border-rose-400 bg-rose-50/80 shadow-md ring-1 ring-rose-300'
+                      : 'border-stone-200 bg-white shadow-xs'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          !superAdminData?.isProduction && (superAdminData?.fullPowerActive || superAdminData?.superAdminFullPower)
+                            ? 'bg-rose-600 text-white animate-pulse'
+                            : 'bg-rose-100 text-rose-700'
+                        }`}
+                      >
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-outfit font-black text-base text-rose-950 flex items-center gap-2">
+                          <span>⚡ SUPER ADMIN FULL POWER</span>
+                        </h4>
+                        <p className="text-xs text-stone-600 mt-0.5">
+                          Enable unrestricted business-level destructive controls for SUPER_ADMIN in staging/development.
+                        </p>
+                      </div>
+                    </div>
 
-            <form onSubmit={handleResetData} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-ink mb-1">Type RESET to confirm</label>
-                <input
-                  type="text"
-                  placeholder="RESET"
-                  value={dangerConfirm}
-                  onChange={(e) => setDangerConfirm(e.target.value)}
-                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-rose-300 bg-white font-mono font-bold text-rose-900 focus:outline-rose-600"
-                />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-bold text-stone-500">Status:</span>
+                      {superAdminData?.isProduction ? (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-stone-200 text-stone-700 border border-stone-300">
+                          Unavailable in Production
+                        </span>
+                      ) : !superAdminData?.isProduction && (superAdminData?.fullPowerActive || superAdminData?.superAdminFullPower) ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white border border-rose-700 shadow-xs">
+                          <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping" />
+                          ACTIVE
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-stone-100 text-stone-700 border border-stone-300">
+                          OFF
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PROMINENT RED WARNING WHEN FULL POWER IS ACTIVE */}
+                  {!superAdminData?.isProduction && (superAdminData?.fullPowerActive || superAdminData?.superAdminFullPower) && (
+                    <div className="mt-4 p-4 rounded-xl bg-rose-600 text-white shadow-sm flex items-start gap-3 animate-in fade-in">
+                      <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="font-outfit font-black text-sm tracking-wide text-amber-200 flex items-center gap-2">
+                          <span>⚡ FULL POWER ACTIVE</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/20 uppercase">
+                            {superAdminData?.nodeEnv || 'staging'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-rose-50 leading-relaxed font-medium">
+                          SUPER_ADMIN destructive deletion controls are currently enabled. Normal safe deletion safeguards and protection rules are bypassed.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DESCRIPTION */}
+                  <div className="mt-4 text-xs text-stone-600 space-y-1.5 bg-stone-50 p-3.5 rounded-xl border border-stone-200/80">
+                    <p className="leading-relaxed">
+                      Allows SUPER_ADMIN to permanently delete otherwise protected business records in staging/development.
+                    </p>
+                    {!(!superAdminData?.isProduction && (superAdminData?.fullPowerActive || superAdminData?.superAdminFullPower)) && (
+                      <p className="text-stone-500 font-medium">
+                        When OFF: normal safe deletion rules remain active.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* ACTION BUTTON */}
+                  <div className="pt-4">
+                    {superAdminData?.isProduction ? (
+                      <button
+                        disabled
+                        className="px-4 py-2.5 rounded-xl bg-stone-200 text-stone-500 text-xs font-bold cursor-not-allowed"
+                      >
+                        Full Power is unavailable in Production
+                      </button>
+                    ) : !superAdminData?.isProduction && (superAdminData?.fullPowerActive || superAdminData?.superAdminFullPower) ? (
+                      <button
+                        type="button"
+                        disabled={fullPowerSubmitting}
+                        onClick={async () => {
+                          try {
+                            setFullPowerSubmitting(true);
+                            const res = await fetchApi<any>('/admin/settings/super-admin/full-power', {
+                              method: 'POST',
+                              body: JSON.stringify({ enabled: false }),
+                            });
+                            setMsg({ text: res.message || 'SUPER_ADMIN Full Power deactivated.', type: 'success' });
+                            setSuperAdminData((prev) => prev ? { ...prev, fullPowerActive: false, superAdminFullPower: false } : prev);
+                            await loadSuperAdminSettings();
+                            broadcastSuperAdminSync();
+                          } catch (e: any) {
+                            setMsg({ text: e.message || 'Failed to deactivate Full Power', type: 'error' });
+                          } finally {
+                            setFullPowerSubmitting(false);
+                          }
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <Power className="w-4 h-4 text-rose-400" />
+                        <span>{fullPowerSubmitting ? 'Deactivating...' : 'Deactivate Full Power'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFullPowerConfirmText('');
+                          setFullPowerError(null);
+                          setFullPowerModalOpen(true);
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
+                      >
+                        <Zap className="w-4 h-4 text-amber-300" />
+                        <span>Enable Full Power</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* --------------------------------------------
+                    2. 🛠 MAINTENANCE MODE CARD
+                   -------------------------------------------- */}
+                <div
+                  className={`p-6 rounded-2xl border transition-all ${
+                    superAdminData?.maintenanceMode
+                      ? 'border-amber-400 bg-amber-50/80 shadow-md ring-1 ring-amber-300'
+                      : 'border-stone-200 bg-white shadow-xs'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          superAdminData?.maintenanceMode
+                            ? 'bg-amber-600 text-white animate-pulse'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        <Wrench className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-outfit font-black text-base text-amber-950 flex items-center gap-2">
+                          <span>🛠 MAINTENANCE MODE</span>
+                        </h4>
+                        <p className="text-xs text-stone-600 mt-0.5">
+                          Temporarily disable public registration and E-Pass purchase while keeping administration and scanner operations available.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-bold text-stone-500">Status:</span>
+                      {superAdminData?.maintenanceMode ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-600 text-white border border-amber-700 shadow-xs">
+                          <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                          ACTIVE
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-stone-100 text-stone-700 border border-stone-300">
+                          OFF
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PROMINENT AMBER WARNING WHEN MAINTENANCE MODE IS ACTIVE */}
+                  {superAdminData?.maintenanceMode && (
+                    <div className="mt-4 p-4 rounded-xl bg-amber-500 text-white shadow-sm flex items-start gap-3 animate-in fade-in">
+                      <ShieldAlert className="w-5 h-5 text-white shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="font-outfit font-black text-sm tracking-wide">
+                          🟠 MAINTENANCE MODE ACTIVE
+                        </div>
+                        <p className="text-xs text-amber-50 leading-relaxed font-medium">
+                          Public registration and E-Pass purchase are currently suspended. Turnstile scanner operations and administration consoles remain fully active.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DESCRIPTION */}
+                  <div className="mt-4 text-xs text-stone-600 space-y-1.5 bg-stone-50 p-3.5 rounded-xl border border-stone-200/80">
+                    <p className="leading-relaxed">
+                      Blocks public registration / E-Pass purchase while leaving admin and scanner operations available.
+                    </p>
+                  </div>
+
+                  {/* ACTION BUTTON */}
+                  <div className="pt-4">
+                    {superAdminData?.maintenanceMode ? (
+                      <button
+                        type="button"
+                        disabled={maintenanceSubmitting}
+                        onClick={async () => {
+                          try {
+                            setMaintenanceSubmitting(true);
+                            const res = await fetchApi<any>('/admin/settings/super-admin/maintenance-mode', {
+                              method: 'POST',
+                              body: JSON.stringify({ enabled: false }),
+                            });
+                            setMsg({ text: res.message || 'System Maintenance Mode deactivated.', type: 'success' });
+                            setSuperAdminData((prev) => prev ? { ...prev, maintenanceMode: false } : prev);
+                            await loadSuperAdminSettings();
+                            broadcastSuperAdminSync();
+                          } catch (e: any) {
+                            setMsg({ text: e.message || 'Failed to deactivate Maintenance Mode', type: 'error' });
+                          } finally {
+                            setMaintenanceSubmitting(false);
+                          }
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <Power className="w-4 h-4 text-amber-400" />
+                        <span>{maintenanceSubmitting ? 'Deactivating...' : 'Deactivate Maintenance Mode'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMaintenanceConfirmText('');
+                          setMaintenanceError(null);
+                          setMaintenanceModalOpen(true);
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
+                      >
+                        <Power className="w-4 h-4" />
+                        <span>Enable Maintenance Mode</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* --------------------------------------------
+                3. ⚠ EXISTING DATA PURGE
+               -------------------------------------------- */}
+            <div className="p-6 rounded-2xl border border-stone-200 bg-white space-y-4">
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                  <span>Restricted Administrative Action</span>
+                </div>
+                <p className="text-xs text-rose-800">
+                  Purging event data will clear test scan events and simulate a clean slate. Type{' '}
+                  <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-rose-300">
+                    RESET
+                  </strong>{' '}
+                  to authorize.
+                </p>
               </div>
-              <button
-                type="submit"
-                disabled={dangerConfirm.trim().toUpperCase() !== 'RESET' || dangerSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {dangerSubmitting ? 'Purging...' : 'Execute Data Purge'}
-              </button>
-            </form>
+
+              <form onSubmit={handleResetData} className="space-y-3 max-w-md">
+                <div>
+                  <label className="block text-xs font-bold text-ink mb-1">Type RESET to confirm</label>
+                  <input
+                    type="text"
+                    placeholder="RESET"
+                    value={dangerConfirm}
+                    onChange={(e) => setDangerConfirm(e.target.value)}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-rose-300 bg-white font-mono font-bold text-rose-900 focus:outline-rose-600"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={dangerConfirm.trim().toUpperCase() !== 'RESET' || dangerSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {dangerSubmitting ? 'Purging...' : 'Execute Data Purge'}
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </div>
+
+      {/* MODAL 1: CONFIRM FULL POWER ACTIVATION */}
+      {fullPowerModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 border border-rose-300 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 flex items-center justify-center shrink-0">
+                <Zap className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-outfit font-black text-lg text-rose-950">
+                  Enable SUPER_ADMIN Full Power
+                </h3>
+                <span className="text-xs font-bold text-rose-600 uppercase tracking-wide">
+                  Destructive Mode Authorization
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-2">
+              <p className="font-bold">
+                ⚠️ WARNING: Bypasses all deletion protections!
+              </p>
+              <p className="leading-relaxed">
+                Enabling Full Power grants authority to permanently delete any commercial orders, passes, employee tickets, scanned passes, and payment records.
+              </p>
+              <p className="font-medium text-rose-800">
+                Type <strong>ENABLE FULL POWER</strong> below to activate.
+              </p>
+            </div>
+
+            {fullPowerError && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span className="font-semibold">{fullPowerError}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (fullPowerConfirmText.trim() !== 'ENABLE FULL POWER') {
+                  setFullPowerError('You must type ENABLE FULL POWER exactly.');
+                  return;
+                }
+                try {
+                  setFullPowerSubmitting(true);
+                  setFullPowerError(null);
+                  const res = await fetchApi<any>('/admin/settings/super-admin/full-power', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      enabled: true,
+                      confirmation: fullPowerConfirmText.trim(),
+                    }),
+                  });
+                  setMsg({ text: res.message || 'SUPER_ADMIN FULL POWER ENABLED.', type: 'success' });
+                  setFullPowerModalOpen(false);
+                  setFullPowerConfirmText('');
+                  setFullPowerError(null);
+                  setSuperAdminData((prev) => prev ? { ...prev, fullPowerActive: true, superAdminFullPower: true } : prev);
+                  await loadSuperAdminSettings();
+                  broadcastSuperAdminSync();
+                } catch (err: any) {
+                  setFullPowerError(`Unable to enable Full Power. ${err.message || 'Server error occurred.'}`);
+                } finally {
+                  setFullPowerSubmitting(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-stone-800 mb-1.5">
+                  Confirmation Phrase
+                </label>
+                <input
+                  type="text"
+                  placeholder="ENABLE FULL POWER"
+                  value={fullPowerConfirmText}
+                  onChange={(e) => {
+                    setFullPowerConfirmText(e.target.value);
+                    if (fullPowerError) setFullPowerError(null);
+                  }}
+                  className="w-full text-xs px-3.5 py-3 rounded-xl border border-rose-300 font-mono font-bold text-rose-900 focus:outline-rose-600 bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFullPowerModalOpen(false);
+                    setFullPowerConfirmText('');
+                    setFullPowerError(null);
+                  }}
+                  disabled={fullPowerSubmitting}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={fullPowerConfirmText.trim() !== 'ENABLE FULL POWER' || fullPowerSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition shadow-sm disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  <span>{fullPowerSubmitting ? 'Enabling...' : 'Authorize Full Power'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: CONFIRM MAINTENANCE MODE ACTIVATION */}
+      {maintenanceModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 border border-amber-300 shadow-2xl">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+                <Power className="w-6 h-6 text-amber-700" />
+              </div>
+              <div>
+                <h3 className="font-outfit font-black text-lg text-amber-950">
+                  Enable Maintenance Mode
+                </h3>
+                <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">
+                  Public Intake Suspension
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-2">
+              <p className="font-bold">
+                Public intake will be paused immediately!
+              </p>
+              <p className="leading-relaxed">
+                Public registration and commercial pass purchasing routes will respond with HTTP 503 Maintenance. Scanner turnstiles and gate entry operations will NOT be affected.
+              </p>
+              <p className="font-medium text-amber-800">
+                Type <strong>ENABLE MAINTENANCE</strong> below to activate.
+              </p>
+            </div>
+
+            {maintenanceError && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-700" />
+                <span className="font-semibold">{maintenanceError}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (maintenanceConfirmText.trim() !== 'ENABLE MAINTENANCE') {
+                  setMaintenanceError('You must type ENABLE MAINTENANCE exactly.');
+                  return;
+                }
+                try {
+                  setMaintenanceSubmitting(true);
+                  setMaintenanceError(null);
+                  const res = await fetchApi<any>('/admin/settings/super-admin/maintenance-mode', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      enabled: true,
+                      confirmation: maintenanceConfirmText.trim(),
+                    }),
+                  });
+                  setMsg({ text: res.message || 'System Maintenance Mode enabled.', type: 'success' });
+                  setMaintenanceModalOpen(false);
+                  setMaintenanceConfirmText('');
+                  setMaintenanceError(null);
+                  setSuperAdminData((prev) => prev ? { ...prev, maintenanceMode: true } : prev);
+                  await loadSuperAdminSettings();
+                  broadcastSuperAdminSync();
+                } catch (err: any) {
+                  setMaintenanceError(`Unable to enable Maintenance Mode. ${err.message || 'Server error occurred.'}`);
+                } finally {
+                  setMaintenanceSubmitting(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-stone-800 mb-1.5">
+                  Confirmation Phrase
+                </label>
+                <input
+                  type="text"
+                  placeholder="ENABLE MAINTENANCE"
+                  value={maintenanceConfirmText}
+                  onChange={(e) => {
+                    setMaintenanceConfirmText(e.target.value);
+                    if (maintenanceError) setMaintenanceError(null);
+                  }}
+                  className="w-full text-xs px-3.5 py-3 rounded-xl border border-amber-300 font-mono font-bold text-amber-900 focus:outline-amber-600 bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMaintenanceModalOpen(false);
+                    setMaintenanceConfirmText('');
+                    setMaintenanceError(null);
+                  }}
+                  disabled={maintenanceSubmitting}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={maintenanceConfirmText.trim() !== 'ENABLE MAINTENANCE' || maintenanceSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition shadow-sm disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Power className="w-4 h-4" />
+                  <span>{maintenanceSubmitting ? 'Enabling...' : 'Activate Maintenance'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

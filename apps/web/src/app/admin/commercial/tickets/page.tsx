@@ -33,7 +33,7 @@ export default function CommercialTicketsPage() {
       setResendSuccess(null);
 
       // Search through commercial orders for this ticket or phone or email
-      const res = await fetchApi(`/commercial/admin/orders?search=${encodeURIComponent(ticketSearch.trim())}`);
+      const res = await fetchApi(`/admin/commercial/orders?search=${encodeURIComponent(ticketSearch.trim())}`);
       const orders = res?.orders || [];
       if (orders.length === 0) {
         setError(`No commercial orders or passes found matching "${ticketSearch}".`);
@@ -47,12 +47,14 @@ export default function CommercialTicketsPage() {
     }
   };
 
-  const handleResendEmail = async (orderId: string) => {
+  const handleResendEmail = async (orderNumber: string, mobile: string) => {
     try {
       setResending(true);
       setResendSuccess(null);
-      await fetchApi(`/commercial/admin/orders/${orderId}/resend-email`, {
+      setError(null);
+      await fetchApi(`/commercial/orders/${encodeURIComponent(orderNumber)}/email`, {
         method: 'POST',
+        body: JSON.stringify({ mobile }),
       });
       setResendSuccess('Ticket confirmation email resent successfully!');
     } catch (err: any) {
@@ -134,19 +136,19 @@ export default function CommercialTicketsPage() {
                 {searchResult.customerName}
               </div>
               <div className="text-xs text-ink-soft">
-                {searchResult.customerPhone} &bull; {searchResult.customerEmail}
+                {(searchResult.customerMobile || searchResult.customerPhone || 'N/A')} &bull; {(searchResult.customerEmail || 'N/A')}
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
-                searchResult.status === 'PAID' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-stone-100 text-stone-600'
+                (searchResult.orderStatus || searchResult.status) === 'PAID' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-stone-100 text-stone-600'
               }`}>
-                {searchResult.status}
+                {searchResult.orderStatus || searchResult.status}
               </span>
               <button
-                onClick={() => handleResendEmail(searchResult.id)}
-                disabled={resending}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-maroon text-white text-xs font-semibold hover:bg-maroon-dark transition-colors shadow-xs"
+                onClick={() => handleResendEmail(searchResult.orderNumber, searchResult.customerMobile || searchResult.customerPhone)}
+                disabled={resending || !(searchResult.customerMobile || searchResult.customerPhone)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-maroon text-white text-xs font-semibold hover:bg-maroon-dark transition-colors shadow-xs disabled:opacity-50"
               >
                 <Send className="w-3 h-3" />
                 {resending ? 'Sending...' : 'Resend Email'}
@@ -157,7 +159,7 @@ export default function CommercialTicketsPage() {
           <div>
             <h3 className="text-xs font-bold text-ink-soft uppercase tracking-wider mb-2">Issued Tickets</h3>
             <div className="space-y-2">
-              {searchResult.passes?.map((p: any) => (
+              {(searchResult.attendees || searchResult.passes || []).map((p: any) => (
                 <div key={p.id} className="p-3 rounded-xl bg-stone-50 border border-stone-200/60 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Ticket className="w-4 h-4 text-maroon" />
@@ -168,7 +170,8 @@ export default function CommercialTicketsPage() {
                   </div>
                   <span className="text-xs font-semibold text-emerald-600">Valid</span>
                 </div>
-              )) || (
+              ))}
+              {!(searchResult.attendees?.length || searchResult.passes?.length) && (
                 <div className="text-xs text-ink-soft">No individual pass records found on this order.</div>
               )}
             </div>

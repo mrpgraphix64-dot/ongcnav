@@ -29,7 +29,7 @@ export default function CommercialAgentDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetchApi(`/commercial/agents/admin/agents`);
+      const res = await fetchApi('/admin/commercial/agents?limit=100');
       const agents = Array.isArray(res) ? res : res?.agents || [];
       const found = agents.find((a: any) => String(a.id) === String(agentId));
       if (!found) {

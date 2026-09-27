@@ -8,7 +8,17 @@ import {
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendeeStatus, OrderStatus, PaymentStatus, RegistrationType, UserRole } from '@ongc/shared-types';
+import {
+  AttendeeStatus,
+  OrderStatus,
+  PaymentStatus,
+  RegistrationType,
+  UserRole,
+  SETTING_SUPER_ADMIN_FULL_POWER,
+  AUDIT_FULL_POWER_ATTENDEE_DELETED,
+  AUDIT_FULL_POWER_ATTENDEES_BULK_DELETED,
+  isSuperAdminFullPowerActive,
+} from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import {
   isAdminTestDataDeleteEnabled,
@@ -932,6 +942,17 @@ export class AttendeesService {
     return isAdminTestDataDeleteEnabled();
   }
 
+  private async isFullPowerActive(userRole?: string | null): Promise<boolean> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: SETTING_SUPER_ADMIN_FULL_POWER },
+      });
+      return isSuperAdminFullPowerActive(userRole, setting?.value, process.env.NODE_ENV);
+    } catch {
+      return false;
+    }
+  }
+
   isStagingTestAttendee(attendee: any): boolean {
     if (!attendee) return false;
     // Real employee records or employee family members are NEVER test attendees
@@ -995,10 +1016,74 @@ export class AttendeesService {
     const userRole = typeof user === 'string' ? user : user?.role;
     const userId = typeof user === 'object' && user !== null ? user.id : undefined;
     const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const fullPowerActive = await this.isFullPowerActive(userRole);
     const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
     const isTest = this.isStagingTestAttendee(attendee);
 
-    // TEMPORARY SUPER_ADMIN TEST-DATA DELETE MODE
+    // 1. SUPER_ADMIN FULL POWER DESTRUCTIVE MODE (Non-production only)
+    if (fullPowerActive) {
+      await this.prisma.$transaction(async (tx: any) => {
+        // Audit log with safe metadata (no QR tokens, no secrets)
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: AUDIT_FULL_POWER_ATTENDEE_DELETED,
+            details: {
+              attendeeId: attendee.id.toString(),
+              attendeeName: attendee.name,
+              ticketNumber: attendee.ticketNumber,
+              registrationType: attendee.registrationType,
+              category: attendee.category,
+              orderId: attendee.orderId ? attendee.orderId.toString() : null,
+              orderNumber: attendee.order?.orderNumber || null,
+              razorpayPaymentId: attendee.order?.razorpayPaymentId || null,
+              checkinsRemoved: attendee.dailyCheckins?.length || 0,
+              scansRemoved: attendee.scanLogs?.length || 0,
+              fullPowerActive: true,
+              reason: 'Permanent attendee deletion under SUPER_ADMIN Full Power',
+            },
+          },
+        });
+
+        // Cascade cleanup of check-in and scan records
+        await tx.dailyCheckin.deleteMany({
+          where: { attendeeId: attendee.id },
+        });
+        await tx.scanLog.deleteMany({
+          where: { attendeeId: attendee.id },
+        });
+
+        // Delete attendee
+        await tx.attendee.delete({ where: { id: attendee.id } });
+
+        // Sibling safety: if this was the last remaining attendee of an order, clean up order
+        if (attendee.orderId) {
+          const remainingCount = await tx.attendee.count({
+            where: { orderId: attendee.orderId },
+          });
+          if (remainingCount === 0) {
+            await tx.paymentWebhookEvent.deleteMany({
+              where: { orderId: attendee.orderId },
+            });
+            await tx.allocationEvent.deleteMany({
+              where: { orderId: attendee.orderId },
+            });
+            await tx.commercialOrder.delete({
+              where: { id: attendee.orderId },
+            });
+          }
+        }
+      });
+
+      return {
+        success: true,
+        action: 'deleted',
+        isFullPower: true,
+        message: `Attendee '${attendee.name || attendee.ticketNumber}' permanently deleted under SUPER_ADMIN Full Power.`,
+      };
+    }
+
+    // 2. TEMPORARY SUPER_ADMIN TEST-DATA DELETE MODE
     if (testDeleteActive && isTest) {
       await this.prisma.$transaction(async (tx: any) => {
         // 1. Audit log with safe metadata (no QR tokens, no secrets)
@@ -1093,6 +1178,7 @@ export class AttendeesService {
     const userRole = typeof user === 'string' ? user : user?.role;
     const userId = typeof user === 'object' && user !== null ? user.id : undefined;
     const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+    const fullPowerActive = await this.isFullPowerActive(userRole);
     const testDeleteActive = isSuperAdmin && this.isTestDataDeleteEnabled();
 
     const attendees = await this.prisma.attendee.findMany({
@@ -1130,6 +1216,78 @@ export class AttendeesService {
         },
       },
     });
+
+    // 1. SUPER_ADMIN FULL POWER BULK DESTRUCTIVE MODE (Non-production only)
+    if (fullPowerActive) {
+      const attendeeIds = attendees.map((a) => a.id);
+      const ticketNumbers = attendees.map((a) => a.ticketNumber);
+      const affectedOrderIds = Array.from(
+        new Set(attendees.filter((a) => a.orderId).map((a) => a.orderId as bigint)),
+      );
+
+      await this.prisma.$transaction(async (tx: any) => {
+        // Safe audit log for bulk full power deletion
+        await tx.auditLog.create({
+          data: {
+            userId: userId ? BigInt(userId) : null,
+            action: AUDIT_FULL_POWER_ATTENDEES_BULK_DELETED,
+            details: {
+              totalSelected: ids.length,
+              deletedCount: attendeeIds.length,
+              attendeeIds: attendeeIds.map((id) => id.toString()),
+              ticketNumbers,
+              affectedOrderCount: affectedOrderIds.length,
+              fullPowerActive: true,
+              reason: 'Permanent bulk attendee deletion under SUPER_ADMIN Full Power',
+            },
+          },
+        });
+
+        if (attendeeIds.length > 0) {
+          await tx.dailyCheckin.deleteMany({
+            where: { attendeeId: { in: attendeeIds } },
+          });
+          await tx.scanLog.deleteMany({
+            where: { attendeeId: { in: attendeeIds } },
+          });
+          await tx.attendee.deleteMany({
+            where: { id: { in: attendeeIds } },
+          });
+
+          // Sibling safety: clean affected orders with 0 remaining attendees
+          for (const orderId of affectedOrderIds) {
+            const remainingCount = await tx.attendee.count({
+              where: { orderId },
+            });
+            if (remainingCount === 0) {
+              await tx.paymentWebhookEvent.deleteMany({
+                where: { orderId },
+              });
+              await tx.allocationEvent.deleteMany({
+                where: { orderId },
+              });
+              await tx.commercialOrder.delete({
+                where: { id: orderId },
+              });
+            }
+          }
+        }
+      });
+
+      return {
+        success: true,
+        totalSelected: ids.length,
+        deletedCount: attendeeIds.length,
+        failedCount: 0,
+        protectedCount: 0,
+        testDeletedCount: 0,
+        normalDeletedCount: attendeeIds.length,
+        isFullPower: true,
+        deletedTickets: ticketNumbers,
+        protectedTickets: [] as Array<{ id: string; ticketNumber: string; reason: string }>,
+        message: `Permanently deleted ${attendeeIds.length} pass(es) under SUPER_ADMIN Full Power.`,
+      };
+    }
 
     const eligibleTestAttendees: typeof attendees = [];
     const deletableAttendees: typeof attendees = [];

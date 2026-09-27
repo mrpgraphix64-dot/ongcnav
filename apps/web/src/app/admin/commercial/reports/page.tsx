@@ -18,13 +18,18 @@ export default function CommercialReportsPage() {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetchApi('/commercial/admin/summary');
-      setSummary(res);
+      const res = await fetchApi('/admin/commercial/orders?limit=1');
+      setSummary({
+        totalRevenue: res?.summary?.totalSalesInr ?? 0,
+        totalPassesIssued: res?.summary?.totalPasses ?? 0,
+        paidOrdersCount: res?.summary?.totalOrders ?? res?.total ?? 0,
+      });
     } catch (err: any) {
       setError(err?.message || 'Failed to load commercial report summary');
     } finally {
@@ -36,8 +41,40 @@ export default function CommercialReportsPage() {
     loadData();
   }, []);
 
-  const handleExportOrdersCsv = () => {
-    window.open('/api/commercial/admin/orders/export', '_blank');
+  const handleExportOrdersCsv = async () => {
+    try {
+      setExporting(true);
+      setError(null);
+      const res = await fetchApi('/admin/commercial/orders?limit=1000');
+      const orders = res?.orders || [];
+      const headers = ['Order Number', 'Date', 'Customer Name', 'Mobile', 'Email', 'Source', 'Ticket Type', 'Quantity', 'Amount (INR)', 'Status'];
+      const rows = orders.map((o: any) => [
+        `"${o.orderNumber || ''}"`,
+        `"${o.createdAt || ''}"`,
+        `"${(o.customerName || '').replace(/"/g, '""')}"`,
+        `"${o.customerMobile || o.customerPhone || ''}"`,
+        `"${(o.customerEmail || '').replace(/"/g, '""')}"`,
+        `"${o.source || ''}"`,
+        `"${o.ticketType || ''}"`,
+        o.quantity ?? o.passesCount ?? 1,
+        o.amountInr ?? 0,
+        `"${o.orderStatus || o.status || ''}"`,
+      ]);
+      const csvContent = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `commercial_orders_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to export commercial orders CSV');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -64,10 +101,11 @@ export default function CommercialReportsPage() {
           </button>
           <button
             onClick={handleExportOrdersCsv}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-maroon text-white hover:bg-maroon-dark transition-colors shadow-xs"
+            disabled={exporting}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-maroon text-white hover:bg-maroon-dark transition-colors shadow-xs disabled:opacity-50"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
-            Export Orders CSV
+            {exporting ? 'Exporting...' : 'Export Orders CSV'}
           </button>
         </div>
       </div>

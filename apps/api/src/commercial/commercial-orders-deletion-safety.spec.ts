@@ -17,6 +17,9 @@ import {
   PaymentStatus,
   RegistrationType,
   UserRole,
+  SETTING_SUPER_ADMIN_FULL_POWER,
+  AUDIT_FULL_POWER_ORDER_DELETED,
+  AUDIT_FULL_POWER_ORDERS_BULK_DELETED,
 } from '@ongc/shared-types';
 
 describe('Commercial Orders Deletion Safety & Staging Test-Data Delete Mode Tests', () => {
@@ -62,6 +65,9 @@ describe('Commercial Orders Deletion Safety & Staging Test-Data Delete Mode Test
       },
       auditLog: {
         create: jest.fn().mockResolvedValue({ id: BigInt(1) }),
+      },
+      setting: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       user: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -538,6 +544,160 @@ describe('Commercial Orders Deletion Safety & Staging Test-Data Delete Mode Test
         userRole: UserRole.SUPER_ADMIN,
       });
       expect(res.testDataDeleteEnabled).toBe(false);
+    });
+  });
+
+  describe('8. SUPER_ADMIN Full Power Destructive Deletion Tests', () => {
+    it('permanently deletes real/paid commercial order when Full Power is active for SUPER_ADMIN', async () => {
+      process.env.NODE_ENV = 'staging';
+
+      prisma.setting.findUnique.mockResolvedValueOnce({
+        key: SETTING_SUPER_ADMIN_FULL_POWER,
+        value: 'true',
+      });
+
+      const realPaidOrder = {
+        id: BigInt(501),
+        orderNumber: 'ORD-REAL-PAID-501',
+        orderStatus: OrderStatus.PAID,
+        paymentStatus: PaymentStatus.CAPTURED,
+        amountPaise: 150000,
+        ticketType: 'COMMERCIAL_DAILY',
+        quantity: 2,
+        razorpayPaymentId: 'pay_live_real_501',
+        customerName: 'Real Customer',
+        customerMobile: '9876543210',
+        customerEmail: 'real@gmail.com',
+        attendees: [
+          {
+            id: BigInt(5001),
+            ticketNumber: 'TK-5001',
+            dailyCheckins: [{ id: BigInt(1) }],
+            scanLogs: [{ id: BigInt(2) }],
+          },
+        ],
+        webhookEvents: [{ id: BigInt(10) }],
+        allocationEvents: [{ id: BigInt(20) }],
+      };
+
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(realPaidOrder);
+
+      const res = await service.deleteOrderAdmin(BigInt(501), {
+        id: BigInt(99),
+        role: UserRole.SUPER_ADMIN,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.action).toBe('deleted');
+      expect(res.fullPower).toBe(true);
+
+      // Verify cascade deletions
+      expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+        where: { attendeeId: { in: [BigInt(5001)] } },
+      });
+      expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({
+        where: { attendeeId: { in: [BigInt(5001)] } },
+      });
+      expect(prisma.paymentWebhookEvent.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: BigInt(501) },
+      });
+      expect(prisma.allocationEvent.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: BigInt(501) },
+      });
+      expect(prisma.attendee.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: BigInt(501) },
+      });
+      expect(prisma.commercialOrder.delete).toHaveBeenCalledWith({
+        where: { id: BigInt(501) },
+      });
+
+      // Verify audit log with safe metadata
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: BigInt(99),
+          action: AUDIT_FULL_POWER_ORDER_DELETED,
+          details: expect.objectContaining({
+            orderId: '501',
+            orderNumber: 'ORD-REAL-PAID-501',
+            fullPowerActive: true,
+          }),
+        }),
+      });
+    });
+
+    it('bulk deletes multiple protected orders when Full Power is active for SUPER_ADMIN', async () => {
+      process.env.NODE_ENV = 'staging';
+
+      prisma.setting.findUnique.mockResolvedValueOnce({
+        key: SETTING_SUPER_ADMIN_FULL_POWER,
+        value: 'true',
+      });
+
+      const order1 = {
+        id: BigInt(601),
+        orderNumber: 'ORD-601',
+        orderStatus: OrderStatus.PAID,
+        attendees: [{ id: BigInt(6001), ticketNumber: 'TK-6001' }],
+      };
+      const order2 = {
+        id: BigInt(602),
+        orderNumber: 'ORD-602',
+        orderStatus: OrderStatus.PAID,
+        attendees: [{ id: BigInt(6002), ticketNumber: 'TK-6002' }],
+      };
+
+      prisma.commercialOrder.findMany.mockResolvedValueOnce([order1, order2]);
+
+      const res = await service.bulkDeleteOrdersAdmin(['601', '602'], {
+        id: BigInt(99),
+        role: UserRole.SUPER_ADMIN,
+      });
+
+      expect(res.deletedCount).toBe(2);
+      expect(res.fullPower).toBe(true);
+      expect(prisma.commercialOrder.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: [BigInt(601), BigInt(602)] } },
+      });
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: BigInt(99),
+          action: AUDIT_FULL_POWER_ORDERS_BULK_DELETED,
+        }),
+      });
+    });
+
+    it('in production, Full Power is fail-closed and paid order cannot be deleted', async () => {
+      process.env.NODE_ENV = 'production';
+
+      prisma.setting.findUnique.mockResolvedValueOnce({
+        key: SETTING_SUPER_ADMIN_FULL_POWER,
+        value: 'true',
+      });
+
+      const realPaidOrder = {
+        id: BigInt(501),
+        orderNumber: 'ORD-REAL-PAID-501',
+        orderStatus: OrderStatus.PAID,
+        paymentStatus: PaymentStatus.CAPTURED,
+        amountPaise: 150000,
+        ticketType: 'COMMERCIAL_DAILY',
+        quantity: 2,
+        razorpayPaymentId: 'pay_live_real_501',
+        attendees: [{ id: BigInt(5001), ticketNumber: 'TK-5001', dailyCheckins: [], scanLogs: [] }],
+        webhookEvents: [],
+        allocationEvents: [],
+      };
+
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(realPaidOrder);
+
+      // In production, SUPER_ADMIN cancel/revokes instead of destructive deletion
+      const res = await service.deleteOrderAdmin(BigInt(501), {
+        id: BigInt(99),
+        role: UserRole.SUPER_ADMIN,
+      });
+
+      expect(res.action).toBe('cancelled');
+      expect(prisma.commercialOrder.delete).not.toHaveBeenCalled();
     });
   });
 });

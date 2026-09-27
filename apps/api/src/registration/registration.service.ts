@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
-import { AttendeeStatus, RegistrationType } from '@ongc/shared-types';
+import {
+  AttendeeStatus,
+  RegistrationType,
+  SETTING_MAINTENANCE_MODE,
+  isMaintenanceModeActive,
+} from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
@@ -14,6 +19,20 @@ import * as QRCode from 'qrcode';
 @Injectable()
 export class RegistrationService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getMaintenanceStatus() {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: SETTING_MAINTENANCE_MODE },
+      });
+      return {
+        maintenance: isMaintenanceModeActive(setting?.value),
+      };
+    } catch {
+      return { maintenance: false };
+    }
+  }
+
 
   private generateSecureQrToken(): string {
     return crypto.randomBytes(32).toString('hex');

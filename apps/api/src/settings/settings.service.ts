@@ -1,5 +1,19 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  UserRole,
+  SETTING_SUPER_ADMIN_FULL_POWER,
+  SETTING_MAINTENANCE_MODE,
+  CONFIRMATION_ENABLE_FULL_POWER,
+  CONFIRMATION_ENABLE_MAINTENANCE,
+  AUDIT_SUPER_ADMIN_FULL_POWER_ENABLED,
+  AUDIT_SUPER_ADMIN_FULL_POWER_DISABLED,
+  AUDIT_MAINTENANCE_MODE_ENABLED,
+  AUDIT_MAINTENANCE_MODE_DISABLED,
+  isSuperAdminFullPowerActive,
+  isMaintenanceModeActive,
+} from '@ongc/shared-types';
+import { isAdminTestDataDeleteEnabled } from '../commercial/commercial-test-payment.util';
 
 export const DEFAULT_SETTINGS: Record<string, string> = {
   // general
@@ -49,6 +63,10 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   'security.allow_qr_regeneration': '1',
   'security.log_scan_attempts': '1',
   'security.audit_log_days': '90',
+
+  // system control center defaults
+  'system.super_admin_full_power': '0',
+  'system.maintenance_mode': '0',
 };
 
 export const FIELDS_BY_GROUP: Record<string, string[]> = {
@@ -71,12 +89,18 @@ export const TOGGLE_FIELDS: Record<string, string[]> = {
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAllSettings() {
+  async getAllSettings(userRole?: string | null) {
+    const isSuperAdmin = (userRole || '').toUpperCase().trim() === UserRole.SUPER_ADMIN;
     const dbSettings = await this.prisma.setting.findMany();
     const settingsMap: Record<string, string> = { ...DEFAULT_SETTINGS };
 
     for (const s of dbSettings) {
       settingsMap[s.key] = s.value;
+    }
+
+    // Never leak SUPER_ADMIN_FULL_POWER in general settings for non-SUPER_ADMIN users
+    if (!isSuperAdmin) {
+      delete settingsMap[SETTING_SUPER_ADMIN_FULL_POWER];
     }
 
     const gates = await this.prisma.gate.findMany({
@@ -179,5 +203,194 @@ export class SettingsService {
     });
 
     return { success: true, message: 'Event data reset completed.' };
+  }
+
+  /**
+   * Determine if SUPER_ADMIN Full Power is currently active for the requesting user.
+   */
+  async isFullPowerActive(userRole?: string | null): Promise<boolean> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: SETTING_SUPER_ADMIN_FULL_POWER },
+      });
+      return isSuperAdminFullPowerActive(userRole, setting?.value, process.env.NODE_ENV);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Determine if global maintenance mode is currently active.
+   */
+  async isMaintenanceModeActive(): Promise<boolean> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: SETTING_MAINTENANCE_MODE },
+      });
+      return isMaintenanceModeActive(setting?.value);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Authoritative retrieval of SUPER_ADMIN control center settings.
+   */
+  async getSuperAdminSettings(userRole?: string | null) {
+    const role = (userRole || '').toUpperCase().trim();
+    if (role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can access Super Admin control center settings.');
+    }
+
+    const [fullPowerSetting, maintenanceSetting] = await Promise.all([
+      this.prisma.setting.findUnique({ where: { key: SETTING_SUPER_ADMIN_FULL_POWER } }),
+      this.prisma.setting.findUnique({ where: { key: SETTING_MAINTENANCE_MODE } }),
+    ]);
+
+    const isFullPowerEnabled = fullPowerSetting?.value === '1' || fullPowerSetting?.value === 'true';
+    const isMaintenanceEnabled = maintenanceSetting?.value === '1' || maintenanceSetting?.value === 'true';
+    const fullPowerActive = isSuperAdminFullPowerActive(role, fullPowerSetting?.value, process.env.NODE_ENV);
+    const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase().trim();
+
+    return {
+      superAdminFullPower: isFullPowerEnabled,
+      fullPowerActive,
+      isProduction: nodeEnv === 'production',
+      nodeEnv: process.env.NODE_ENV || 'development',
+      maintenanceMode: isMaintenanceEnabled,
+      adminTestDataDeleteEnabled: isAdminTestDataDeleteEnabled(),
+    };
+  }
+
+  /**
+   * Authoritative activation or deactivation of SUPER_ADMIN Full Power mode.
+   */
+  async toggleFullPower(
+    enabled: boolean,
+    confirmation?: string,
+    user?: { id?: bigint | string; role?: string } | string,
+  ) {
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
+
+    if ((userRole || '').toUpperCase().trim() !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can modify Super Admin Full Power setting.');
+    }
+
+    if (typeof enabled !== 'boolean') {
+      throw new BadRequestException('The enabled property must be an explicit boolean.');
+    }
+
+    const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase().trim();
+
+    if (enabled) {
+      // 1. Strict production fail-closed check
+      if (nodeEnv === 'production') {
+        throw new BadRequestException('Full Power is strictly unavailable in Production environment.');
+      }
+
+      // 2. Strict confirmation requirement
+      if ((confirmation || '').trim() !== CONFIRMATION_ENABLE_FULL_POWER) {
+        throw new BadRequestException(
+          `Confirmation phrase must be exactly '${CONFIRMATION_ENABLE_FULL_POWER}' to activate Full Power.`,
+        );
+      }
+    }
+
+    const valStr = enabled ? '1' : '0';
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.setting.upsert({
+        where: { key: SETTING_SUPER_ADMIN_FULL_POWER },
+        update: { value: valStr },
+        create: { key: SETTING_SUPER_ADMIN_FULL_POWER, value: valStr },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: userId ? BigInt(userId) : null,
+          action: enabled ? AUDIT_SUPER_ADMIN_FULL_POWER_ENABLED : AUDIT_SUPER_ADMIN_FULL_POWER_DISABLED,
+          details: {
+            action: enabled ? 'ENABLE_FULL_POWER' : 'DISABLE_FULL_POWER',
+            enabled,
+            nodeEnv: process.env.NODE_ENV || 'development',
+            reason: enabled
+              ? 'SUPER_ADMIN Full Power activated by authorized administrator'
+              : 'SUPER_ADMIN Full Power deactivated by administrator',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      enabled,
+      fullPowerActive: enabled && nodeEnv !== 'production',
+      message: enabled
+        ? 'SUPER_ADMIN Full Power mode activated. Destructive operations are enabled in this non-production environment.'
+        : 'SUPER_ADMIN Full Power mode deactivated. Normal safe deletion safeguards restored.',
+    };
+  }
+
+  /**
+   * Authoritative activation or deactivation of global maintenance mode.
+   */
+  async toggleMaintenanceMode(
+    enabled: boolean,
+    confirmation?: string,
+    user?: { id?: bigint | string; role?: string } | string,
+  ) {
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
+
+    if ((userRole || '').toUpperCase().trim() !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can modify Maintenance Mode setting.');
+    }
+
+    if (typeof enabled !== 'boolean') {
+      throw new BadRequestException('The enabled property must be an explicit boolean.');
+    }
+
+    if (enabled) {
+      if ((confirmation || '').trim() !== CONFIRMATION_ENABLE_MAINTENANCE) {
+        throw new BadRequestException(
+          `Confirmation phrase must be exactly '${CONFIRMATION_ENABLE_MAINTENANCE}' to activate Maintenance Mode.`,
+        );
+      }
+    }
+
+    const valStr = enabled ? '1' : '0';
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.setting.upsert({
+        where: { key: SETTING_MAINTENANCE_MODE },
+        update: { value: valStr },
+        create: { key: SETTING_MAINTENANCE_MODE, value: valStr },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: userId ? BigInt(userId) : null,
+          action: enabled ? AUDIT_MAINTENANCE_MODE_ENABLED : AUDIT_MAINTENANCE_MODE_DISABLED,
+          details: {
+            action: enabled ? 'ENABLE_MAINTENANCE' : 'DISABLE_MAINTENANCE',
+            enabled,
+            reason: enabled
+              ? 'Maintenance mode activated by SUPER_ADMIN. Public registrations and ticket purchases suspended.'
+              : 'Maintenance mode deactivated by SUPER_ADMIN. Public operations restored.',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      enabled,
+      message: enabled
+        ? 'Maintenance mode activated. Public registration and ticket booking are suspended.'
+        : 'Maintenance mode deactivated. Normal public operations restored.',
+    };
   }
 }
