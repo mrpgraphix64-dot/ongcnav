@@ -22,7 +22,14 @@ describe('CommercialService', () => {
 
   beforeEach(async () => {
     prisma = {
-      setting: { findUnique: jest.fn().mockResolvedValue(null) },
+      setting: {
+        findUnique: jest.fn().mockImplementation(({ where }: any) => {
+          if (where?.key === 'payment.razorpay_enabled') {
+            return Promise.resolve({ key: 'payment.razorpay_enabled', value: '1' });
+          }
+          return Promise.resolve(null);
+        }),
+      },
       commercialOrder: {
         create: jest.fn(),
         findUnique: jest.fn(),
@@ -979,6 +986,22 @@ describe('CommercialService', () => {
   });
 
   describe('Online Payment Guard', () => {
+    it('blocks new commercial order creation when payment setting is not found (default OFF)', async () => {
+      prisma.setting.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createOrder({
+          customerName: 'Aarti Patel',
+          customerEmail: 'aarti@example.com',
+          customerMobile: '9876543210',
+          ticketType: 'COMMERCIAL_DAILY',
+          selectedDates: ['2026-10-15'],
+          quantity: 1,
+          termsAccepted: true,
+        }),
+      ).rejects.toThrow('Online payments are currently unavailable. Please try again later.');
+    });
+
     it('blocks new commercial order creation when payment is disabled', async () => {
       prisma.setting.findUnique.mockImplementation(({ where }: any) => {
         if (where.key === 'payment.razorpay_enabled') {

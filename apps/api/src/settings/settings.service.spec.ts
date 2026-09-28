@@ -129,6 +129,15 @@ describe('SettingsService', () => {
   });
 
   describe('Payment Settings', () => {
+    it('should default payment to OFF (false) when setting row is not found', async () => {
+      prisma.setting.findUnique = jest.fn().mockResolvedValue(null);
+      const isEnabled = await service.isPaymentEnabled();
+      expect(isEnabled).toBe(false);
+
+      const settings = await service.getPaymentSettings('SUPER_ADMIN');
+      expect(settings.enabled).toBe(false);
+    });
+
     it('should allow SUPER_ADMIN to get payment settings', async () => {
       prisma.setting.findUnique = jest.fn().mockResolvedValue({ key: 'payment.razorpay_enabled', value: '1' });
       const res = await service.getPaymentSettings('SUPER_ADMIN');

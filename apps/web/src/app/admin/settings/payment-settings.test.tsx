@@ -63,4 +63,24 @@ describe('Payment Settings UI Tab Tests', () => {
     const html = ReactDOMServer.renderToStaticMarkup(<AdminSettingsPage />);
     expect(html).toContain('Payment Settings');
   });
+
+  it('renders Payment Settings controls when payment tab is selected', () => {
+    localStorage.setItem(
+      AUTH_SESSION_KEY,
+      JSON.stringify({ id: 'super-1', name: 'Super Admin', email: 'super@ongc.co.in', role: 'SUPER_ADMIN' }),
+    );
+
+    // Mock window.location.search with tab=payment
+    delete (global as any).window.location;
+    (global as any).window.location = new URL('https://ongcnavratri.reworkzone.in/admin/settings?tab=payment');
+
+    const html = ReactDOMServer.renderToStaticMarkup(<AdminSettingsPage />);
+    expect(html).toContain('PAYMENT SETTINGS');
+    expect(html).toContain('Razorpay Payment');
+    expect(html).toContain('Payment Status');
+    expect(html).toContain('Save Settings');
+    expect(html).toContain('Environment');
+    expect(html).toContain('Gateway');
+    expect(html).toContain('Razorpay');
+  });
 });

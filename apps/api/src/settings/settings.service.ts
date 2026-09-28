@@ -72,7 +72,7 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   'system.maintenance_mode': '0',
 
   // payment settings
-  'payment.razorpay_enabled': '1',
+  'payment.razorpay_enabled': '0',
 };
 
 export const FIELDS_BY_GROUP: Record<string, string[]> = {
@@ -408,10 +408,10 @@ export class SettingsService {
       const setting = await this.prisma.setting.findUnique({
         where: { key: SETTING_PAYMENT_RAZORPAY_ENABLED },
       });
-      if (!setting) return true;
+      if (!setting) return false;
       return setting.value === '1' || setting.value === 'true';
     } catch {
-      return true;
+      return false;
     }
   }
 

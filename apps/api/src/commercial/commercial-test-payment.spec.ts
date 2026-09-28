@@ -54,7 +54,14 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
 
     beforeEach(async () => {
       prisma = {
-        setting: { findUnique: jest.fn().mockResolvedValue(null) },
+        setting: {
+          findUnique: jest.fn().mockImplementation(({ where }: any) => {
+            if (where?.key === 'payment.razorpay_enabled') {
+              return Promise.resolve({ key: 'payment.razorpay_enabled', value: '1' });
+            }
+            return Promise.resolve(null);
+          }),
+        },
         commercialOrder: {
           create: jest.fn(),
           findUnique: jest.fn(),

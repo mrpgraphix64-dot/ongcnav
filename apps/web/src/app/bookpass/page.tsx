@@ -23,104 +23,17 @@ import {
   ChevronDown,
   Check,
   Download,
+  Lock,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { generateDownloadablePassSvg, resolveOrderSelectedDates } from './bookpass-order.util';
-
-const EVENT_DATES = [
-  '2026-10-11',
-  '2026-10-12',
-  '2026-10-13',
-  '2026-10-14',
-  '2026-10-15',
-  '2026-10-16',
-  '2026-10-17',
-  '2026-10-18',
-  '2026-10-19',
-];
-
-function formatDateChip(iso: string) {
-  const d = new Date(iso + 'T00:00:00');
-  return {
-    weekday: d.toLocaleDateString('en-IN', { weekday: 'short' }),
-    day: d.toLocaleDateString('en-IN', { day: '2-digit' }),
-    month: d.toLocaleDateString('en-IN', { month: 'short' }),
-    fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-    chipLabel: `${d.toLocaleDateString('en-IN', { month: 'short' })} ${d.getDate()}`,
-  };
-}
-
-const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
-
-export type TicketTypeCode =
-  | 'COMMERCIAL_DAILY'
-  | 'COMMERCIAL_SEASON'
-  | 'COMMERCIAL_MANDLI'
-  | 'COMMERCIAL_ANY_DAY';
-
-interface PassOption {
-  code: TicketTypeCode;
-  name: string;
-  timing: string;
-  timingCategory: 'Mandli' | 'Garba';
-  price: number;
-  originalPrice: number;
-  discountLabel: string;
-  offerLabel: string;
-  description: string;
-  isSeason: boolean;
-}
-
-const PASS_OPTIONS: PassOption[] = [
-  {
-    code: 'COMMERCIAL_DAILY',
-    name: 'Daily Pass',
-    timing: '8:00 PM – 4:00 AM',
-    timingCategory: 'Garba',
-    price: 249,
-    originalPrice: 499,
-    discountLabel: '50% OFF',
-    offerLabel: 'EARLY BIRD OFFER',
-    description: 'Full evening Garba entry for selected night',
-    isSeason: false,
-  },
-  {
-    code: 'COMMERCIAL_SEASON',
-    name: 'Season Pass',
-    timing: '8:00 PM – 4:00 AM',
-    timingCategory: 'Garba',
-    price: 1750,
-    originalPrice: 3500,
-    discountLabel: '50% OFF',
-    offerLabel: 'ALL 9 NIGHTS',
-    description: 'Full festival pass covering all 9 nights of Garba',
-    isSeason: true,
-  },
-  {
-    code: 'COMMERCIAL_MANDLI',
-    name: 'Mandli Pass',
-    timing: '12:00 AM – 4:00 AM',
-    timingCategory: 'Mandli',
-    price: 149,
-    originalPrice: 299,
-    discountLabel: '50% OFF',
-    offerLabel: 'MIDNIGHT SPECIAL',
-    description: 'Post-midnight entry for late-night Mandli Garba',
-    isSeason: false,
-  },
-  {
-    code: 'COMMERCIAL_ANY_DAY',
-    name: 'Any Day Pass',
-    timing: '8:00 PM – 4:00 AM',
-    timingCategory: 'Garba',
-    price: 279,
-    originalPrice: 499,
-    discountLabel: '44% OFF',
-    offerLabel: 'FLEXIBLE ENTRY',
-    description: 'Flexible single-night entry pass for any chosen event night',
-    isSeason: false,
-  },
-];
+import BookPassSection, {
+  EVENT_DATES,
+  formatDateChip,
+  PASS_OPTIONS,
+  INDIAN_MOBILE_REGEX,
+  type TicketTypeCode,
+} from '@/components/BookPassSection';
 
 interface GeneratedPass {
   id: string;
@@ -362,24 +275,30 @@ export default function BookPassPage() {
     }
   };
 
-  // Server-synced pricing config
+  // Server-synced pricing config & authoritative payment gateway state
   const [serverPricing, setServerPricing] = useState<Record<string, any> | null>(null);
+  const [paymentEnabled, setPaymentEnabled] = useState<boolean>(false);
 
-  // Load server-side commercial pricing & dates on mount
+  // Load server-side commercial pricing, dates & payment status on mount
   useEffect(() => {
     async function loadConfig() {
       try {
         setLoadingConfig(true);
         const res = await fetchApi('/commercial/config');
-        if (res?.ticketTypes) {
-          const map: Record<string, any> = {};
-          res.ticketTypes.forEach((t: any) => {
-            map[t.code] = t;
-          });
-          setServerPricing(map);
+        if (res) {
+          if (res.ticketTypes) {
+            const map: Record<string, any> = {};
+            res.ticketTypes.forEach((t: any) => {
+              map[t.code] = t;
+            });
+            setServerPricing(map);
+          }
+          if (typeof res.paymentEnabled === 'boolean') {
+            setPaymentEnabled(res.paymentEnabled);
+          }
         }
       } catch {
-        // Fallback to local constants
+        // Fallback to local constants; paymentEnabled stays false
       } finally {
         setLoadingConfig(false);
       }
@@ -387,57 +306,20 @@ export default function BookPassPage() {
     loadConfig();
   }, []);
 
-  // Single date selection: tapping another date REPLACES the previous date
-  const handleSelectDate = (date: string) => {
-    setSelectedDate(date);
-  };
-
-  // Resolve active option config
-  const activeOption = PASS_OPTIONS.find((t) => t.code === ticketType) || PASS_OPTIONS[0];
-  const serverItem = serverPricing?.[ticketType];
-  const unitPrice = serverItem?.priceInr ?? activeOption.price;
-  const originalUnitPrice = serverItem?.originalPriceInr ?? activeOption.originalPrice;
-  const activeTiming = serverItem?.timing ?? activeOption.timing;
-
-  // Live estimated pricing (strictly computed and validated server-side on creation)
-  const isSeason = ticketType === 'COMMERCIAL_SEASON';
-  const isAnyDay = ticketType === 'COMMERCIAL_ANY_DAY';
-
-  const unitPricePerPass = unitPrice;
-  const originalUnitPricePerPass = originalUnitPrice;
-
-  const estimatedTotal = unitPricePerPass * quantity;
-  const estimatedOriginalTotal = originalUnitPricePerPass * quantity;
-  const estimatedSavings = Math.max(0, estimatedOriginalTotal - estimatedTotal);
-
-  // Step 1: Initiate order & launch Razorpay Checkout
-  const handleInitiatePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!name.trim() || name.trim().length < 2) {
-      setErrorMessage('Please enter your full name (at least 2 characters).');
-      return;
-    }
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    if (!INDIAN_MOBILE_REGEX.test(cleanPhone)) {
-      setErrorMessage('Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9).');
-      return;
-    }
-    if (!email.trim()) {
-      setErrorMessage('Email address is required because your digital QR pass will be sent here.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      setErrorMessage('Please enter a valid email address.');
-      return;
-    }
-    if (!isSeason && !isAnyDay && !selectedDate) {
-      setErrorMessage('Please select a booking date.');
-      return;
-    }
-    if (!termsAccepted) {
-      setErrorMessage('Please accept the ticket terms & conditions to continue.');
+  // Step 1: Initiate order & launch Razorpay Checkout from BookPassSection
+  const handleInitiatePayment = async (data: {
+    ticketType: TicketTypeCode;
+    selectedDate: string;
+    quantity: number;
+    name: string;
+    phone: string;
+    email: string;
+    attendeeNames: string[];
+    termsAccepted: boolean;
+    estimatedTotal: number;
+  }) => {
+    if (!paymentEnabled) {
+      setErrorMessage('Online payments are currently unavailable. Please try again later.');
       return;
     }
 
@@ -446,19 +328,21 @@ export default function BookPassPage() {
     setSubmitting(true);
 
     try {
-      // 1. Create order on backend (Any Day Pass does not send/require a date)
-      const effectiveDates = resolveOrderSelectedDates(ticketType, selectedDate, EVENT_DATES);
+      const cleanPhone = data.phone.replace(/[^0-9]/g, '');
+      const isSeason = data.ticketType === 'COMMERCIAL_SEASON';
+      const isAnyDay = data.ticketType === 'COMMERCIAL_ANY_DAY';
+      const effectiveDates = resolveOrderSelectedDates(data.ticketType, data.selectedDate, EVENT_DATES);
 
       const res = await fetchApi('/commercial/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerName: name.trim(),
+          customerName: data.name.trim(),
           customerMobile: cleanPhone,
-          customerEmail: email.trim().toLowerCase(),
-          ticketType,
+          customerEmail: data.email.trim().toLowerCase(),
+          ticketType: data.ticketType,
           selectedDates: effectiveDates,
-          quantity,
+          quantity: data.quantity,
           termsAccepted: true,
         }),
       });
@@ -479,12 +363,12 @@ export default function BookPassPage() {
         setConfirmedPasses(res.passes);
         setConfirmedOrderSummary({
           orderNumber: orderData.orderNumber,
-          ticketType: (orderData.ticketType as TicketTypeCode) || ticketType,
-          selectedDates: (orderData.selectedDates as string[]) || (isSeason ? EVENT_DATES : (isAnyDay ? [] : [selectedDate])),
-          quantity: orderData.quantity || quantity,
-          amountInr: orderData.amountInr ?? (orderData.amountPaise ? orderData.amountPaise / 100 : estimatedTotal),
-          customerEmail: orderData.customer?.email || email.trim().toLowerCase(),
-          customerName: orderData.customer?.name || name.trim(),
+          ticketType: (orderData.ticketType as TicketTypeCode) || data.ticketType,
+          selectedDates: (orderData.selectedDates as string[]) || (isSeason ? EVENT_DATES : (isAnyDay ? [] : [data.selectedDate])),
+          quantity: orderData.quantity || data.quantity,
+          amountInr: orderData.amountInr ?? (orderData.amountPaise ? orderData.amountPaise / 100 : data.estimatedTotal),
+          customerEmail: orderData.customer?.email || data.email.trim().toLowerCase(),
+          customerName: orderData.customer?.name || data.name.trim(),
         });
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
         document.documentElement.scrollTop = 0;
@@ -497,6 +381,7 @@ export default function BookPassPage() {
 
       // 2. Open Razorpay Standard Checkout
       if (typeof window !== 'undefined' && (window as any).Razorpay) {
+        const activeOption = PASS_OPTIONS.find((t) => t.code === data.ticketType) || PASS_OPTIONS[0];
         const options = {
           key: orderData.razorpayKeyId,
           amount: orderData.amountPaise,
@@ -588,12 +473,12 @@ export default function BookPassPage() {
         setConfirmedPasses(res.passes);
         setConfirmedOrderSummary({
           orderNumber: res.orderNumber,
-          ticketType: (res.ticketType as TicketTypeCode) || pendingOrder?.ticketType || ticketType,
-          selectedDates: (res.selectedDates as string[]) || pendingOrder?.selectedDates || (ticketType === 'COMMERCIAL_SEASON' ? EVENT_DATES : (ticketType === 'COMMERCIAL_ANY_DAY' ? [] : [selectedDate])),
-          quantity: res.quantity || pendingOrder?.quantity || quantity,
-          amountInr: res.amountInr ?? (pendingOrder?.amountInr || (pendingOrder?.amountPaise ? pendingOrder.amountPaise / 100 : estimatedTotal)),
-          customerEmail: res.customerEmail || pendingOrder?.customer?.email || email.trim().toLowerCase(),
-          customerName: pendingOrder?.customer?.name || name.trim(),
+          ticketType: (res.ticketType as TicketTypeCode) || pendingOrder?.ticketType || 'COMMERCIAL_DAILY',
+          selectedDates: (res.selectedDates as string[]) || pendingOrder?.selectedDates || [],
+          quantity: res.quantity || pendingOrder?.quantity || 1,
+          amountInr: res.amountInr ?? (pendingOrder?.amountInr || (pendingOrder?.amountPaise ? pendingOrder.amountPaise / 100 : 0)),
+          customerEmail: res.customerEmail || pendingOrder?.customer?.email || '',
+          customerName: pendingOrder?.customer?.name || res.customerName || '',
         });
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
         document.documentElement.scrollTop = 0;
@@ -854,7 +739,7 @@ export default function BookPassPage() {
                     Amount Paid
                   </span>
                   <span className="font-bold text-emerald-700 text-sm sm:text-base">
-                    ₹{(confirmedOrderSummary?.amountInr ?? estimatedTotal).toLocaleString('en-IN')}
+                    ₹{(confirmedOrderSummary?.amountInr ?? 0).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div>
@@ -1034,484 +919,13 @@ export default function BookPassPage() {
                 </p>
               </div>
             ) : (
-              /* COMMERCIAL PURCHASE FORM */
-              <div className="bg-white rounded-3xl p-5 sm:p-8 md:p-10 border border-gold/40 shadow-xl space-y-6">
-              {errorMessage && (
-                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-semibold flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                  <div className="flex-1">{errorMessage}</div>
-                </div>
-              )}
-
-              <form onSubmit={handleInitiatePayment} className="space-y-6">
-                {/* STEP 1 — CATEGORY */}
-                <div className="space-y-3">
-                  <div>
-                    <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
-                      <Ticket className="w-5 h-5 text-maroon" />
-                      <span>1. Choose Category <span className="text-rose-600">*</span></span>
-                    </h2>
-                    <p className="text-xs text-ink-soft">
-                      Select your preferred E-Pass category
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    {PASS_OPTIONS.map((opt) => {
-                      const isSelected = ticketType === opt.code;
-                      const sPrice = serverPricing?.[opt.code]?.priceInr ?? opt.price;
-                      const sOrigPrice = serverPricing?.[opt.code]?.originalPriceInr ?? opt.originalPrice;
-                      const sTiming = serverPricing?.[opt.code]?.timing ?? opt.timing;
-
-                      return (
-                        <button
-                          key={opt.code}
-                          type="button"
-                          onClick={() => setTicketType(opt.code)}
-                          className={`relative p-5 rounded-2xl border-2 text-left transition-all duration-200 overflow-hidden cursor-pointer flex flex-col justify-between ${
-                            isSelected
-                              ? 'border-[#7A1930] bg-gradient-to-b from-[#FAF7F2] via-amber-50/40 to-[#FAF7F2] shadow-lg ring-2 ring-[#7A1930]/15'
-                              : 'border-stone-200 bg-white hover:border-[#7A1930]/40 hover:shadow-xs'
-                          }`}
-                        >
-                          <div className="w-full">
-                            {/* Badges strip */}
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-[#7A1930] border border-[#D4AF37]/50">
-                                <Sparkles className="w-3 h-3 text-[#E65100]" />
-                                <span>{opt.offerLabel}</span>
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-[#7A1930] text-[#FAF7F2]">
-                                {opt.discountLabel}
-                              </span>
-                            </div>
-
-                            {/* Pass title & description */}
-                            <h3 className="font-outfit font-black text-base sm:text-lg text-ink tracking-tight">
-                              {opt.name}
-                            </h3>
-                            <p className="text-[11px] text-ink-soft leading-snug mt-1">
-                              {opt.description}
-                            </p>
-
-                            {/* Prominent Timing Chip */}
-                            <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-100/90 text-stone-800 text-[11px] font-bold border border-stone-200">
-                              <Clock className="w-3.5 h-3.5 text-maroon" />
-                              <span>{sTiming}</span>
-                            </div>
-                          </div>
-
-                          {/* Price strip */}
-                          <div className="pt-3 mt-3 border-t border-stone-200/70 flex items-baseline justify-between flex-wrap gap-2">
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-xs text-stone-400 font-bold line-through decoration-rose-600">
-                                ₹{sOrigPrice.toLocaleString('en-IN')}
-                              </span>
-                              <span className="font-outfit font-black text-2xl text-[#7A1930] tracking-tight">
-                                ₹{sPrice.toLocaleString('en-IN')}
-                              </span>
-                              <span className="text-[11px] font-semibold text-ink-soft">
-                                {opt.isSeason ? '/ 9 nights' : '/ pass'}
-                              </span>
-                            </div>
-
-                            <span
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                isSelected
-                                  ? 'border-maroon bg-maroon text-white'
-                                  : 'border-stone-300 bg-white'
-                              }`}
-                            >
-                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* PROMINENT TIMING CALLOUT */}
-                  <div
-                    className={`p-4 rounded-2xl border flex items-start gap-3 transition-all ${
-                      activeOption.timingCategory === 'Mandli'
-                        ? 'bg-amber-50/80 border-amber-300/80 text-amber-950'
-                        : 'bg-maroon/5 border-maroon/20 text-maroon-dark'
-                    }`}
-                  >
-                    <Clock
-                      className={`w-5 h-5 shrink-0 mt-0.5 ${
-                        activeOption.timingCategory === 'Mandli'
-                          ? 'text-amber-700'
-                          : 'text-maroon'
-                      }`}
-                    />
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-outfit font-black text-sm uppercase tracking-wide">
-                          {activeOption.timingCategory === 'Mandli'
-                            ? 'Mandli Pass Timing:'
-                            : 'Garba Pass Timing:'}
-                        </span>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${
-                            activeOption.timingCategory === 'Mandli'
-                              ? 'bg-amber-200/80 text-amber-900 border border-amber-300'
-                              : 'bg-maroon text-white'
-                          }`}
-                        >
-                          {activeTiming}
-                        </span>
-                      </div>
-                      <p className="text-xs text-ink/80 leading-relaxed">
-                        {activeOption.timingCategory === 'Mandli'
-                          ? 'Post-Midnight Entry: 12:00 AM to 4:00 AM. This pass is exclusively valid for late-night Mandli Garba.'
-                          : 'Evening to Late-Night Entry: 8:00 PM to 4:00 AM. Gates open at 7:30 PM for general Garba attendance.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* STEP 2 — DATE (Only for date-specific and season passes; skipped for Any Day Pass) */}
-                {!isAnyDay && (
-                  <div className="space-y-3 pt-6 border-t border-stone-100">
-                    <div>
-                      <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
-                        <CalendarCheck className="w-5 h-5 text-maroon" />
-                        <span>2. Select Date <span className="text-rose-600">*</span></span>
-                      </h2>
-                      <p className="text-xs text-ink-soft">
-                        {isSeason
-                          ? 'Season Pass automatically covers all 9 event dates.'
-                          : 'Select one booking date for this order.'}
-                      </p>
-                    </div>
-
-                    {isSeason ? (
-                      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                            <CheckCircle2 className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h3 className="font-outfit font-extrabold text-base text-emerald-950">
-                              All Event Dates
-                            </h3>
-                            <p className="text-xs text-emerald-800">
-                              Covers all 9 festival nights (11 Oct – 19 Oct 2026)
-                            </p>
-                          </div>
-                        </div>
-                        <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-white text-emerald-800 border border-emerald-300 shadow-xs">
-                          All 9 Nights Included
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
-                          {EVENT_DATES.map((iso, idx) => {
-                            const isSelected = selectedDate === iso;
-                            const { weekday, chipLabel } = formatDateChip(iso);
-                            return (
-                              <button
-                                key={iso}
-                                type="button"
-                                onClick={() => handleSelectDate(iso)}
-                                className={`p-2 sm:p-2.5 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center cursor-pointer ${
-                                  isSelected
-                                    ? 'bg-maroon text-white border-maroon shadow-md scale-[1.03] ring-2 ring-gold/40'
-                                    : 'bg-cream-light text-ink border-stone-200 hover:border-maroon/50 hover:bg-stone-50'
-                                }`}
-                              >
-                                <span
-                                  className={`text-[9px] uppercase tracking-wider font-bold ${
-                                    isSelected ? 'text-gold-light' : 'text-ink-soft'
-                                  }`}
-                                >
-                                  Day {idx + 1}
-                                </span>
-                                <span className="font-outfit font-black text-sm sm:text-base leading-tight mt-0.5">
-                                  {chipLabel}
-                                </span>
-                                <span
-                                  className={`text-[9px] font-medium mt-0.5 ${
-                                    isSelected ? 'text-gold-light/90' : 'text-stone-400'
-                                  }`}
-                                >
-                                  {weekday}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <div className="p-3 rounded-xl bg-amber-50/70 border border-[#D4AF37]/40 flex items-center justify-between text-xs text-ink flex-wrap gap-2">
-                          <span className="flex items-center gap-1.5 font-medium">
-                            <CalendarCheck className="w-4 h-4 text-maroon" />
-                            <span>Booking Date: <strong className="text-maroon font-bold">{formatDateChip(selectedDate).fullDate} ({formatDateChip(selectedDate).weekday})</strong></span>
-                          </span>
-                          <span className="text-[11px] text-ink-soft">
-                            Tapping another date replaces your selection
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STEP 3 (or 2 for Any Day Pass) — QUANTITY */}
-                <div className="space-y-2 pt-6 border-t border-stone-100">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                    <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
-                      <Ticket className="w-5 h-5 text-maroon" />
-                      <span>{isAnyDay ? '2. Quantity' : '3. Quantity'} <span className="text-rose-600">*</span></span>
-                    </h2>
-                    <span className="text-[11px] text-ink-soft">
-                      (1 to 10 passes per booking)
-                    </span>
-                  </div>
-                  <p className="text-xs text-ink-soft">
-                    All passes will share the selected category ({activeOption.name}){isAnyDay ? ' and are valid for one entry on any chosen event night (11–19 Oct 2026).' : ` and date (${isSeason ? 'All Event Dates' : formatDateChip(selectedDate).fullDate}).`}
-                  </p>
-                  <CustomQuantityDropdown
-                    value={quantity}
-                    onChange={setQuantity}
-                    disabled={submitting || verifying}
-                  />
-                </div>
-
-                {/* STEP 4 (or 3 for Any Day Pass) — CUSTOMER DETAILS */}
-                <div className="space-y-4 pt-6 border-t border-stone-100">
-                  <div>
-                    <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider">
-                      {isAnyDay ? '3. Customer Details' : '4. Customer Details'}
-                    </h2>
-                    <p className="text-xs text-ink-soft">
-                      Primary contact details for this booking
-                    </p>
-                  </div>
-
-                  <div>
-                    <label htmlFor="reg-name" className="block text-xs font-bold text-ink mb-1.5">
-                      Full Name <span className="text-rose-600">*</span>
-                    </label>
-                    <input
-                      id="reg-name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                      autoComplete="name"
-                      placeholder="e.g. Priyesh Shah"
-                      className="w-full px-4 py-3 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="reg-phone" className="block text-xs font-bold text-ink mb-1.5">
-                        Mobile Number (10 Digits) <span className="text-rose-600">*</span>
-                      </label>
-                      <input
-                        id="reg-phone"
-                        type="tel"
-                        value={phone}
-                        onChange={(e) =>
-                          setPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))
-                        }
-                        required
-                        pattern="[6-9][0-9]{9}"
-                        maxLength={10}
-                        minLength={10}
-                        inputMode="numeric"
-                        autoComplete="tel"
-                        placeholder="e.g. 9876543210"
-                        className="w-full px-4 py-3 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="reg-email" className="block text-xs font-bold text-ink mb-1.5">
-                        Email Address <span className="text-rose-600">*</span>
-                      </label>
-                      <input
-                        id="reg-email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        inputMode="email"
-                        autoComplete="email"
-                        placeholder="e.g. priyesh@example.com"
-                        className="w-full px-4 py-3 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                      />
-                      <p className="text-[11px] text-stone-500 mt-1">
-                        Your QR pass will be sent to this email.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* STEP 5 (or 4 for Any Day Pass) — REVIEW */}
-                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#FAF7F2] to-amber-50/40 border border-[#D4AF37]/40 space-y-3.5 text-xs shadow-sm">
-                  <div className="flex items-center justify-between pb-2 border-b border-stone-200/80">
-                    <h2 className="font-outfit font-black text-sm sm:text-base text-ink uppercase tracking-wider">
-                      {isAnyDay ? '4. Review Booking' : '5. Review Booking'}
-                    </h2>
-                    <span className="text-[11px] font-semibold text-maroon bg-maroon/10 px-2.5 py-0.5 rounded-full">
-                      {quantity} {quantity === 1 ? 'Pass' : 'Passes'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div className="space-y-1">
-                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Pass Category</span>
-                      <p className="font-outfit font-extrabold text-sm text-ink">{activeOption.name}</p>
-                      <p className="text-[11px] text-maroon font-bold">{activeTiming}</p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Booking Date</span>
-                      <p className="font-outfit font-extrabold text-sm text-ink">
-                        {isSeason
-                          ? 'All Event Dates'
-                          : isAnyDay
-                          ? 'Any 1 Event Night'
-                          : formatDateChip(selectedDate).fullDate}
-                      </p>
-                      <p className="text-[11px] text-ink-soft">
-                        {isSeason
-                          ? 'Covers all 9 nights (Oct 11 – 19)'
-                          : isAnyDay
-                          ? 'Valid on any 1 night (Oct 11 – 19)'
-                          : `${formatDateChip(selectedDate).weekday} night entry`}
-                      </p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Quantity</span>
-                      <p className="font-outfit font-bold text-sm text-ink">
-                        {quantity} {quantity === 1 ? 'Pass' : 'Passes'}
-                      </p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Customer Details</span>
-                      <p className="font-bold text-sm text-ink truncate">
-                        {name.trim() || '—'}
-                      </p>
-                      <p className="text-[11px] text-ink-soft truncate">
-                        {phone || '—'} &bull; {email.trim() || '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-stone-200/80 pt-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-ink-soft">
-                      <span>Price per Pass:</span>
-                      <span className="font-bold text-ink">₹{unitPricePerPass.toLocaleString('en-IN')}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-ink-soft">
-                      <span>Original Price:</span>
-                      <span className="font-semibold text-stone-400 line-through decoration-rose-600">
-                        ₹{estimatedOriginalTotal.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-
-                    {estimatedSavings > 0 && (
-                      <div className="flex items-center justify-between text-[#E65100] font-bold">
-                        <span className="flex items-center gap-1">
-                          <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-                          Savings ({activeOption.discountLabel}):
-                        </span>
-                        <span>-₹{estimatedSavings.toLocaleString('en-IN')}</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between pt-2 border-t border-stone-200/80 text-sm">
-                      <span className="font-outfit font-extrabold text-ink text-base">Total Amount:</span>
-                      <span className="font-outfit font-black text-2xl sm:text-3xl text-[#7A1930] tracking-tight">
-                        ₹{estimatedTotal.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-stone-100 border border-stone-200 text-[11px] text-ink-soft">
-                    <strong>Order Rule:</strong> {isAnyDay ? 'Any Day Pass gives 1 flexible entry on any 1 official event night (11–19 Oct 2026).' : (isSeason ? 'Season Pass covers all 9 dates in 1 order.' : '1 Order = 1 Category + 1 Booking Date + Quantity. If tickets for another date are needed, please place another order after completing this booking.')}
-                  </div>
-                </div>
-
-                {/* IMPORTANT INFORMATION & TERMS */}
-                <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-gold/40 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-maroon shrink-0" />
-                    <h3 className="font-outfit font-black text-xs sm:text-sm text-ink uppercase tracking-wider">
-                      Important Information
-                    </h3>
-                  </div>
-
-                  <ul className="space-y-1.5 list-disc list-inside text-xs text-stone-700 leading-relaxed font-medium">
-                    <li>Your digital QR pass will be sent to your registered email address.</li>
-                    <li>Please enter an active email address that you can access (email is mandatory).</li>
-                    <li>Please keep your QR pass ready on your phone at the entry gate.</li>
-                    <li>Tickets are non-refundable and non-transferable.</li>
-                    <li>Daily / Season / Any Day passes are valid from 8:00 PM to 4:00 AM.</li>
-                    <li>Mandli passes are valid only from 12:00 AM to 4:00 AM.</li>
-                    <li>Each QR pass is unique to your booking. Do not share your QR pass with unauthorized persons.</li>
-                  </ul>
-
-                  <div className="pt-2.5 border-t border-gold/30">
-                    <label
-                      htmlFor="terms-checkbox"
-                      className="flex items-start gap-2.5 cursor-pointer select-none text-ink font-semibold text-xs sm:text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        id="terms-checkbox"
-                        data-testid="terms-checkbox"
-                        checked={termsAccepted}
-                        onChange={(e) => setTermsAccepted(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer accent-[#7A1930]"
-                      />
-                      <span>
-                        I have read and agree to the ticket terms & conditions. <span className="text-rose-600">*</span>
-                      </span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* STEP 6 — PAYMENT */}
-                <div className="space-y-3 pt-2">
-                  <button
-                    type="submit"
-                    disabled={!termsAccepted || submitting || verifying}
-                    aria-label="Buy your pass"
-                    data-testid="buy-pass-submit"
-                    className={`w-full py-4 rounded-2xl font-outfit font-black text-base sm:text-lg transition-all shadow-lg flex items-center justify-center gap-2.5 border ${
-                      !termsAccepted || submitting || verifying
-                        ? 'bg-stone-200 text-stone-400 border-stone-300 cursor-not-allowed shadow-none'
-                        : 'bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-105 text-[#7A1930] border-[#7A1930]/20 hover:shadow-xl cursor-pointer'
-                    }`}
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Initializing Secure Gateway...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Ticket className="w-5 h-5 text-[#7A1930]" />
-                        <span>BUY YOUR PASS &bull; ₹{estimatedTotal.toLocaleString('en-IN')}</span>
-                      </>
-                    )}
-                  </button>
-                  <div className="flex items-center justify-center gap-2 text-[11px] text-ink-soft text-center">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Secure Payment via Razorpay &bull; Instant Digital QR Delivery</span>
-                  </div>
-                </div>
-              </form>
-            </div>
+              <BookPassSection
+                isPreview={false}
+                paymentEnabled={paymentEnabled}
+                submitting={submitting}
+                errorMessage={errorMessage}
+                onInitiatePayment={handleInitiatePayment}
+              />
           )}
         </div>
         )}

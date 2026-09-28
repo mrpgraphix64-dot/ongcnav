@@ -104,12 +104,58 @@ describe('SuperAdminTestingPage UI Tests', () => {
     const html = ReactDOMServer.renderToStaticMarkup(<SuperAdminTestingView initialData={mockInitialData} />);
     expect(html).toContain('Testing &amp; Preview Lab');
     expect(html).toContain('SUPER ADMIN');
+    expect(html).toContain('Customer Booking Page Preview');
+    expect(html).toContain('PREVIEW MODE');
+    expect(html).toContain('PAYMENT: ON');
+    expect(html).toContain('Open Live Book Pass');
     expect(html).toContain('Payment Gateway Status');
     expect(html).toContain('Send Test Transactional Email');
     expect(html).toContain('Latest E-Pass Preview');
     expect(html).toContain('E-Pass Email Template Preview');
     expect(html).toContain('Open Live Pass');
     expect(html).toContain('ORD-COMM-20261015-1234');
+  });
+
+  it('renders PAYMENT: OFF and disabled booking controls when gateway is disabled', () => {
+    localStorage.setItem(
+      AUTH_SESSION_KEY,
+      JSON.stringify({ id: 'super-1', name: 'Super Admin', email: 'super@ongc.co.in', role: 'SUPER_ADMIN' }),
+    );
+
+    const mockDisabledData: any = {
+      order: {
+        orderNumber: 'ORD-COMM-SAMPLE-001',
+        customerName: 'Test Customer',
+        customerMobile: '9876543210',
+        customerEmail: 'test@example.com',
+        ticketType: 'COMMERCIAL_DAILY',
+        selectedDates: ['2026-10-15'],
+        quantity: 1,
+        amountInr: 249,
+        paymentReference: 'pay_sample',
+        passes: [],
+      },
+      emailPreview: {
+        subject: 'Preview',
+        html: '<p>Preview</p>',
+        fromName: 'ONGC',
+        fromEmail: 'test@ongc.com',
+        isConfigured: false,
+      },
+      paymentGateway: {
+        status: 'DISABLED',
+        enabled: false,
+        environment: 'TEST',
+        gateway: 'Razorpay',
+        isConfigured: false,
+      },
+      serverTime: new Date().toISOString(),
+    };
+
+    const html = ReactDOMServer.renderToStaticMarkup(<SuperAdminTestingView initialData={mockDisabledData} />);
+    expect(html).toContain('PAYMENT: OFF');
+    expect(html).toContain('Online payments are currently unavailable');
+    expect(html).toContain('ONLINE PAYMENT UNAVAILABLE');
   });
 
   it('TicketPassCard renders correctly with attendee details and QR fallback', () => {

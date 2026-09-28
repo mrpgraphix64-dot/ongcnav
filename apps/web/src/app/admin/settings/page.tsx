@@ -32,7 +32,16 @@ import { subscribeToSuperAdminSync, broadcastSuperAdminSync } from '@/lib/super-
 type TabType = 'general' | 'event' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger' | 'payment';
 
 export default function AdminSettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('general');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    if (typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam === 'payment') return 'payment';
+      } catch {}
+    }
+    return 'general';
+  });
   const [groups, setGroups] = useState<Record<string, any>>({});
   const [gates, setGates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,47 +78,57 @@ export default function AdminSettingsPage() {
   const [dangerSubmitting, setDangerSubmitting] = useState(false);
 
   // Payment settings state (SUPER_ADMIN only)
-  const [paymentSettings, setPaymentSettings] = useState<{
+  const [serverPaymentSettings, setServerPaymentSettings] = useState<{
     enabled: boolean;
     environment: string;
     gateway: string;
     keyId: string;
     isConfigured: boolean;
   } | null>(null);
-  const [savingPayment, setSavingPayment] = useState(false);
+  const [paymentDraftEnabled, setPaymentDraftEnabled] = useState<boolean>(false);
+  const [loadingPayment, setLoadingPayment] = useState<boolean>(false);
+  const [savingPayment, setSavingPayment] = useState<boolean>(false);
 
   const loadPaymentSettings = async () => {
     try {
+      setLoadingPayment(true);
       const res = await fetchApi<any>('/admin/settings/payment');
       if (res) {
-        setPaymentSettings({
-          enabled: Boolean(res.enabled),
+        const isEn = Boolean(res.enabled);
+        setServerPaymentSettings({
+          enabled: isEn,
           environment: res.environment || 'TEST',
           gateway: res.gateway || 'Razorpay',
           keyId: res.keyId || '',
           isConfigured: Boolean(res.isConfigured),
         });
+        setPaymentDraftEnabled(isEn);
       }
     } catch {
-      setPaymentSettings(null);
+      setServerPaymentSettings(null);
+    } finally {
+      setLoadingPayment(false);
     }
   };
 
   const handleSavePaymentSettings = async () => {
-    if (!paymentSettings) return;
     try {
       setSavingPayment(true);
       setMsg(null);
       const res = await fetchApi<any>('/admin/settings/payment', {
         method: 'POST',
-        body: JSON.stringify({ enabled: paymentSettings.enabled }),
+        body: JSON.stringify({ enabled: paymentDraftEnabled }),
       });
       setMsg({
         text: res?.message || 'Payment settings saved successfully.',
         type: 'success',
       });
       await loadPaymentSettings();
+      broadcastSuperAdminSync();
     } catch (err: any) {
+      if (serverPaymentSettings) {
+        setPaymentDraftEnabled(serverPaymentSettings.enabled);
+      }
       setMsg({
         text: err.message || 'Failed to save payment settings.',
         type: 'error',
@@ -185,20 +204,24 @@ export default function AdminSettingsPage() {
       } else if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
         setCurrentUser(null);
         setSuperAdminData(null);
-        setPaymentSettings(null);
+        setServerPaymentSettings(null);
       }
     });
 
     const unsubscribeSync = subscribeToSuperAdminSync(() => {
       loadSuperAdminSettings();
+      loadPaymentSettings();
     });
 
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get('tab');
-      if (tabParam === 'payment') {
-        setActiveTab('payment');
-      }
+    if (typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam === 'payment') {
+          setActiveTab('payment');
+          loadPaymentSettings();
+        }
+      } catch {}
     }
 
     loadSettings();
@@ -326,7 +349,13 @@ export default function AdminSettingsPage() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as TabType)}
+              onClick={() => {
+                const newTab = tab.id as TabType;
+                setActiveTab(newTab);
+                if (newTab === 'payment') {
+                  loadPaymentSettings();
+                }
+              }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
                 isActive
                   ? 'bg-maroon text-white shadow-xs'
@@ -1104,11 +1133,26 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="rounded-2xl border border-stone-200 bg-cream-soft p-5 space-y-5">
-              <div>
-                <h4 className="font-outfit font-bold text-sm text-ink uppercase tracking-wide">
-                  Razorpay Payment
-                </h4>
-                <div className="h-0.5 w-12 bg-maroon rounded-full mt-1.5" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-outfit font-bold text-sm text-ink uppercase tracking-wide">
+                    Razorpay Payment
+                  </h4>
+                  <div className="h-0.5 w-12 bg-maroon rounded-full mt-1.5" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-stone-400 uppercase">Live Server State:</span>
+                  <span
+                    data-testid="server-payment-status"
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      serverPaymentSettings?.enabled
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-rose-100 text-rose-800 border border-rose-300'
+                    }`}
+                  >
+                    {serverPaymentSettings?.enabled ? 'Active (ON)' : 'Disabled (OFF)'}
+                  </span>
+                </div>
               </div>
 
               {/* Payment Status ON / OFF */}
@@ -1116,7 +1160,7 @@ export default function AdminSettingsPage() {
                 <div>
                   <div className="text-xs font-bold text-ink">Payment Status</div>
                   <div className="text-[11px] text-stone-500 mt-0.5">
-                    {paymentSettings?.enabled
+                    {paymentDraftEnabled
                       ? 'ON — Customers can initiate Razorpay pass bookings'
                       : 'OFF — New Razorpay payment initiation is blocked'}
                   </div>
@@ -1124,13 +1168,10 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center gap-1.5 bg-stone-200/80 p-1 rounded-xl">
                   <button
                     type="button"
-                    onClick={() =>
-                      setPaymentSettings((prev) =>
-                        prev ? { ...prev, enabled: true } : { enabled: true, environment: 'TEST', gateway: 'Razorpay', keyId: '', isConfigured: false }
-                      )
-                    }
+                    data-testid="payment-toggle-on"
+                    onClick={() => setPaymentDraftEnabled(true)}
                     className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                      paymentSettings?.enabled
+                      paymentDraftEnabled
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-stone-600 hover:text-ink'
                     }`}
@@ -1139,13 +1180,10 @@ export default function AdminSettingsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setPaymentSettings((prev) =>
-                        prev ? { ...prev, enabled: false } : { enabled: false, environment: 'TEST', gateway: 'Razorpay', keyId: '', isConfigured: false }
-                      )
-                    }
+                    data-testid="payment-toggle-off"
+                    onClick={() => setPaymentDraftEnabled(false)}
                     className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                      paymentSettings && !paymentSettings.enabled
+                      !paymentDraftEnabled
                         ? 'bg-rose-600 text-white shadow-xs'
                         : 'text-stone-600 hover:text-ink'
                     }`}
@@ -1154,6 +1192,23 @@ export default function AdminSettingsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Unsaved changes banner */}
+              {serverPaymentSettings && paymentDraftEnabled !== serverPaymentSettings.enabled && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between">
+                  <span>
+                    Unsaved change: Payment will be switched to{' '}
+                    <strong>{paymentDraftEnabled ? 'ON' : 'OFF'}</strong>. Click &ldquo;Save Settings&rdquo; to apply.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentDraftEnabled(serverPaymentSettings.enabled)}
+                    className="text-[11px] text-amber-700 underline font-bold ml-2 cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              )}
 
               {/* Environment */}
               <div className="flex items-center justify-between py-3 border-b border-stone-200/80">
@@ -1166,12 +1221,12 @@ export default function AdminSettingsPage() {
                 <div>
                   <span
                     className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${
-                      paymentSettings?.environment === 'LIVE'
+                      serverPaymentSettings?.environment === 'LIVE'
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                         : 'bg-amber-100 text-amber-800 border border-amber-300'
                     }`}
                   >
-                    {paymentSettings?.environment || 'TEST'}
+                    {serverPaymentSettings?.environment || 'TEST'}
                   </span>
                 </div>
               </div>
@@ -1194,7 +1249,7 @@ export default function AdminSettingsPage() {
                 <button
                   type="button"
                   onClick={handleSavePaymentSettings}
-                  disabled={savingPayment || !paymentSettings}
+                  disabled={savingPayment || loadingPayment || !serverPaymentSettings}
                   className="px-6 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Save className="w-4 h-4 text-gold" />

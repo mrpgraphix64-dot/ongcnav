@@ -22,6 +22,7 @@ import {
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 import TicketPassCard, { TicketPassData } from '@/components/TicketPassCard';
+import BookPassSection from '@/components/BookPassSection';
 
 export interface TestingPreviewResponse {
   order: {
@@ -220,123 +221,181 @@ export default function SuperAdminTestingView({
           <p className="text-xs font-bold text-maroon">Loading latest commercial booking and email preview...</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Top Row: Section E (Payment Gateway Status) & Section C (Send Test Email) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* SECTION E: PAYMENT GATEWAY STATUS CARD */}
-            <div className="bg-white rounded-3xl border border-stone-200/80 p-5 card-shadow flex flex-col justify-between space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-cream-soft border border-stone-200 flex items-center justify-center">
-                      <CreditCard className="w-4 h-4 text-maroon" />
-                    </div>
-                    <div>
-                      <h3 className="font-outfit font-bold text-sm text-ink">Payment Gateway Status</h3>
-                      <div className="text-[10px] text-stone-400 font-medium">Razorpay Online Gateway</div>
-                    </div>
-                  </div>
+        <div className="space-y-8">
+          {/* SECTION A: CUSTOMER BOOKING PAGE PREVIEW */}
+          <div className="bg-white rounded-3xl border border-stone-200/80 p-6 card-shadow space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="font-outfit font-black text-xl text-ink">
+                    Section A &bull; Customer Booking Page Preview
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black uppercase tracking-wider border border-blue-200">
+                    PREVIEW MODE
+                  </span>
                   <span
-                    className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${
+                    data-testid="preview-payment-badge"
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                       gateway?.enabled
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                         : 'bg-rose-100 text-rose-800 border border-rose-300'
                     }`}
                   >
-                    {gateway?.status || 'ENABLED'}
+                    PAYMENT: {gateway?.enabled ? 'ON' : 'OFF'}
                   </span>
                 </div>
-
-                <div className="grid grid-cols-3 gap-2.5 pt-2">
-                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
-                    <div className="text-[10px] font-bold uppercase text-stone-400">Status</div>
-                    <div className="text-xs font-bold text-ink mt-0.5">
-                      {gateway?.enabled ? 'Online (ON)' : 'Disabled (OFF)'}
-                    </div>
-                  </div>
-                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
-                    <div className="text-[10px] font-bold uppercase text-stone-400">Environment</div>
-                    <div className="text-xs font-bold text-ink mt-0.5">
-                      {gateway?.environment || 'TEST'}
-                    </div>
-                  </div>
-                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
-                    <div className="text-[10px] font-bold uppercase text-stone-400">Configuration</div>
-                    <div className="text-xs font-bold text-ink mt-0.5">
-                      {gateway?.isConfigured ? 'Live Configured' : 'Sandbox / Mock'}
-                    </div>
-                  </div>
-                </div>
+                <p className="text-xs text-stone-500 mt-1">
+                  Live preview of public pass booking (/bookpass) reflecting current payment configuration. Real payments cannot be initiated in preview mode.
+                </p>
               </div>
 
-              <div className="pt-2 border-t border-stone-100">
-                <Link
-                  href="/admin/settings?tab=payment"
-                  className="inline-flex items-center gap-2 text-xs font-bold text-maroon hover:text-maroon-dark hover:underline"
-                >
-                  <span>Open Payment Settings &rarr;</span>
-                </Link>
-              </div>
+              <a
+                href="/bookpass"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition flex items-center gap-2 shadow-xs shrink-0 self-start sm:self-auto cursor-pointer"
+              >
+                <span>Open Live Book Pass</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
             </div>
 
-            {/* SECTION C: SEND TEST EMAIL CARD */}
-            <div className="bg-white rounded-3xl border border-stone-200/80 p-5 card-shadow flex flex-col justify-between space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-cream-soft border border-stone-200 flex items-center justify-center">
-                      <Mail className="w-4 h-4 text-maroon" />
+            {/* Embedded Interactive Booking Section Preview */}
+            <div className="border border-stone-200 rounded-3xl p-2 sm:p-4 bg-stone-50/50">
+              <BookPassSection
+                isPreview={true}
+                paymentEnabled={gateway?.enabled ?? false}
+              />
+            </div>
+          </div>
+
+          {/* SECTION B: PAYMENT GATEWAY STATE & TEST EMAIL */}
+          <div className="space-y-4">
+            <div className="border-b border-stone-200 pb-2">
+              <h2 className="font-outfit font-black text-lg text-ink">
+                Section B &bull; Payment Gateway State &amp; Test Email
+              </h2>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Runtime gateway health status and transactional delivery verification
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* PAYMENT GATEWAY STATUS CARD */}
+              <div className="bg-white rounded-3xl border border-stone-200/80 p-5 card-shadow flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-cream-soft border border-stone-200 flex items-center justify-center">
+                        <CreditCard className="w-4 h-4 text-maroon" />
+                      </div>
+                      <div>
+                        <h3 className="font-outfit font-bold text-sm text-ink">Payment Gateway Status</h3>
+                        <div className="text-[10px] text-stone-400 font-medium">Razorpay Online Gateway</div>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-outfit font-bold text-sm text-ink">Send Test Transactional Email</h3>
-                      <div className="text-[10px] text-stone-400 font-medium">Verify Live Mail Delivery Pipeline</div>
+                    <span
+                      className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${
+                        gateway?.enabled
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-rose-100 text-rose-800 border border-rose-300'
+                      }`}
+                    >
+                      {gateway?.status || 'ENABLED'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5 pt-2">
+                    <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
+                      <div className="text-[10px] font-bold uppercase text-stone-400">Status</div>
+                      <div className="text-xs font-bold text-ink mt-0.5">
+                        {gateway?.enabled ? 'Online (ON)' : 'Disabled (OFF)'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
+                      <div className="text-[10px] font-bold uppercase text-stone-400">Environment</div>
+                      <div className="text-xs font-bold text-ink mt-0.5">
+                        {gateway?.environment || 'TEST'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60">
+                      <div className="text-[10px] font-bold uppercase text-stone-400">Configuration</div>
+                      <div className="text-xs font-bold text-ink mt-0.5">
+                        {gateway?.isConfigured ? 'Live Configured' : 'Sandbox / Mock'}
+                      </div>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono font-bold text-stone-500 bg-stone-100 px-2.5 py-1 rounded-lg">
-                    Hostinger API
-                  </span>
                 </div>
 
-                <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60 text-xs text-stone-700 space-y-1.5">
-                  <div className="text-stone-500 text-[11px]">
-                    Test email will be sent strictly to your authenticated address:
-                  </div>
-                  <div className="font-mono font-bold text-maroon text-xs break-all">
-                    {currentUser?.email || 'Logged-in Super Admin'}
-                  </div>
-                  <div className="text-[10px] text-stone-400">
-                    Subject: <span className="font-mono font-semibold">TEST — ONGC Navratri 2026 E-Pass</span>
-                  </div>
-                </div>
-
-                {emailStatus && (
-                  <div
-                    className={`p-3 rounded-2xl text-xs font-medium flex items-center gap-2 ${
-                      emailStatus.type === 'success'
-                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
-                        : 'bg-rose-50 border border-rose-200 text-rose-900'
-                    }`}
+                <div className="pt-2 border-t border-stone-100">
+                  <Link
+                    href="/admin/settings?tab=payment"
+                    className="inline-flex items-center gap-2 text-xs font-bold text-maroon hover:text-maroon-dark hover:underline"
                   >
-                    {emailStatus.type === 'success' ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                    )}
-                    <span>{emailStatus.text}</span>
-                  </div>
-                )}
+                    <span>Open Payment Settings &rarr;</span>
+                  </Link>
+                </div>
               </div>
 
-              <div className="pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={handleSendTestEmail}
-                  disabled={sendingEmail || !currentUser?.email}
-                  className="px-5 py-2.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Send className="w-3.5 h-3.5 text-gold" />
-                  <span>{sendingEmail ? 'Dispatching Test Email...' : 'Send Test Email'}</span>
-                </button>
+              {/* SEND TEST EMAIL CARD */}
+              <div className="bg-white rounded-3xl border border-stone-200/80 p-5 card-shadow flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-cream-soft border border-stone-200 flex items-center justify-center">
+                        <Mail className="w-4 h-4 text-maroon" />
+                      </div>
+                      <div>
+                        <h3 className="font-outfit font-bold text-sm text-ink">Send Test Transactional Email</h3>
+                        <div className="text-[10px] text-stone-400 font-medium">Verify Live Mail Delivery Pipeline</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-stone-500 bg-stone-100 px-2.5 py-1 rounded-lg">
+                      Hostinger API
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200/60 text-xs text-stone-700 space-y-1.5">
+                    <div className="text-stone-500 text-[11px]">
+                      Test email will be sent strictly to your authenticated address:
+                    </div>
+                    <div className="font-mono font-bold text-maroon text-xs break-all">
+                      {currentUser?.email || 'Logged-in Super Admin'}
+                    </div>
+                    <div className="text-[10px] text-stone-400">
+                      Subject: <span className="font-mono font-semibold">TEST — ONGC Navratri 2026 E-Pass</span>
+                    </div>
+                  </div>
+
+                  {emailStatus && (
+                    <div
+                      className={`p-3 rounded-2xl text-xs font-medium flex items-center gap-2 ${
+                        emailStatus.type === 'success'
+                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
+                          : 'bg-rose-50 border border-rose-200 text-rose-900'
+                      }`}
+                    >
+                      {emailStatus.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      )}
+                      <span>{emailStatus.text}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-stone-100">
+                  <button
+                    type="button"
+                    onClick={handleSendTestEmail}
+                    disabled={sendingEmail || !currentUser?.email}
+                    className="px-5 py-2.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5 text-gold" />
+                    <span>{sendingEmail ? 'Dispatching Test Email...' : 'Send Test Email'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -354,15 +413,15 @@ export default function SuperAdminTestingView({
             </div>
           )}
 
-          {/* SECTION A & SECTION B SPLIT: LATEST E-PASS PREVIEW & EMAIL PREVIEW */}
+          {/* SECTION C & SECTION D SPLIT: LATEST E-PASS PREVIEW & EMAIL PREVIEW */}
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            {/* SECTION A: LATEST E-PASS PREVIEW (5 cols on xl) */}
+            {/* SECTION C: LATEST E-PASS PREVIEW (5 cols on xl) */}
             <div className="xl:col-span-5 space-y-4">
               <div className="bg-white rounded-3xl border border-stone-200/80 p-5 card-shadow space-y-4">
                 <div className="flex items-center justify-between border-b border-stone-100 pb-3">
                   <div>
                     <h3 className="font-outfit font-extrabold text-base text-ink">
-                      Section A &bull; Latest E-Pass Preview
+                      Section C &bull; Latest E-Pass Preview
                     </h3>
                     <p className="text-[11px] text-stone-500 mt-0.5">
                       Most recent confirmed booking from commercial database
@@ -456,14 +515,14 @@ export default function SuperAdminTestingView({
               </div>
             </div>
 
-            {/* SECTION B: E-PASS EMAIL PREVIEW (7 cols on xl) */}
+            {/* SECTION D: E-PASS EMAIL PREVIEW (7 cols on xl) */}
             <div className="xl:col-span-7 space-y-4">
               <div className="bg-white rounded-3xl border border-stone-200/80 p-5 card-shadow space-y-4">
                 <div className="border-b border-stone-100 pb-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-outfit font-extrabold text-base text-ink">
-                        Section B &bull; E-Pass Email Template Preview
+                        Section D &bull; E-Pass Email Template Preview
                       </h3>
                       <p className="text-[11px] text-stone-500 mt-0.5">
                         Exact HTML generated by <span className="font-mono font-semibold">MailService</span> for transactional confirmations

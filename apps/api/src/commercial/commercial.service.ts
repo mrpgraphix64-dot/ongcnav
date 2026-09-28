@@ -223,10 +223,10 @@ export class CommercialService {
       const setting = await this.prisma.setting.findUnique({
         where: { key: 'payment.razorpay_enabled' },
       });
-      if (!setting) return true;
+      if (!setting) return false;
       return setting.value === '1' || setting.value === 'true';
     } catch {
-      return true;
+      return false;
     }
   }
 
