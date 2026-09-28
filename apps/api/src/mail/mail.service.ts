@@ -175,7 +175,7 @@ export class MailService {
             Accept: 'application/json',
           },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(30000),
         },
       );
 
@@ -206,7 +206,7 @@ export class MailService {
     } catch (err: any) {
       const isTimeout = err?.name === 'TimeoutError' || err?.code === 'ABORT_ERR';
       const safeErr = isTimeout
-        ? 'Request timed out after 10 seconds'
+        ? 'Request timed out after 30 seconds'
         : err?.message || 'Network error';
 
       this.logger.error(`Hostinger Mail dispatch error: ${safeErr}`);
@@ -223,6 +223,9 @@ export class MailService {
   private formatDates(dates?: string[] | null, ticketType?: string): string {
     if (ticketType === 'COMMERCIAL_SEASON') {
       return '11–19 October 2026 (All 9 Nights)';
+    }
+    if (ticketType === 'COMMERCIAL_ANY_DAY') {
+      return 'Valid on Any 1 Night (11–19 Oct 2026)';
     }
     if (!dates || dates.length === 0) {
       return '11–19 October 2026';
@@ -371,14 +374,40 @@ export class MailService {
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
-          <!-- 1. HEADER WITH NAVRATRI ARTWORK LOGO -->
+          <!-- 1. HEADER: CLEAN CORPORATE / PREMIUM PASS STRUCTURE -->
           <tr>
-            <td style="background-color: #0A0205; background: linear-gradient(180deg, #4A0C1A 0%, #150207 100%); padding: 24px 20px 20px 20px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
-              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <td style="background-color: #3B0813; background: linear-gradient(180deg, #4A0C1A 0%, #150207 100%); padding: 32px 20px 24px 20px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
+                <!-- A) ONGC LOGO (CENTERED, SMALL, BREATHING ROOM, TRANSPARENT) -->
+                <tr>
+                  <td align="center" style="padding-bottom: 14px;">
+                    <img src="cid:ongc-logo" alt="ONGC Logo" width="75" height="75" style="display: block; width: 75px; max-width: 75px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
+                  </td>
+                </tr>
+                <!-- B) NAVRATRI 2026 (PREMIUM SERIF / DISPLAY-STYLE IN GOLD) -->
+                <tr>
+                  <td align="center" style="padding-bottom: 6px;">
+                    <div style="font-family: 'Cinzel', 'Georgia', 'Times New Roman', serif; font-size: 24px; font-weight: 800; color: #D4AF37; letter-spacing: 4px; text-transform: uppercase; line-height: 1.2; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+                      NAVRATRI 2026
+                    </div>
+                  </td>
+                </tr>
+                <!-- SUBTLE DIVIDER ACCENT -->
+                <tr>
+                  <td align="center" style="padding: 4px 0 8px 0;">
+                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
+                      <tr>
+                        <td style="width: 36px; height: 1px; background-color: #D4AF37; opacity: 0.6;"></td>
+                        <td style="padding: 0 8px; font-size: 10px; color: #D4AF37; opacity: 0.8; line-height: 1;">&#9670;</td>
+                        <td style="width: 36px; height: 1px; background-color: #D4AF37; opacity: 0.6;"></td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <!-- C) AHMEDABAD • OFFICIAL DIGITAL E-PASS (SMALLER UPPERCASE SUBTITLE) -->
                 <tr>
                   <td align="center">
-                    <img src="cid:navratri-logo" alt="ONGC Navratri 2026" width="360" style="display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto; border: 0;" />
-                    <div style="font-size: 13px; font-weight: 700; color: #F5E6B3; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; color: #F5E6B3; letter-spacing: 2px; text-transform: uppercase;">
                       Ahmedabad &bull; Official Digital E-Pass
                     </div>
                   </td>
@@ -495,7 +524,7 @@ export class MailService {
               <!-- 7. RECOVERY / MY TICKETS PORTAL LINK -->
               <div style="background-color: #F5EFEB; border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: center;">
                 <p style="font-size: 13px; color: #5A4A3E; margin: 0 0 10px 0;">
-                  Access your passes anytime online by entering your <strong>Order Number</strong> and <strong>Mobile Number</strong>:
+                  Access your passes anytime online by entering your <strong>Order Number</strong> and <strong>Registered Email Address</strong>:
                 </p>
                 <a href="${portalUrl}" style="display: inline-block; background-color: #7A1930; color: #FFFFFF; font-weight: bold; font-size: 13px; padding: 10px 20px; text-decoration: none; border-radius: 8px;">
                   Access My Tickets Portal &rarr;
@@ -585,25 +614,25 @@ export class MailService {
                 </tr>
               </table>
 
-              <!-- 10. ORGANISED BY (DIGANT ART) -->
+              <!-- 9. EVENT ORGANISER (DIGANT ART) -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #E5D5BA; margin-top: 18px; padding-top: 22px; text-align: center;">
                 <tr>
                   <td align="center">
                     <div style="font-size: 10px; font-weight: 800; letter-spacing: 2px; color: #8A7264; text-transform: uppercase; margin-bottom: 12px;">
-                      ORGANISED BY
+                      EVENT ORGANISER
                     </div>
                     <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
                       <tr>
-                        <td align="center" style="padding: 8px 12px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.05);">
-                          <img src="cid:digant-art-logo" alt="Digant Art" width="130" style="display: block; width: 130px; max-width: 100%; height: auto; max-height: 130px; border-radius: 8px; border: 0;" />
+                        <td align="center" style="padding: 6px 10px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.05);">
+                          <img src="cid:digant-art-logo" alt="Digant Art" width="100" style="display: block; width: 100px; max-width: 100%; height: auto; max-height: 100px; border-radius: 8px; border: 0;" />
                         </td>
                       </tr>
                     </table>
                     <div style="font-size: 12px; font-weight: 700; color: #7A1930; margin-top: 10px; letter-spacing: 0.5px;">
-                      ONGC Navratri 2026
+                      Digant Art
                     </div>
                     <div style="font-size: 11px; color: #8A7264; margin-top: 2px;">
-                      Support: <a href="mailto:${this.mailbox}" style="color: #7A1930; text-decoration: none; font-weight: 600;">${this.mailbox}</a>
+                      Official Event Organiser
                     </div>
                   </td>
                 </tr>
@@ -611,18 +640,34 @@ export class MailService {
             </td>
           </tr>
 
-          <!-- 11. FOOTER -->
+          <!-- 10. SUPPORT & CONTACT FOOTER -->
           <tr>
-            <td style="background-color: #2A1810; padding: 24px; text-align: center; color: #E5D5BA; font-size: 12px; line-height: 1.5;">
-              <p style="margin: 0 0 6px 0; font-weight: bold; color: #FFFFFF;">
-                Need assistance?
-              </p>
-              <p style="margin: 0 0 8px 0;">
-                Support: <a href="mailto:${this.mailbox}" style="color: #D4AF37; text-decoration: none;">${this.mailbox}</a>
-              </p>
-              <p style="margin: 0; font-size: 11px; color: #A69080;">
-                This is an automated ticket confirmation. Please do not reply directly to this email.
-              </p>
+            <td style="background-color: #2A1810; padding: 26px 20px; text-align: center; color: #E5D5BA; font-size: 12px; line-height: 1.6;">
+              <div style="font-weight: 800; font-size: 13px; color: #FFFFFF; letter-spacing: 0.5px; margin-bottom: 8px;">
+                Need Assistance?
+              </div>
+              <div style="margin: 0 0 4px 0; color: #E5D5BA;">
+                Support: <a href="mailto:ongcnavratri@gmail.com" style="color: #F5E6B3; text-decoration: underline; font-weight: 600;">ongcnavratri@gmail.com</a>
+              </div>
+              <div style="margin: 0 0 12px 0; color: #E5D5BA;">
+                E-Pass / Ticket Assistance: <a href="mailto:ticket@ongcnavratri.tech" style="color: #F5E6B3; text-decoration: underline; font-weight: 600;">ticket@ongcnavratri.tech</a>
+              </div>
+              <div style="font-size: 11px; color: #A69080; border-top: 1px solid rgba(229, 213, 186, 0.15); padding-top: 10px; margin-top: 10px;">
+                This is an automated ticket confirmation.<br />
+                Please do not reply to this email.
+              </div>
+
+              <!-- 11. REWORKZONE CREDIT / E-TICKETING SYSTEM (SUBTLE, RESTRAINED, ABSOLUTE BOTTOM) -->
+              <div style="border-top: 1px solid rgba(229, 213, 186, 0.15); padding-top: 14px; margin-top: 14px; text-align: center;">
+                <div style="font-size: 10px; color: #8A7264; letter-spacing: 0.5px; margin-bottom: 2px;">
+                  E-Ticketing &amp; E-Pass System by
+                </div>
+                <div>
+                  <a href="https://reworkzone.com" target="_blank" rel="noopener noreferrer" style="color: #DC2626; font-size: 11px; font-weight: 700; text-decoration: none; letter-spacing: 0.5px;">
+                    Reworkzone.com
+                  </a>
+                </div>
+              </div>
             </td>
           </tr>
         </table>
@@ -634,7 +679,8 @@ export class MailService {
     `;
 
     const textContent = `
-ONGC NAVRATRI 2026 - OFFICIAL ENTRY PASS
+ONGC
+NAVRATRI 2026
 Ahmedabad • Official Digital E-Pass
 
 PAYMENT / BOOKING CONFIRMED • PASS READY
@@ -690,12 +736,23 @@ Zaira Diamond, Om Sanctuary Palace
 MEDIA PARTNER:
 Lalkaar News
 
-ORGANISED BY:
+EVENT ORGANISER:
 Digant Art
-ONGC Navratri 2026
+Official Event Organiser
 
-Need assistance? Contact us at: ${this.mailbox}
-This is an automated ticket confirmation. Please do not reply to this email.
+NEED ASSISTANCE?
+
+Support:
+ongcnavratri@gmail.com
+
+E-Pass / Ticket Assistance:
+ticket@ongcnavratri.tech
+
+This is an automated ticket confirmation.
+Please do not reply to this email.
+
+E-Ticketing & E-Pass System by
+Reworkzone.com (https://reworkzone.com)
     `.trim();
 
     // Attach static branding assets (Navratri logo, sponsors, organiser)

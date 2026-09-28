@@ -13,28 +13,28 @@ export const metadata: Metadata = {
 
 const dailySchedule = [
   {
-    time_badge_top: '12:00',
-    time_badge_bottom: 'PM',
-    time: '12:00 PM — 4:00 PM',
-    title: 'GARBA MANDLI GARBA',
-    desc: 'Traditional Garba celebration continues through the afternoon.',
-    tag: 'DAILY PROGRAMME',
-  },
-  {
     time_badge_top: '07:00',
     time_badge_bottom: 'PM',
     time: '07:00 PM — 08:00 PM',
     title: 'DURGA MAHA AARTI & CEREMONY',
-    desc: 'Sacred evening lamp lighting and prayers ushering in the night of celebration.',
+    desc: 'Sacred evening lamp lighting, Vedic chanting, and prayers ushering in the night of celebration.',
     tag: 'EVENING CEREMONY',
   },
   {
     time_badge_top: '08:00',
     time_badge_bottom: 'PM',
-    time: '08:00 PM — 11:30 PM',
-    title: 'MAHA RAAS GARBA CELEBRATION',
-    desc: 'Grand Raas Garba circles featuring live traditional orchestra and folk artists.',
-    tag: 'MAIN CELEBRATION',
+    time: '08:00 PM — 12:00 AM',
+    title: 'GENERAL RAAS GARBA',
+    desc: 'Grand Raas Garba circles featuring live traditional orchestra, devotional folk singers, and vibrant non-stop celebrations.',
+    tag: 'GENERAL GARBA',
+  },
+  {
+    time_badge_top: '12:00',
+    time_badge_bottom: 'AM',
+    time: '12:00 AM — 04:00 AM',
+    title: 'GARBA MANDLI (MIDNIGHT SESSION)',
+    desc: 'Traditional acoustic Garba Mandli under the stars with authentic folk melodies continuing until dawn.',
+    tag: 'MANDLI GARBA',
   },
 ];
 

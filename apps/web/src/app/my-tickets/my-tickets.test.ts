@@ -57,55 +57,66 @@ describe('My-Tickets: Indian Mobile Normalization (normalizeIndianMobile)', () =
 });
 
 describe('My-Tickets: Commercial Order Lookup Validation (validateCommercialLookup)', () => {
-  it('accepts valid commercial order number and Indian mobile', () => {
-    const res = validateCommercialLookup('ord-comm-20261011-xyz123', '9876543210');
+  it('accepts valid commercial order number and registered email', () => {
+    const res = validateCommercialLookup('ord-comm-20261011-xyz123', 'test@example.com');
     expect(res.isValid).toBe(true);
     expect(res.cleanOrderNumber).toBe('ORD-COMM-20261011-XYZ123');
-    expect(res.cleanMobile).toBe('9876543210');
+    expect(res.cleanEmail).toBe('test@example.com');
     expect(res.error).toBeUndefined();
   });
 
-  it('accepts mobile numbers starting with 6, 7, 8, 9', () => {
-    expect(validateCommercialLookup('ORD-1', '6123456789').isValid).toBe(true);
-    expect(validateCommercialLookup('ORD-1', '7123456789').isValid).toBe(true);
-    expect(validateCommercialLookup('ORD-1', '8123456789').isValid).toBe(true);
-    expect(validateCommercialLookup('ORD-1', '9123456789').isValid).toBe(true);
+  it('normalizes email and order number (trims and lowercases email, uppercases order)', () => {
+    const res = validateCommercialLookup('  ord-comm-123  ', '  USER@Test.COM  ');
+    expect(res.isValid).toBe(true);
+    expect(res.cleanOrderNumber).toBe('ORD-COMM-123');
+    expect(res.cleanEmail).toBe('user@test.com');
   });
 
   it('rejects missing or empty order number', () => {
-    const res = validateCommercialLookup('   ', '9876543210');
+    const res = validateCommercialLookup('   ', 'test@example.com');
     expect(res.isValid).toBe(false);
     expect(res.error).toContain('E-Pass Order Number');
   });
 
-  it('rejects empty or missing mobile number', () => {
+  it('rejects empty or missing email', () => {
     const res = validateCommercialLookup('ORD-COMM-1', '');
     expect(res.isValid).toBe(false);
-    expect(res.error).toContain('mobile number');
+    expect(res.error).toContain('email address');
   });
 
-  it('rejects invalid mobile numbers (starts with 0-5 or wrong length)', () => {
-    const res1 = validateCommercialLookup('ORD-COMM-1', '5123456789');
+  it('rejects invalid email formats', () => {
+    const res1 = validateCommercialLookup('ORD-COMM-1', 'not-an-email');
     expect(res1.isValid).toBe(false);
-    expect(res1.error).toContain('valid 10-digit Indian mobile');
+    expect(res1.error).toContain('valid registered email address');
 
-    const res2 = validateCommercialLookup('ORD-COMM-1', '98765');
+    const res2 = validateCommercialLookup('ORD-COMM-1', '@missingusername.com');
     expect(res2.isValid).toBe(false);
 
-    const res3 = validateCommercialLookup('ORD-COMM-1', '987654321000');
+    const res3 = validateCommercialLookup('ORD-COMM-1', 'user@domain');
     expect(res3.isValid).toBe(false);
+  });
+
+  it('supports legacy 10-digit Indian mobile fallback gracefully', () => {
+    const res = validateCommercialLookup('ORD-1', '9876543210');
+    expect(res.isValid).toBe(true);
+    expect(res.cleanMobile).toBe('9876543210');
   });
 });
 
 describe('My-Tickets: Commercial URL Builder (buildCommercialOrderUrl)', () => {
-  it('builds encoded URL for commercial order endpoint', () => {
-    const url = buildCommercialOrderUrl('ord-comm-20261011-abc', '+91 98765 43210');
-    expect(url).toBe('/commercial/orders/ORD-COMM-20261011-ABC?mobile=9876543210');
+  it('builds encoded URL for commercial order endpoint with email query param', () => {
+    const url = buildCommercialOrderUrl('ord-comm-20261011-abc', 'test@example.com');
+    expect(url).toBe('/commercial/orders/ORD-COMM-20261011-ABC?email=test%40example.com');
   });
 
-  it('properly encodes special characters in order number', () => {
-    const url = buildCommercialOrderUrl('ORD/TEST#1', '9876543210');
-    expect(url).toBe('/commercial/orders/ORD%2FTEST%231?mobile=9876543210');
+  it('properly encodes special characters in order number and email', () => {
+    const url = buildCommercialOrderUrl('ORD/TEST#1', 'user+tag@domain.com');
+    expect(url).toBe('/commercial/orders/ORD%2FTEST%231?email=user%2Btag%40domain.com');
+  });
+
+  it('builds mobile query URL when legacy mobile is passed', () => {
+    const url = buildCommercialOrderUrl('ORD-1', '+91 98765 43210');
+    expect(url).toBe('/commercial/orders/ORD-1?mobile=9876543210');
   });
 });
 
@@ -169,14 +180,18 @@ describe('My-Tickets: Order Status Badge Classifier (getOrderStatusBadge)', () =
 });
 
 describe('My-Tickets: Email Ticket Recovery Validation (validateEmailRecoveryRequest)', () => {
-  it('validates and normalizes valid order number and 10-digit mobile', () => {
+  it('validates and normalizes valid order number and 10-digit mobile or email', () => {
     const res = validateEmailRecoveryRequest('ord-comm-20261011-xyz', '+91 98765 43210');
     expect(res.isValid).toBe(true);
     expect(res.cleanOrderNumber).toBe('ORD-COMM-20261011-XYZ');
     expect(res.cleanMobile).toBe('9876543210');
+
+    const resEmail = validateEmailRecoveryRequest('ord-comm-20261011-xyz', 'test@example.com');
+    expect(resEmail.isValid).toBe(true);
+    expect(resEmail.cleanEmail).toBe('test@example.com');
   });
 
-  it('rejects recovery when mobile number is missing or invalid', () => {
+  it('rejects recovery when mobile/email is missing or invalid', () => {
     const res = validateEmailRecoveryRequest('ORD-COMM-1', '12345');
     expect(res.isValid).toBe(false);
     expect(res.error).toBeDefined();

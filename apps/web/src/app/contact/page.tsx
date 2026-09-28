@@ -59,7 +59,7 @@ export default function ContactPage() {
                   </div>
                   <h3 className="font-cinzel font-bold text-xl text-maroon">Organizing Help Desk</h3>
                   <div className="text-xs sm:text-sm text-ink/80 space-y-1 leading-relaxed">
-                    <p><strong className="text-ink">Email:</strong> support@ongcnavratri.com</p>
+                    <p><strong className="text-ink">Email:</strong> <a href="mailto:ongcnavratri@gmail.com" className="text-maroon font-semibold hover:underline">ongcnavratri@gmail.com</a></p>
                     <p><strong className="text-ink">Committee:</strong> EWC Ahmedabad Support Desk</p>
                     <p><strong className="text-ink">On-Ground:</strong> Help booths at Main Gate &amp; Stage Side</p>
                   </div>
@@ -79,8 +79,8 @@ export default function ContactPage() {
                   <h3 className="font-cinzel font-bold text-xl text-maroon">Event &amp; Support Hours</h3>
                   <div className="text-xs sm:text-sm text-ink/80 space-y-1 leading-relaxed">
                     <p><strong className="text-ink">Festive Dates:</strong> 11 October – 19 October 2026</p>
-                    <p><strong className="text-ink">Daily Afternoon Garba:</strong> 12:00 PM – 04:00 PM</p>
-                    <p><strong className="text-ink">Evening Sessions:</strong> 07:00 PM – 11:30 PM</p>
+                    <p><strong className="text-ink">General Garba:</strong> 08:00 PM – 12:00 AM</p>
+                    <p><strong className="text-ink">Mandli Garba:</strong> 12:00 AM – 04:00 AM</p>
                   </div>
                 </div>
                 <div className="pt-4 border-t border-stone-100 text-xs text-gold-dark font-medium flex items-center gap-1.5">

@@ -30,13 +30,16 @@ export function normalizeIndianMobile(mobile: string): string {
   return digits;
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function validateCommercialLookup(
   orderNumber: string,
-  mobile: string,
+  emailOrMobile: string,
 ): {
   isValid: boolean;
   cleanOrderNumber: string;
-  cleanMobile: string;
+  cleanEmail: string;
+  cleanMobile?: string;
   error?: string;
 } {
   const cleanOrderNumber = (orderNumber || '').trim().toUpperCase();
@@ -44,46 +47,72 @@ export function validateCommercialLookup(
     return {
       isValid: false,
       cleanOrderNumber: '',
-      cleanMobile: '',
+      cleanEmail: '',
       error: 'Please enter your E-Pass Order Number or Ticket Number',
     };
   }
 
-  const cleanMobile = normalizeIndianMobile(mobile);
-  if (!cleanMobile) {
+  const rawInput = (emailOrMobile || '').trim();
+  if (!rawInput) {
     return {
       isValid: false,
       cleanOrderNumber,
-      cleanMobile: '',
-      error: 'Please enter your 10-digit mobile number',
+      cleanEmail: '',
+      error: 'Please enter your registered email address',
     };
   }
 
-  if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
+  if (rawInput.includes('@')) {
+    if (!EMAIL_REGEX.test(rawInput)) {
+      return {
+        isValid: false,
+        cleanOrderNumber,
+        cleanEmail: '',
+        error: 'Please enter a valid email address (e.g. test@example.com)',
+      };
+    }
     return {
-      isValid: false,
+      isValid: true,
       cleanOrderNumber,
+      cleanEmail: rawInput.toLowerCase(),
+    };
+  }
+
+  // Fallback for legacy 10-digit Indian mobile lookup
+  const cleanMobile = normalizeIndianMobile(rawInput);
+  if (/^[6-9]\d{9}$/.test(cleanMobile)) {
+    return {
+      isValid: true,
+      cleanOrderNumber,
+      cleanEmail: '',
       cleanMobile,
-      error: 'Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)',
     };
   }
 
   return {
-    isValid: true,
+    isValid: false,
     cleanOrderNumber,
-    cleanMobile,
+    cleanEmail: '',
+    error: 'Please enter a valid registered email address (e.g. test@example.com)',
   };
 }
 
-export function buildCommercialOrderUrl(orderNumber: string, mobile: string): string {
+export function buildCommercialOrderUrl(orderNumber: string, emailOrMobile: string): string {
   const cleanOrder = (orderNumber || '').trim().toUpperCase();
-  const cleanMob = normalizeIndianMobile(mobile);
+  const rawInput = (emailOrMobile || '').trim();
+  if (rawInput.includes('@')) {
+    return `/commercial/orders/${encodeURIComponent(cleanOrder)}?email=${encodeURIComponent(rawInput.toLowerCase())}`;
+  }
+  const cleanMob = normalizeIndianMobile(rawInput);
   return `/commercial/orders/${encodeURIComponent(cleanOrder)}?mobile=${encodeURIComponent(cleanMob)}`;
 }
 
 export function formatPassDates(dates?: string[] | null, ticketType?: string): string {
-  if (ticketType === 'SEASON') {
+  if (ticketType === 'SEASON' || ticketType === 'COMMERCIAL_SEASON') {
     return '11–19 October 2026 (All 9 Days)';
+  }
+  if (ticketType === 'COMMERCIAL_ANY_DAY' || ticketType === 'ANY_DAY') {
+    return 'Valid on Any 1 Night (11–19 Oct 2026)';
   }
   if (!dates || dates.length === 0) {
     return '11–19 October 2026';
@@ -184,7 +213,13 @@ export function getOrderStatusBadge(
 
 export function validateEmailRecoveryRequest(
   orderNumber: string,
-  mobile: string,
-): { isValid: boolean; cleanOrderNumber: string; cleanMobile: string; error?: string } {
-  return validateCommercialLookup(orderNumber, mobile);
+  emailOrMobile: string,
+): {
+  isValid: boolean;
+  cleanOrderNumber: string;
+  cleanEmail: string;
+  cleanMobile?: string;
+  error?: string;
+} {
+  return validateCommercialLookup(orderNumber, emailOrMobile);
 }

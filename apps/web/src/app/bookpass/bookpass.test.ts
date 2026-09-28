@@ -266,7 +266,7 @@ describe('Commercial /bookpass Staging Test Payment Regression Tests', () => {
         expect(selectedDate).toBe('2026-10-19');
       });
 
-      it('Daily / Mandli / Any Day Pass produces exactly ONE booking date in the payload', () => {
+      it('Daily / Mandli Pass produces exactly ONE booking date in the payload', () => {
         const dailyDates = resolveOrderSelectedDates('COMMERCIAL_DAILY', '2026-10-12', EVENT_DATES);
         expect(dailyDates).toEqual(['2026-10-12']);
         expect(dailyDates).toHaveLength(1);
@@ -274,10 +274,12 @@ describe('Commercial /bookpass Staging Test Payment Regression Tests', () => {
         const mandliDates = resolveOrderSelectedDates('COMMERCIAL_MANDLI', '2026-10-15', EVENT_DATES);
         expect(mandliDates).toEqual(['2026-10-15']);
         expect(mandliDates).toHaveLength(1);
+      });
 
-        const anyDayDates = resolveOrderSelectedDates('COMMERCIAL_ANY_DAY', '2026-10-18', EVENT_DATES);
-        expect(anyDayDates).toEqual(['2026-10-18']);
-        expect(anyDayDates).toHaveLength(1);
+      it('Any Day Pass produces empty selectedDates (flexible single-night pass, no date selection)', () => {
+        const anyDayDates = resolveOrderSelectedDates('COMMERCIAL_ANY_DAY', '', EVENT_DATES);
+        expect(anyDayDates).toEqual([]);
+        expect(anyDayDates).toHaveLength(0);
       });
 
       it('Season Pass automatically covers all event dates in the booking without user date selection', () => {

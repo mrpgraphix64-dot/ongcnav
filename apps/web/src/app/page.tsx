@@ -93,21 +93,21 @@ export default function HomePage() {
           </div>
 
           {/* BOY GARBA DANCER (LEFT SIDE) */}
-          <div className="absolute left-0 bottom-0 z-20 pointer-events-none opacity-0 animate-dancer-boy flex items-end justify-start">
+          <div className="hidden md:flex absolute left-0 bottom-0 z-20 pointer-events-none opacity-0 animate-dancer-boy items-end justify-start max-w-[22vw] lg:max-w-[28vw] xl:max-w-[32vw]">
             <img
               src="/images/left.png"
               alt="ONGC Navratri Garba Dancer Boy"
-              className="w-[125px] xs:w-[150px] sm:w-[230px] md:w-[310px] lg:w-[390px] xl:w-[450px] h-auto object-contain max-h-[48vh] sm:max-h-[62vh] lg:max-h-[75vh] select-none"
+              className="md:w-[260px] lg:w-[340px] xl:w-[420px] h-auto object-contain max-h-[62vh] lg:max-h-[75vh] select-none"
               loading="eager"
             />
           </div>
 
           {/* GIRL GARBA DANCER (RIGHT SIDE) */}
-          <div className="absolute right-0 bottom-0 z-20 pointer-events-none opacity-0 animate-dancer-girl flex items-end justify-end">
+          <div className="hidden md:flex absolute right-0 bottom-0 z-20 pointer-events-none opacity-0 animate-dancer-girl items-end justify-end max-w-[22vw] lg:max-w-[28vw] xl:max-w-[32vw]">
             <img
               src="/images/right.png"
               alt="ONGC Navratri Garba Dancer Girl"
-              className="w-[125px] xs:w-[150px] sm:w-[230px] md:w-[310px] lg:w-[390px] xl:w-[450px] h-auto object-contain max-h-[48vh] sm:max-h-[62vh] lg:max-h-[75vh] select-none"
+              className="md:w-[260px] lg:w-[340px] xl:w-[420px] h-auto object-contain max-h-[62vh] lg:max-h-[75vh] select-none"
               loading="eager"
             />
           </div>
@@ -638,21 +638,21 @@ export default function HomePage() {
 
               <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-5 sm:gap-6">
                 <div className="w-20 h-20 rounded-2xl bg-maroon-soft text-maroon border border-maroon/20 flex flex-col items-center justify-center shrink-0 group-hover:bg-maroon group-hover:text-white transition-colors duration-300 shadow-xs">
-                  <span className="font-cinzel font-bold text-2xl leading-none">12:00</span>
+                  <span className="font-cinzel font-bold text-2xl leading-none">08:00</span>
                   <span className="text-[10px] font-extrabold tracking-wider uppercase mt-0.5">PM</span>
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                      ✦ TODAY'S HIGHLIGHT
+                      ✦ NIGHTLY HIGHLIGHT
                     </span>
-                    <span className="text-[11px] font-medium text-ink-muted">Afternoon Session</span>
+                    <span className="text-[11px] font-medium text-ink-muted">General Garba Session</span>
                   </div>
-                  <div className="text-xs font-semibold text-ink-soft">12:00 PM — 4:00 PM</div>
-                  <h3 className="font-cinzel font-bold text-xl sm:text-2xl text-maroon">GARBA MANDLI GARBA</h3>
+                  <div className="text-xs font-semibold text-ink-soft">8:00 PM — 12:00 AM</div>
+                  <h3 className="font-cinzel font-bold text-xl sm:text-2xl text-maroon">GENERAL RAAS GARBA</h3>
                   <p className="text-xs sm:text-sm text-ink/75 leading-relaxed max-w-md">
-                    Traditional Garba celebration continues through the afternoon with folk rhythms and devotion.
+                    Grand Raas Garba circles featuring live traditional orchestra, devotional folk singers, and vibrant non-stop celebrations.
                   </p>
                 </div>
               </div>
@@ -660,7 +660,7 @@ export default function HomePage() {
               <div className="shrink-0 flex sm:flex-col items-center sm:items-end gap-2 text-right">
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gold-dark bg-gold/10 px-3 py-1.5 rounded-xl border border-gold/30">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Concludes at 4:00 PM
+                  Concludes at 12:00 AM
                 </span>
               </div>
             </div>
@@ -669,10 +669,10 @@ export default function HomePage() {
             <div className="relative py-2 sm:py-4 px-2 sm:px-4">
               <div className="hidden md:block relative">
                 <div className="flex items-center justify-between relative">
-                  {/* 12 PM Left Marker */}
+                  {/* 8 PM Left Marker */}
                   <div className="flex items-center gap-2 z-10 shrink-0">
                     <div className="w-3.5 h-3.5 rounded-full bg-maroon border-2 border-gold shadow-xs" />
-                    <span className="font-mono text-xs font-bold text-maroon-dark tracking-wider">12:00 PM</span>
+                    <span className="font-mono text-xs font-bold text-maroon-dark tracking-wider">8:00 PM</span>
                   </div>
 
                   {/* Left Segment */}
@@ -690,7 +690,7 @@ export default function HomePage() {
                     </div>
                     <div className="mt-2.5 flex flex-col items-center whitespace-nowrap">
                       <span className="font-mono text-xs font-extrabold text-maroon bg-white/95 px-2.5 py-0.5 rounded-md border border-gold/50 shadow-2xs">
-                        4:00 PM
+                        12:00 AM (Mandli Garba)
                       </span>
                     </div>
                   </div>
@@ -702,7 +702,7 @@ export default function HomePage() {
 
                   {/* Right Marker */}
                   <div className="flex items-center gap-2 z-10 shrink-0">
-                    <span className="font-mono text-xs font-bold text-maroon-dark tracking-wider">7:00 PM</span>
+                    <span className="font-mono text-xs font-bold text-maroon-dark tracking-wider">4:00 AM</span>
                     <div className="w-3.5 h-3.5 rounded-full bg-gold border-2 border-white shadow-xs" />
                   </div>
                 </div>
@@ -711,7 +711,7 @@ export default function HomePage() {
                   <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-gold/15 via-amber-100/80 to-gold/15 border border-gold/50 shadow-2xs">
                     <Sparkles className="w-3.5 h-3.5 text-gold-dark animate-pulse" />
                     <span className="font-cinzel font-bold text-xs tracking-wider text-maroon uppercase">
-                      The Celebration Continues
+                      General Garba: 8:00 PM – 12:00 AM &bull; Mandli Garba: 12:00 AM – 4:00 AM
                     </span>
                     <Sparkles className="w-3.5 h-3.5 text-gold-dark animate-pulse" />
                   </div>
@@ -727,10 +727,10 @@ export default function HomePage() {
                   </div>
                   <div className="mt-2 text-center">
                     <div className="font-mono text-xs font-extrabold text-maroon bg-white px-2.5 py-0.5 rounded border border-gold/40 shadow-2xs">
-                      4:00 PM
+                      12:00 AM
                     </div>
                     <div className="mt-1 font-cinzel font-bold text-[11px] text-maroon uppercase tracking-wider">
-                      The Celebration Continues
+                      Mandli Garba Commences &bull; Till 4:00 AM
                     </div>
                   </div>
                 </div>
@@ -748,19 +748,19 @@ export default function HomePage() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-maroon bg-maroon-soft border border-maroon/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                      ✦ UP NEXT &bull; EVENING CEREMONY
+                      ✦ MIDNIGHT SESSION &bull; TRADITIONAL MANDLI
                     </span>
                     <span className="text-xs font-mono font-bold text-ink-soft">
-                      7:00 PM onwards
+                      12:00 AM — 04:00 AM
                     </span>
                   </div>
 
                   <h4 className="font-cinzel font-bold text-base sm:text-lg text-maroon">
-                    Maha Aarti & Grand Raas Garba
+                    Garba Mandli (Midnight to Dawn)
                   </h4>
 
                   <p className="text-xs sm:text-sm text-ink/70 leading-relaxed max-w-xl">
-                    Divine Aarti followed by 9 nights of vibrant Raas Garba, traditional folk orchestra, and cultural celebration.
+                    Sacred authentic Mandli Garba with intimate acoustic folk singing, traditional clapping rhythms, and devotional ecstasy till 4:00 AM.
                   </p>
                 </div>
               </div>

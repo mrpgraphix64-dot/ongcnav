@@ -127,9 +127,19 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).toContain('src="cid:zaira-logo"');
       expect(body.html).toContain('src="cid:om-sanctuary-logo"');
       expect(body.html).toContain('src="cid:lalkaar-logo"');
-      expect(body.html).toContain('ORGANISED BY');
+      expect(body.html).toContain('EVENT ORGANISER');
       expect(body.html).toContain('src="cid:digant-art-logo"');
       expect(body.html).toContain('ONGC Navratri 2026');
+
+      // Verify support emails order and labels
+      const ongcSupportIdx = body.html.indexOf('ongcnavratri@gmail.com');
+      const ticketAssistanceIdx = body.html.indexOf('ticket@ongcnavratri.tech');
+      expect(ongcSupportIdx).toBeGreaterThan(-1);
+      expect(ticketAssistanceIdx).toBeGreaterThan(-1);
+      expect(ongcSupportIdx).toBeLessThan(ticketAssistanceIdx); // ongcnavratri@gmail.com MUST appear first
+
+      expect(body.html).toContain('Support: <a href="mailto:ongcnavratri@gmail.com"');
+      expect(body.html).toContain('E-Pass / Ticket Assistance: <a href="mailto:ticket@ongcnavratri.tech"');
 
       // Verify pass is positioned BEFORE booking details (Pass-first visual hierarchy)
       const passIndex = body.html.indexOf('YOUR E-PASS');
@@ -154,7 +164,7 @@ describe('MailService (Hostinger Mail API)', () => {
 
       // Verify branding attachments are present
       const cids = body.attachments.map((a: any) => a.cid);
-      expect(cids).toContain('navratri-logo');
+      expect(cids).toContain('ongc-logo');
       expect(cids).toContain('zaira-logo');
       expect(cids).toContain('om-sanctuary-logo');
       expect(cids).toContain('lalkaar-logo');
@@ -305,7 +315,7 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.attachments[1].filename).toBe('QR-TK-COMM-SEAS-2-B2.png');
       // Plus 5 branding attachments
       expect(body.attachments.map((a: any) => a.cid)).toEqual(
-        expect.arrayContaining(['navratri-logo', 'zaira-logo', 'om-sanctuary-logo', 'lalkaar-logo', 'digant-art-logo']),
+        expect.arrayContaining(['ongc-logo', 'zaira-logo', 'om-sanctuary-logo', 'lalkaar-logo', 'digant-art-logo']),
       );
     });
 
@@ -440,8 +450,12 @@ describe('MailService (Hostinger Mail API)', () => {
 
         const attachmentCids = body.attachments.map((a: any) => a.cid);
 
-        // 1. Navratri logo CID is included.
-        expect(attachmentCids).toContain('navratri-logo');
+        // 1. ONGC logo CID is included and is an authentic transparent RGBA PNG (colorType: 6).
+        expect(attachmentCids).toContain('ongc-logo');
+        const ongcAttachment = body.attachments.find((a: any) => a.cid === 'ongc-logo');
+        expect(ongcAttachment).toBeDefined();
+        const logoBuf = Buffer.from(ongcAttachment.content, 'base64');
+        expect(logoBuf.readUInt8(25)).toBe(6); // Color Type 6: RGBA with true alpha transparency
 
         // 2. Zaira Diamond logo CID is included.
         expect(attachmentCids).toContain('zaira-logo');
@@ -456,7 +470,7 @@ describe('MailService (Hostinger Mail API)', () => {
         expect(attachmentCids).toContain('digant-art-logo');
 
         // 6. HTML references the exact matching CIDs.
-        expect(body.html).toContain('src="cid:navratri-logo"');
+        expect(body.html).toContain('src="cid:ongc-logo"');
         expect(body.html).toContain('src="cid:zaira-logo"');
         expect(body.html).toContain('src="cid:om-sanctuary-logo"');
         expect(body.html).toContain('src="cid:lalkaar-logo"');
@@ -501,15 +515,41 @@ describe('MailService (Hostinger Mail API)', () => {
         expect(body.html).not.toContain('staffId');
         expect(body.html).not.toContain('SUPER_ADMIN');
 
-        // Hierarchy check: Navratri logo header -> Digital Pass -> Sponsors -> Organiser
-        const navratriLogoIdx = body.html.indexOf('src="cid:navratri-logo"');
+        // 14. Support emails order: ongcnavratri@gmail.com must appear before ticket@ongcnavratri.tech
+        const generalSupportIdx = body.html.indexOf('ongcnavratri@gmail.com');
+        const ticketSupportIdx = body.html.indexOf('ticket@ongcnavratri.tech');
+        expect(generalSupportIdx).toBeGreaterThan(-1);
+        expect(ticketSupportIdx).toBeGreaterThan(-1);
+        expect(generalSupportIdx).toBeLessThan(ticketSupportIdx);
+
+        // 15. Organiser attribution: Digant Art as official event organiser
+        expect(body.html).toContain('EVENT ORGANISER');
+        expect(body.html).toContain('Digant Art');
+        expect(body.html).toContain('Official Event Organiser');
+        expect(body.html).not.toContain('ONGC Organising Committee');
+        expect(body.html).not.toContain('Organised by ONGC');
+
+        // 16. Reworkzone.com credit at absolute bottom
+        expect(body.html).toContain('E-Ticketing &amp; E-Pass System by');
+        expect(body.html).toContain('href="https://reworkzone.com"');
+        expect(body.html).toContain('Reworkzone.com');
+
+        // Hierarchy check: ONGC logo header -> NAVRATRI 2026 -> Digital Pass -> Sponsors -> Organiser -> Support -> Reworkzone
+        const ongcLogoIdx = body.html.indexOf('src="cid:ongc-logo"');
+        const headerTitleIdx = body.html.indexOf('NAVRATRI 2026');
         const passCardIdx = body.html.indexOf('src="cid:qr-TKBRAND1-1"');
         const sponsorsIdx = body.html.indexOf('OUR PARTNERS');
-        const organiserIdx = body.html.indexOf('ORGANISED BY');
-        expect(navratriLogoIdx).toBeGreaterThan(-1);
-        expect(passCardIdx).toBeGreaterThan(navratriLogoIdx);
+        const organiserIdx = body.html.indexOf('EVENT ORGANISER');
+        const supportIdx = body.html.indexOf('Need Assistance?');
+        const reworkzoneIdx = body.html.indexOf('Reworkzone.com');
+
+        expect(ongcLogoIdx).toBeGreaterThan(-1);
+        expect(headerTitleIdx).toBeGreaterThan(ongcLogoIdx);
+        expect(passCardIdx).toBeGreaterThan(headerTitleIdx);
         expect(sponsorsIdx).toBeGreaterThan(passCardIdx);
         expect(organiserIdx).toBeGreaterThan(sponsorsIdx);
+        expect(supportIdx).toBeGreaterThan(organiserIdx);
+        expect(reworkzoneIdx).toBeGreaterThan(supportIdx);
       });
     });
   });

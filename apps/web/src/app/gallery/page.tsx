@@ -1,62 +1,87 @@
 'use client';
 
-import React, { useState } from 'react';
-import Image from 'next/image';
+import React, { useState, useEffect, useRef } from 'react';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
 import PageHero from '@/components/PageHero';
-import { Maximize2, X, Camera } from 'lucide-react';
+import { Play, X, Video, Sparkles } from 'lucide-react';
 
-interface GalleryItem {
+interface GalleryVideoItem {
+  id: string;
   title: string;
   category: string;
-  image: string;
+  videoSrc: string;
   caption: string;
 }
 
-const categories = ['ALL', 'GARBA', 'CULTURE', 'CELEBRATION', 'VENUE', 'MOMENTS'];
+const categories = ['ALL', 'GARBA', 'CULTURE', 'CELEBRATION', 'MANDLI', 'MOMENTS'];
 
-const galleryItems: GalleryItem[] = [
+const galleryVideos: GalleryVideoItem[] = [
   {
-    title: 'Sponsor Pavilion & Festive Stage',
-    category: 'CELEBRATION',
-    image: '/images/bg.png',
-    caption: 'The illuminated main stage and grand pavilion at ONGC Ground Ahmedabad.',
-  },
-  {
-    title: 'Garba Dance & Folk Heritage',
+    id: 'garba-1',
+    title: 'Grand Raas Garba Circles',
     category: 'GARBA',
-    image: '/images/left.png',
-    caption: 'Traditional festive attire and expressive Garba steps honoring heritage.',
+    videoSrc: '/Video/Garba1.mp4',
+    caption: 'Vibrant circular Garba steps with devotees dancing enthusiastically to live rhythmic folk beats.',
   },
   {
-    title: 'Devotion & Festive Rhythm',
+    id: 'garba-2',
+    title: 'Devotional Garba & Folk Symphony',
     category: 'CULTURE',
-    image: '/images/right.png',
-    caption: 'Vibrant colours and celebration of cultural unity during Navratri.',
+    videoSrc: '/Video/Garba2.mp4',
+    caption: 'Energetic traditional dance and music celebrating the sacred spirit and heritage of Gujarat.',
   },
   {
-    title: 'Stage Arch & Auspicious Kalash',
-    category: 'VENUE',
-    image: '/images/2ndsecleft.png',
-    caption: 'Traditional ceremonial decor with marigold arches, brass diyas, and kalash.',
+    id: 'garba-3',
+    title: 'Maha Raas Garba Gathering',
+    category: 'CELEBRATION',
+    videoSrc: '/Video/Garba3.mp4',
+    caption: 'Thousands of devotees and dancers moving in unison across the illuminated ONGC festive arena.',
   },
   {
-    title: 'Golden Hanging Lamps & Ambiance',
+    id: 'garba-4',
+    title: 'Mandli Garba Traditional Steps',
+    category: 'MANDLI',
+    videoSrc: '/Video/Garba4.mp4',
+    caption: 'Authentic acoustic Mandli Garba with traditional clapping rhythms under the midnight starlit sky.',
+  },
+  {
+    id: 'garba-5',
+    title: 'Festive Night Finale & Energy',
     category: 'MOMENTS',
-    image: '/images/2ndsecright.png',
-    caption: 'Warm festive lighting illuminating the grounds and creating a royal atmosphere.',
+    videoSrc: '/Video/Garba5.mp4',
+    caption: 'High-energy Raas Garba celebration electrifying the grounds with folk devotion and joy.',
   },
 ];
 
 export default function GalleryPage() {
   const [activeCategory, setActiveCategory] = useState('ALL');
-  const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
+  const [activeVideo, setActiveVideo] = useState<GalleryVideoItem | null>(null);
+  const modalVideoRef = useRef<HTMLVideoElement>(null);
 
-  const filteredItems =
+  const filteredVideos =
     activeCategory === 'ALL'
-      ? galleryItems
-      : galleryItems.filter((item) => item.category === activeCategory);
+      ? galleryVideos
+      : galleryVideos.filter((item) => item.category === activeCategory);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const closeModal = () => {
+    if (modalVideoRef.current) {
+      modalVideoRef.current.pause();
+      modalVideoRef.current.currentTime = 0;
+    }
+    setActiveVideo(null);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-cream text-ink">
@@ -65,9 +90,9 @@ export default function GalleryPage() {
       <main className="flex-1">
         {/* PAGE HERO */}
         <PageHero
-          badge="GALLERY"
+          badge="VIDEO HIGHLIGHTS"
           title="MOMENTS OF NAVRATRI"
-          subtitle="Experience the spirit, colors, devotion and joy through our visual gallery."
+          subtitle="Experience the spirit, rhythm, devotion and vibrant energy through live video highlights."
           breadcrumb="Gallery"
         />
 
@@ -93,40 +118,53 @@ export default function GalleryPage() {
               ))}
             </div>
 
-            {/* MASONRY GALLERY GRID */}
+            {/* VIDEO GRID */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {filteredItems.map((item, idx) => (
+              {filteredVideos.map((item) => (
                 <div
-                  key={idx}
-                  onClick={() => setLightboxItem(item)}
+                  key={item.id}
+                  onClick={() => setActiveVideo(item)}
                   className="bg-white rounded-3xl overflow-hidden border border-stone-200/90 shadow-sm hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col justify-between"
                 >
-                  {/* Image Wrap */}
-                  <div className="relative overflow-hidden bg-stone-100 aspect-4/3 flex items-center justify-center">
-                    <Image
-                      src={item.image}
-                      alt={item.title}
-                      width={600}
-                      height={450}
-                      className="w-full h-full object-contain sm:object-cover group-hover:scale-105 transition-transform duration-500"
+                  {/* Video Preview Wrap */}
+                  <div className="relative overflow-hidden bg-stone-900 aspect-16/10 flex items-center justify-center">
+                    <video
+                      src={item.videoSrc}
+                      preload="metadata"
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
 
-                    {/* Gradient Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-maroon-dark/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gold-light">
-                        <Maximize2 className="w-4 h-4" /> View Full Image
+                    {/* Gradient & Darkening Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-maroon-dark/80 via-black/30 to-transparent group-hover:via-black/40 transition-colors duration-300" />
+
+                    {/* Center Play Button Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-maroon/90 text-gold-light border-2 border-gold/80 flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-maroon group-hover:shadow-[0_0_24px_rgba(212,175,55,0.6)] transition-all duration-300">
+                        <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-gold-light text-gold-light ml-0.5" />
+                      </div>
+                    </div>
+
+                    {/* Bottom Hover Caption Action */}
+                    <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-xs font-bold text-gold-light opacity-90 group-hover:opacity-100 transition-opacity">
+                      <span className="inline-flex items-center gap-1.5 drop-shadow-sm">
+                        <Sparkles className="w-3.5 h-3.5 text-gold" /> Watch Highlight
+                      </span>
+                      <span className="text-[10px] text-white/80 font-mono uppercase bg-black/40 px-2 py-0.5 rounded backdrop-blur-xs">
+                        HD VIDEO
                       </span>
                     </div>
 
                     {/* Category Badge */}
-                    <span className="absolute top-3.5 right-3.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/90 backdrop-blur-xs text-maroon shadow-xs border border-gold/30">
+                    <span className="absolute top-3.5 right-3.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/95 backdrop-blur-xs text-maroon shadow-xs border border-gold/30">
                       {item.category}
                     </span>
                   </div>
 
                   {/* Card Caption Info */}
-                  <div className="p-5 space-y-1 bg-white">
-                    <h3 className="font-cinzel font-bold text-base text-ink group-hover:text-maroon transition-colors">
+                  <div className="p-5 space-y-1.5 bg-white">
+                    <h3 className="font-cinzel font-bold text-base text-ink group-hover:text-maroon transition-colors line-clamp-1">
                       {item.title}
                     </h3>
                     <p className="text-xs text-ink/70 line-clamp-2 leading-relaxed">
@@ -136,14 +174,14 @@ export default function GalleryPage() {
                 </div>
               ))}
 
-              {filteredItems.length === 0 && (
+              {filteredVideos.length === 0 && (
                 <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-stone-200 p-8 space-y-4">
                   <div className="w-16 h-16 mx-auto rounded-full bg-cream-soft text-maroon flex items-center justify-center">
-                    <Camera className="w-8 h-8" />
+                    <Video className="w-8 h-8" />
                   </div>
-                  <h3 className="font-cinzel font-bold text-xl text-ink">NO MOMENTS FOUND</h3>
+                  <h3 className="font-cinzel font-bold text-xl text-ink">NO VIDEOS FOUND</h3>
                   <p className="text-xs text-ink-soft max-w-md mx-auto">
-                    No images match the selected category currently.
+                    No video highlights match the selected category currently.
                   </p>
                 </div>
               )}
@@ -152,43 +190,54 @@ export default function GalleryPage() {
           </div>
         </div>
 
-        {/* LIGHTBOX MODAL */}
-        {lightboxItem && (
+        {/* VIDEO LIGHTBOX MODAL */}
+        {activeVideo && (
           <div
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setLightboxItem(null)}
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6"
+            onClick={closeModal}
           >
             <div
-              className="bg-white rounded-3xl overflow-hidden max-w-3xl w-full border border-gold/40 shadow-2xl relative"
+              className="bg-stone-950 rounded-3xl overflow-hidden max-w-4xl w-full border border-gold/40 shadow-2xl relative flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Close Button */}
               <button
                 type="button"
-                onClick={() => setLightboxItem(null)}
-                className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
+                onClick={closeModal}
+                aria-label="Close video player"
+                className="absolute top-3.5 right-3.5 z-20 w-10 h-10 rounded-full bg-black/60 hover:bg-maroon text-white flex items-center justify-center transition-all duration-200 border border-white/20 shadow-md cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="relative aspect-16/10 bg-stone-900 flex items-center justify-center">
-                <Image
-                  src={lightboxItem.image}
-                  alt={lightboxItem.title}
-                  width={1200}
-                  height={800}
+              {/* Video Player Frame */}
+              <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+                <video
+                  ref={modalVideoRef}
+                  key={activeVideo.videoSrc}
+                  src={activeVideo.videoSrc}
+                  controls
+                  autoPlay
+                  playsInline
                   className="w-full h-full object-contain"
                 />
               </div>
 
-              <div className="p-6 bg-white space-y-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-maroon-soft text-maroon border border-maroon/20">
-                  {lightboxItem.category}
-                </span>
-                <h3 className="font-cinzel font-bold text-xl text-maroon">
-                  {lightboxItem.title}
+              {/* Video Details Bar */}
+              <div className="p-5 sm:p-6 bg-white space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-maroon-soft text-maroon border border-maroon/20">
+                    {activeVideo.category}
+                  </span>
+                  <span className="text-[11px] font-mono text-ink-muted">
+                    Official Video Highlight
+                  </span>
+                </div>
+                <h3 className="font-cinzel font-bold text-lg sm:text-xl text-maroon">
+                  {activeVideo.title}
                 </h3>
-                <p className="text-sm text-ink/80 leading-relaxed">
-                  {lightboxItem.caption}
+                <p className="text-xs sm:text-sm text-ink/80 leading-relaxed">
+                  {activeVideo.caption}
                 </p>
               </div>
             </div>

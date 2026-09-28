@@ -13,7 +13,6 @@ import {
   Clock,
   Calendar,
   ShieldCheck,
-  Phone,
   Hash,
   Mail,
 } from 'lucide-react';
@@ -32,10 +31,11 @@ import {
 function CommercialTicketsContent() {
   const searchParams = useSearchParams();
   const initialOrderNumber = searchParams.get('orderNumber') || searchParams.get('order') || '';
+  const initialEmail = searchParams.get('email') || '';
   const initialMobile = searchParams.get('mobile') || searchParams.get('phone') || '';
 
   const [orderNumber, setOrderNumber] = useState(initialOrderNumber);
-  const [orderMobile, setOrderMobile] = useState(initialMobile);
+  const [orderEmail, setOrderEmail] = useState(initialEmail || initialMobile);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -54,7 +54,7 @@ function CommercialTicketsContent() {
     try {
       const res = await fetchApi(`/commercial/orders/${encodeURIComponent(result.orderNumber)}/email`, {
         method: 'POST',
-        body: JSON.stringify({ mobile: orderMobile.trim() }),
+        body: JSON.stringify({ email: orderEmail.trim() }),
       });
 
       if (res?.success) {
@@ -86,16 +86,16 @@ function CommercialTicketsContent() {
     setEmailMessage(null);
     setShowAllPasses(false);
 
-    const validation = validateCommercialLookup(orderNumber, orderMobile);
+    const validation = validateCommercialLookup(orderNumber, orderEmail);
     if (!validation.isValid) {
-      setError(validation.error || 'Please enter a valid E-Pass Order Number and 10-digit mobile number');
+      setError(validation.error || 'Please enter a valid E-Pass Order Number and registered email address');
       return;
     }
 
     setLoading(true);
 
     try {
-      const url = buildCommercialOrderUrl(validation.cleanOrderNumber, validation.cleanMobile);
+      const url = buildCommercialOrderUrl(validation.cleanOrderNumber, validation.cleanEmail || validation.cleanMobile || '');
       const data = await fetchApi(url);
       setResult(data);
     } catch (err: any) {
@@ -105,7 +105,7 @@ function CommercialTicketsContent() {
         (err.message && err.message.toLowerCase().includes('not found'))
       ) {
         setError(
-          `E-Pass order "${orderNumber.trim().toUpperCase()}" was not found. Please verify your order number and 10-digit mobile number.`,
+          `E-Pass order "${orderNumber.trim().toUpperCase()}" was not found. Please verify your order number and registered email address.`,
         );
       } else {
         setError(err.message || 'Failed to lookup E-Pass order. Please try again.');
@@ -115,12 +115,12 @@ function CommercialTicketsContent() {
     }
   };
 
-  // Deep-link auto-search if both order and mobile are present in URL query
+  // Deep-link auto-search if both order and email (or mobile) are present in URL query
   useEffect(() => {
-    if (initialOrderNumber && initialMobile) {
+    if (initialOrderNumber && (initialEmail || initialMobile)) {
       handleCommercialSearch();
     }
-  }, [initialOrderNumber, initialMobile]);
+  }, [initialOrderNumber, initialEmail, initialMobile]);
 
   return (
     <div className="py-12 sm:py-16 bg-cream relative">
@@ -132,9 +132,9 @@ function CommercialTicketsContent() {
             <div className="w-14 h-14 mx-auto rounded-2xl bg-maroon-soft text-maroon flex items-center justify-center border border-maroon/20 shadow-xs">
               <Ticket className="w-7 h-7 text-maroon" />
             </div>
-            <h2 className="font-cinzel font-bold text-2xl text-ink">E-Pass Retrieval</h2>
+            <h2 className="font-cinzel font-bold text-2xl text-ink">E-PASS RETRIEVAL</h2>
             <p className="text-xs sm:text-sm text-ink-soft">
-              Enter your E-Pass Order Number and registered 10-digit mobile number to access and download your official QR passes.
+              Enter your E-Pass Order Number and registered email address to access and download your official QR passes.
             </p>
           </div>
 
@@ -175,26 +175,25 @@ function CommercialTicketsContent() {
 
             <div>
               <label
-                htmlFor="order_mobile"
+                htmlFor="order_email"
                 className="block text-xs font-bold text-ink-soft uppercase tracking-wider mb-2"
               >
-                Registered Mobile Number (10 Digits)
+                REGISTERED EMAIL ADDRESS
               </label>
               <div className="relative">
-                <Phone className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
+                <Mail className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input
-                  type="tel"
-                  id="order_mobile"
-                  maxLength={10}
-                  value={orderMobile}
-                  onChange={(e) => setOrderMobile(e.target.value.replace(/\D/g, ''))}
+                  type="email"
+                  id="order_email"
+                  value={orderEmail}
+                  onChange={(e) => setOrderEmail(e.target.value)}
                   required
-                  placeholder="e.g. 9876543210"
-                  className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-stone-50 border border-stone-200 text-ink font-mono text-base placeholder:font-sans placeholder:font-normal placeholder:text-stone-400 focus:bg-white focus:outline-none focus:border-maroon shadow-xs transition-colors"
+                  placeholder="e.g. test@example.com"
+                  className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-stone-50 border border-stone-200 text-ink font-sans text-base placeholder:font-sans placeholder:font-normal placeholder:text-stone-400 focus:bg-white focus:outline-none focus:border-maroon shadow-xs transition-colors"
                 />
               </div>
               <p className="text-[11px] text-ink-soft mt-1.5">
-                Enter the Indian mobile number provided during E-Pass ticket booking.
+                Enter the email address provided during E-Pass ticket booking.
               </p>
             </div>
 
@@ -220,6 +219,12 @@ function CommercialTicketsContent() {
               <span>BUY YOUR PASS</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
+            <p className="text-[11px] text-stone-500 pt-1">
+              Need assistance? Email{' '}
+              <a href="mailto:ongcnavratri@gmail.com" className="text-maroon font-semibold hover:underline">
+                ongcnavratri@gmail.com
+              </a>
+            </p>
           </div>
         </div>
 

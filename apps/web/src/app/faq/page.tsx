@@ -48,7 +48,7 @@ const categorizedFaqs: Record<string, FaqItem[]> = {
   'TIMINGS & SCHEDULE': [
     {
       question: 'What are the daily event timings?',
-      answer: 'The afternoon Garba Mandli takes place daily from 12:00 PM to 4:00 PM. Evening festivities begin at 7:00 PM with the Durga Aarti ceremony, followed by non-stop Raas Garba circles until 11:30 PM.',
+      answer: 'Evening ceremonies commence at 7:00 PM with the Durga Maha Aarti. General Garba takes place from 8:00 PM to 12:00 AM, followed by traditional Mandli Garba from 12:00 AM to 4:00 AM.',
     },
     {
       question: 'Which dates does the event run?',
@@ -76,7 +76,7 @@ const categorizedFaqs: Record<string, FaqItem[]> = {
     },
     {
       question: 'How can I contact the organizing committee?',
-      answer: 'Visit our Contact page or reach out to the event support desk at support@ongcnavratri.com or visit the on-ground help desks at the main entrance.',
+      answer: 'Visit our Contact page or reach out to the event support desk at ongcnavratri@gmail.com or visit the on-ground help desks at the main entrance.',
     },
   ],
 };

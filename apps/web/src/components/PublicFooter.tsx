@@ -71,7 +71,7 @@ export default function PublicFooter() {
               </li>
               <li className="flex items-start gap-2.5">
                 <Clock className="w-3.5 h-3.5 text-gold shrink-0 mt-0.5" />
-                <span>Daily Garba Mandli<br /><span className="text-gold-light text-[11px]">12:00 PM – 4:00 PM</span></span>
+                <span>General &amp; Mandli Garba<br /><span className="text-gold-light text-[11px]">8:00 PM – 4:00 AM</span></span>
               </li>
               <li className="flex items-start gap-2.5">
                 <MapPin className="w-3.5 h-3.5 text-gold shrink-0 mt-0.5" />

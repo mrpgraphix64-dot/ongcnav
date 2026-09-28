@@ -75,7 +75,8 @@ export function selectSingleBookingDate(_currentDate: string, newDate: string): 
 /**
  * Resolves the dates array to send to the backend for an order:
  * - For Season Pass: automatically covers all event dates.
- * - For Daily / Mandli / Any Day Pass: exactly ONE date in the array ([selectedDate]).
+ * - For Any Day Pass: returns empty array (flexible single-night pass, no specific booking date).
+ * - For Daily / Mandli Pass: exactly ONE date in the array ([selectedDate]).
  */
 export function resolveOrderSelectedDates(
   ticketType: string,
@@ -85,7 +86,10 @@ export function resolveOrderSelectedDates(
   if (ticketType === 'COMMERCIAL_SEASON') {
     return [...allEventDates];
   }
-  return [selectedDate];
+  if (ticketType === 'COMMERCIAL_ANY_DAY') {
+    return [];
+  }
+  return selectedDate ? [selectedDate] : [];
 }
 
 const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
@@ -192,6 +196,9 @@ export function getPassTypeLabel(ticketType: string): string {
 export function formatConfirmedDates(dates: string[] | undefined, ticketType: string): string {
   if (ticketType === 'COMMERCIAL_SEASON') {
     return '11–19 October 2026 (All 9 Nights)';
+  }
+  if (ticketType === 'COMMERCIAL_ANY_DAY') {
+    return 'Valid on Any 1 Night (11–19 Oct 2026)';
   }
   if (!dates || dates.length === 0) {
     return '11–19 October 2026';

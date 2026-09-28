@@ -24,7 +24,7 @@ import {
   Download,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
-import { generateDownloadablePassSvg } from './bookpass-order.util';
+import { generateDownloadablePassSvg, resolveOrderSelectedDates } from './bookpass-order.util';
 
 const EVENT_DATES = [
   '2026-10-11',
@@ -166,6 +166,9 @@ function getPassTypeLabel(ticketType: TicketTypeCode): string {
 function formatConfirmedDates(dates: string[] | undefined, ticketType: TicketTypeCode): string {
   if (ticketType === 'COMMERCIAL_SEASON') {
     return '11–19 October 2026 (All 9 Nights)';
+  }
+  if (ticketType === 'COMMERCIAL_ANY_DAY') {
+    return 'Valid on Any 1 Night (11–19 Oct 2026)';
   }
   if (!dates || dates.length === 0) {
     return '11–19 October 2026';
@@ -383,6 +386,7 @@ export default function BookPassPage() {
 
   // Live estimated pricing (strictly computed and validated server-side on creation)
   const isSeason = ticketType === 'COMMERCIAL_SEASON';
+  const isAnyDay = ticketType === 'COMMERCIAL_ANY_DAY';
 
   const unitPricePerPass = unitPrice;
   const originalUnitPricePerPass = originalUnitPrice;
@@ -413,7 +417,7 @@ export default function BookPassPage() {
       setErrorMessage('Please enter a valid email address.');
       return;
     }
-    if (!isSeason && !selectedDate) {
+    if (!isSeason && !isAnyDay && !selectedDate) {
       setErrorMessage('Please select a booking date.');
       return;
     }
@@ -427,8 +431,8 @@ export default function BookPassPage() {
     setSubmitting(true);
 
     try {
-      // 1. Create order on backend
-      const effectiveDates = isSeason ? EVENT_DATES : [selectedDate];
+      // 1. Create order on backend (Any Day Pass does not send/require a date)
+      const effectiveDates = resolveOrderSelectedDates(ticketType, selectedDate, EVENT_DATES);
 
       const res = await fetchApi('/commercial/orders', {
         method: 'POST',
@@ -461,7 +465,7 @@ export default function BookPassPage() {
         setConfirmedOrderSummary({
           orderNumber: orderData.orderNumber,
           ticketType: (orderData.ticketType as TicketTypeCode) || ticketType,
-          selectedDates: (orderData.selectedDates as string[]) || (ticketType === 'COMMERCIAL_SEASON' ? EVENT_DATES : [selectedDate]),
+          selectedDates: (orderData.selectedDates as string[]) || (isSeason ? EVENT_DATES : (isAnyDay ? [] : [selectedDate])),
           quantity: orderData.quantity || quantity,
           amountInr: orderData.amountInr ?? (orderData.amountPaise ? orderData.amountPaise / 100 : estimatedTotal),
           customerEmail: orderData.customer?.email || email.trim().toLowerCase(),
@@ -567,7 +571,7 @@ export default function BookPassPage() {
         setConfirmedOrderSummary({
           orderNumber: res.orderNumber,
           ticketType: (res.ticketType as TicketTypeCode) || pendingOrder?.ticketType || ticketType,
-          selectedDates: (res.selectedDates as string[]) || pendingOrder?.selectedDates || (ticketType === 'COMMERCIAL_SEASON' ? EVENT_DATES : [selectedDate]),
+          selectedDates: (res.selectedDates as string[]) || pendingOrder?.selectedDates || (ticketType === 'COMMERCIAL_SEASON' ? EVENT_DATES : (ticketType === 'COMMERCIAL_ANY_DAY' ? [] : [selectedDate])),
           quantity: res.quantity || pendingOrder?.quantity || quantity,
           amountInr: res.amountInr ?? (pendingOrder?.amountInr || (pendingOrder?.amountPaise ? pendingOrder.amountPaise / 100 : estimatedTotal)),
           customerEmail: res.customerEmail || pendingOrder?.customer?.email || email.trim().toLowerCase(),
@@ -958,8 +962,8 @@ export default function BookPassPage() {
             <div className="text-center space-y-4 pt-2">
               <p className="text-xs text-ink-soft">
                 Need assistance? Contact support at{' '}
-                <a href="mailto:ticket@ongcnavratri.tech" className="text-maroon font-bold hover:underline">
-                  ticket@ongcnavratri.tech
+                <a href="mailto:ongcnavratri@gmail.com" className="text-maroon font-bold hover:underline">
+                  ongcnavratri@gmail.com
                 </a>
               </p>
               <p className="text-[11px] text-stone-400">
@@ -1145,104 +1149,106 @@ export default function BookPassPage() {
                   </div>
                 </div>
 
-                {/* STEP 2 — DATE */}
-                <div className="space-y-3 pt-6 border-t border-stone-100">
-                  <div>
-                    <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
-                      <CalendarCheck className="w-5 h-5 text-maroon" />
-                      <span>2. Select Date <span className="text-rose-600">*</span></span>
-                    </h2>
-                    <p className="text-xs text-ink-soft">
-                      {isSeason
-                        ? 'Season Pass automatically covers all 9 event dates.'
-                        : 'Select one booking date for this order.'}
-                    </p>
+                {/* STEP 2 — DATE (Only for date-specific and season passes; skipped for Any Day Pass) */}
+                {!isAnyDay && (
+                  <div className="space-y-3 pt-6 border-t border-stone-100">
+                    <div>
+                      <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
+                        <CalendarCheck className="w-5 h-5 text-maroon" />
+                        <span>2. Select Date <span className="text-rose-600">*</span></span>
+                      </h2>
+                      <p className="text-xs text-ink-soft">
+                        {isSeason
+                          ? 'Season Pass automatically covers all 9 event dates.'
+                          : 'Select one booking date for this order.'}
+                      </p>
+                    </div>
+
+                    {isSeason ? (
+                      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                            <CheckCircle2 className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="font-outfit font-extrabold text-base text-emerald-950">
+                              All Event Dates
+                            </h3>
+                            <p className="text-xs text-emerald-800">
+                              Covers all 9 festival nights (11 Oct – 19 Oct 2026)
+                            </p>
+                          </div>
+                        </div>
+                        <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-white text-emerald-800 border border-emerald-300 shadow-xs">
+                          All 9 Nights Included
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
+                          {EVENT_DATES.map((iso, idx) => {
+                            const isSelected = selectedDate === iso;
+                            const { weekday, chipLabel } = formatDateChip(iso);
+                            return (
+                              <button
+                                key={iso}
+                                type="button"
+                                onClick={() => handleSelectDate(iso)}
+                                className={`p-2 sm:p-2.5 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-maroon text-white border-maroon shadow-md scale-[1.03] ring-2 ring-gold/40'
+                                    : 'bg-cream-light text-ink border-stone-200 hover:border-maroon/50 hover:bg-stone-50'
+                                }`}
+                              >
+                                <span
+                                  className={`text-[9px] uppercase tracking-wider font-bold ${
+                                    isSelected ? 'text-gold-light' : 'text-ink-soft'
+                                  }`}
+                                >
+                                  Day {idx + 1}
+                                </span>
+                                <span className="font-outfit font-black text-sm sm:text-base leading-tight mt-0.5">
+                                  {chipLabel}
+                                </span>
+                                <span
+                                  className={`text-[9px] font-medium mt-0.5 ${
+                                    isSelected ? 'text-gold-light/90' : 'text-stone-400'
+                                  }`}
+                                >
+                                  {weekday}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-amber-50/70 border border-[#D4AF37]/40 flex items-center justify-between text-xs text-ink flex-wrap gap-2">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <CalendarCheck className="w-4 h-4 text-maroon" />
+                            <span>Booking Date: <strong className="text-maroon font-bold">{formatDateChip(selectedDate).fullDate} ({formatDateChip(selectedDate).weekday})</strong></span>
+                          </span>
+                          <span className="text-[11px] text-ink-soft">
+                            Tapping another date replaces your selection
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
+                )}
 
-                  {isSeason ? (
-                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                          <CheckCircle2 className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="font-outfit font-extrabold text-base text-emerald-950">
-                            All Event Dates
-                          </h3>
-                          <p className="text-xs text-emerald-800">
-                            Covers all 9 festival nights (11 Oct – 19 Oct 2026)
-                          </p>
-                        </div>
-                      </div>
-                      <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-white text-emerald-800 border border-emerald-300 shadow-xs">
-                        All 9 Nights Included
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
-                        {EVENT_DATES.map((iso, idx) => {
-                          const isSelected = selectedDate === iso;
-                          const { weekday, chipLabel } = formatDateChip(iso);
-                          return (
-                            <button
-                              key={iso}
-                              type="button"
-                              onClick={() => handleSelectDate(iso)}
-                              className={`p-2 sm:p-2.5 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center cursor-pointer ${
-                                isSelected
-                                  ? 'bg-maroon text-white border-maroon shadow-md scale-[1.03] ring-2 ring-gold/40'
-                                  : 'bg-cream-light text-ink border-stone-200 hover:border-maroon/50 hover:bg-stone-50'
-                              }`}
-                            >
-                              <span
-                                className={`text-[9px] uppercase tracking-wider font-bold ${
-                                  isSelected ? 'text-gold-light' : 'text-ink-soft'
-                                }`}
-                              >
-                                Day {idx + 1}
-                              </span>
-                              <span className="font-outfit font-black text-sm sm:text-base leading-tight mt-0.5">
-                                {chipLabel}
-                              </span>
-                              <span
-                                className={`text-[9px] font-medium mt-0.5 ${
-                                  isSelected ? 'text-gold-light/90' : 'text-stone-400'
-                                }`}
-                              >
-                                {weekday}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="p-3 rounded-xl bg-amber-50/70 border border-[#D4AF37]/40 flex items-center justify-between text-xs text-ink flex-wrap gap-2">
-                        <span className="flex items-center gap-1.5 font-medium">
-                          <CalendarCheck className="w-4 h-4 text-maroon" />
-                          <span>Booking Date: <strong className="text-maroon font-bold">{formatDateChip(selectedDate).fullDate} ({formatDateChip(selectedDate).weekday})</strong></span>
-                        </span>
-                        <span className="text-[11px] text-ink-soft">
-                          Tapping another date replaces your selection
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* STEP 3 — QUANTITY */}
+                {/* STEP 3 (or 2 for Any Day Pass) — QUANTITY */}
                 <div className="space-y-2 pt-6 border-t border-stone-100">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                     <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider flex items-center gap-2">
                       <Ticket className="w-5 h-5 text-maroon" />
-                      <span>3. Quantity <span className="text-rose-600">*</span></span>
+                      <span>{isAnyDay ? '2. Quantity' : '3. Quantity'} <span className="text-rose-600">*</span></span>
                     </h2>
                     <span className="text-[11px] text-ink-soft">
                       (1 to 10 passes per booking)
                     </span>
                   </div>
                   <p className="text-xs text-ink-soft">
-                    All passes will share the selected category ({activeOption.name}) and date ({isSeason ? 'All Event Dates' : formatDateChip(selectedDate).fullDate}).
+                    All passes will share the selected category ({activeOption.name}){isAnyDay ? ' and are valid for one entry on any chosen event night (11–19 Oct 2026).' : ` and date (${isSeason ? 'All Event Dates' : formatDateChip(selectedDate).fullDate}).`}
                   </p>
                   <CustomQuantityDropdown
                     value={quantity}
@@ -1251,11 +1257,11 @@ export default function BookPassPage() {
                   />
                 </div>
 
-                {/* STEP 4 — CUSTOMER DETAILS */}
+                {/* STEP 4 (or 3 for Any Day Pass) — CUSTOMER DETAILS */}
                 <div className="space-y-4 pt-6 border-t border-stone-100">
                   <div>
                     <h2 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider">
-                      4. Customer Details
+                      {isAnyDay ? '3. Customer Details' : '4. Customer Details'}
                     </h2>
                     <p className="text-xs text-ink-soft">
                       Primary contact details for this booking
@@ -1323,11 +1329,11 @@ export default function BookPassPage() {
                   </div>
                 </div>
 
-                {/* STEP 5 — REVIEW */}
+                {/* STEP 5 (or 4 for Any Day Pass) — REVIEW */}
                 <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#FAF7F2] to-amber-50/40 border border-[#D4AF37]/40 space-y-3.5 text-xs shadow-sm">
                   <div className="flex items-center justify-between pb-2 border-b border-stone-200/80">
                     <h2 className="font-outfit font-black text-sm sm:text-base text-ink uppercase tracking-wider">
-                      5. Review Booking
+                      {isAnyDay ? '4. Review Booking' : '5. Review Booking'}
                     </h2>
                     <span className="text-[11px] font-semibold text-maroon bg-maroon/10 px-2.5 py-0.5 rounded-full">
                       {quantity} {quantity === 1 ? 'Pass' : 'Passes'}
@@ -1344,10 +1350,18 @@ export default function BookPassPage() {
                     <div className="space-y-1">
                       <span className="text-[11px] text-ink-soft uppercase tracking-wider font-semibold">Booking Date</span>
                       <p className="font-outfit font-extrabold text-sm text-ink">
-                        {isSeason ? 'All Event Dates' : formatDateChip(selectedDate).fullDate}
+                        {isSeason
+                          ? 'All Event Dates'
+                          : isAnyDay
+                          ? 'Any 1 Event Night'
+                          : formatDateChip(selectedDate).fullDate}
                       </p>
                       <p className="text-[11px] text-ink-soft">
-                        {isSeason ? 'Covers all 9 nights (Oct 11 – 19)' : `${formatDateChip(selectedDate).weekday} night entry`}
+                        {isSeason
+                          ? 'Covers all 9 nights (Oct 11 – 19)'
+                          : isAnyDay
+                          ? 'Valid on any 1 night (Oct 11 – 19)'
+                          : `${formatDateChip(selectedDate).weekday} night entry`}
                       </p>
                     </div>
 
@@ -1401,7 +1415,7 @@ export default function BookPassPage() {
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-stone-100 border border-stone-200 text-[11px] text-ink-soft">
-                    <strong>Order Rule:</strong> 1 Order = 1 Category + 1 Booking Date + Quantity. If tickets for another date are needed, please place another order after completing this booking. {isSeason && '(Season Pass covers all dates in 1 order).'}
+                    <strong>Order Rule:</strong> {isAnyDay ? 'Any Day Pass gives 1 flexible entry on any 1 official event night (11–19 Oct 2026).' : (isSeason ? 'Season Pass covers all 9 dates in 1 order.' : '1 Order = 1 Category + 1 Booking Date + Quantity. If tickets for another date are needed, please place another order after completing this booking.')}
                   </div>
                 </div>
 
