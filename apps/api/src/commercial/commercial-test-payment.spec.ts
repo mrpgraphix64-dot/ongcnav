@@ -96,6 +96,7 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
 
       razorpay = {
         getPublicKeyId: jest.fn().mockReturnValue('rzp_test_123'),
+        isLiveGatewayConfigured: jest.fn().mockReturnValue(false),
         createRazorpayOrder: jest.fn().mockImplementation((amountPaise, receipt) =>
           Promise.resolve({
             id: `order_rzp_${Date.now()}`,
@@ -251,6 +252,36 @@ describe('Commercial Test Payment Mode (Staging-Only)', () => {
       expect(razorpay.createRazorpayOrder).toHaveBeenCalled();
       expect(res.isTestPayment).toBeUndefined();
       expect(res.order.razorpayOrderId).toBe('order_rzp_normal');
+    });
+
+    it('live Razorpay gateway takes precedence over COMMERCIAL_TEST_PAYMENT=true in non-production', async () => {
+      razorpay.isLiveGatewayConfigured.mockReturnValue(true);
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'NODE_ENV') return 'staging';
+        if (key === 'COMMERCIAL_TEST_PAYMENT') return 'true';
+        return null;
+      });
+
+      prisma.commercialOrder.create.mockResolvedValue({
+        id: BigInt(204),
+        orderNumber: 'ORD-COMM-LIVE-1',
+        amountPaise: 49800,
+        currency: 'INR',
+        quantity: 2,
+        ticketType: 'COMMERCIAL_DAILY',
+        selectedDates: ['2026-10-11'],
+        razorpayOrderId: 'order_rzp_live_gateway',
+        customerName: 'Customer',
+        customerEmail: 'c@example.com',
+        customerMobile: '9876543210',
+      });
+
+      const res = await service.createOrder(testDto);
+
+      // With live gateway configured, Razorpay order must be created
+      expect(razorpay.createRazorpayOrder).toHaveBeenCalled();
+      expect(res.isTestPayment).toBeUndefined();
+      expect(res.order.razorpayOrderId).toBe('order_rzp_live_gateway');
     });
 
     it('test mode cannot be enabled from request input', async () => {

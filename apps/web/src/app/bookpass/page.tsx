@@ -212,6 +212,36 @@ function CustomQuantityDropdown({ value, onChange, disabled }: CustomQuantityDro
   );
 }
 
+function ensureRazorpayLoaded(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false);
+  if ((window as any).Razorpay) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
+    if (existing) {
+      let checks = 0;
+      const interval = setInterval(() => {
+        checks++;
+        if ((window as any).Razorpay) {
+          clearInterval(interval);
+          resolve(true);
+        } else if (checks > 30) {
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function BookPassPage() {
   // Form State
   const [ticketType, setTicketType] = useState<TicketTypeCode>('COMMERCIAL_DAILY');
@@ -380,8 +410,17 @@ export default function BookPassPage() {
       setPendingOrder(orderData);
 
       // 2. Open Razorpay Standard Checkout
-      if (typeof window !== 'undefined' && (window as any).Razorpay) {
+      let rzpReady = typeof window !== 'undefined' && Boolean((window as any).Razorpay);
+      if (!rzpReady) {
+        rzpReady = await ensureRazorpayLoaded();
+      }
+
+      if (rzpReady && typeof window !== 'undefined' && (window as any).Razorpay) {
         const activeOption = PASS_OPTIONS.find((t) => t.code === data.ticketType) || PASS_OPTIONS[0];
+        const isMockOrTestOrderId =
+          typeof orderData.razorpayOrderId === 'string' &&
+          (orderData.razorpayOrderId.startsWith('order_mock_') ||
+           orderData.razorpayOrderId.startsWith('TEST_ORD_'));
         const options = {
           key: orderData.razorpayKeyId,
           amount: orderData.amountPaise,
@@ -391,11 +430,7 @@ export default function BookPassPage() {
             ? 'All 9 Nights Season Pass'
             : activeOption.name,
           image: '/images/logo-web.png',
-          order_id:
-            typeof orderData.razorpayOrderId === 'string' &&
-            orderData.razorpayOrderId.startsWith('order_mock_')
-              ? undefined
-              : orderData.razorpayOrderId || undefined,
+          order_id: isMockOrTestOrderId ? undefined : orderData.razorpayOrderId || undefined,
           prefill: {
             name: orderData.customer?.name,
             email: orderData.customer?.email,
@@ -518,7 +553,7 @@ export default function BookPassPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-cream text-ink">
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
       <PublicHeader />
 
       <main className="flex-1">

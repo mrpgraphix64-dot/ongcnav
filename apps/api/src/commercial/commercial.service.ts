@@ -299,10 +299,10 @@ export class CommercialService {
       // 4. Generate internal order reference
       const orderNumber = generateOrderNumber();
 
-      // 5. If staging test payment mode is active, directly create confirmed test order without calling Razorpay
-      if (this.isTestPaymentMode()) {
+      // 5. If staging test payment mode is active AND live gateway is not configured, directly create confirmed test order without calling Razorpay
+      if (this.isTestPaymentMode() && !this.razorpay?.isLiveGatewayConfigured?.()) {
         this.logger.warn(
-          `[STAGING TEST PAYMENT] Creating test-paid commercial order for ${orderNumber} without Razorpay`,
+          `[STAGING TEST PAYMENT] Creating test-paid commercial order for ${orderNumber} without Razorpay (live gateway unconfigured)`,
         );
 
         const testPaymentId = `TEST_PAY_${orderNumber}`;
