@@ -24,7 +24,13 @@ export const metadata: Metadata = {
   title: 'ONGC Navratri 2026 | Ahmedabad — Official Event Website',
   description: 'Celebrate Navratri 2026 with ONGC at ONGC Ground, Ahmedabad. 9 nights of authentic Garba, live folk music, culture, and community spirit.',
   icons: {
-    icon: '/images/favicon.png',
+    icon: [
+      { url: '/ongcnav.jpg' },
+      { url: '/favicon.png', sizes: '512x512', type: 'image/png' },
+      { url: '/favicon.ico' },
+    ],
+    shortcut: '/ongcnav.jpg',
+    apple: '/apple-touch-icon.png',
   },
 };
 
