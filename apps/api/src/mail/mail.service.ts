@@ -382,7 +382,7 @@ export class MailService {
                 <!-- A) ONGC LOGO (CENTERED, MODESTLY SIZED, BREATHING ROOM, TRANSPARENT) -->
                 <tr>
                   <td align="center" style="padding-bottom: 14px;">
-                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="95" height="95" style="display: block; width: 95px; max-width: 95px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
+                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="120" style="display: block; width: 120px; max-width: 120px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
                   </td>
                 </tr>
                 <!-- B) NAVRATRI 2026 (PREMIUM SERIF / DISPLAY-STYLE IN GOLD) -->

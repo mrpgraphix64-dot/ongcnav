@@ -759,6 +759,7 @@ export default function BookPassPage() {
                         <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                           <Link
                             href={`/ticket/${pass.qrCodeToken}`}
+                            scroll={true}
                             className="flex-1 py-3 px-4 rounded-xl bg-gold text-maroon-deep font-bold text-xs sm:text-sm hover:bg-gold-light transition-all text-center border border-maroon/20 flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                           >
                             <ExternalLink className="w-4 h-4" />

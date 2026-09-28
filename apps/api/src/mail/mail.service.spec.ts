@@ -522,8 +522,8 @@ describe('MailService (Hostinger Mail API)', () => {
         expect(body.html).not.toContain('ONGC Organising Committee');
         expect(body.html).not.toContain('Organised by ONGC');
 
-        // 12. Sizing & Branding Design: ONGC logo is modestly enlarged to 95px, Digant Art is 65px
-        expect(body.html).toContain('alt="ONGC Logo" width="95" height="95"');
+        // 12. Sizing & Branding Design: ONGC logo is modestly enlarged to 120px width, Digant Art is 65px
+        expect(body.html).toContain('alt="ONGC Logo" width="120"');
         expect(body.html).toContain('alt="Digant Art" width="65" height="65"');
         expect(body.html).not.toContain('◆'); // No gold diamond divider exists
 
