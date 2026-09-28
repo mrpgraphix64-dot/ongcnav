@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings,
   Calendar,
@@ -89,45 +89,111 @@ export default function AdminSettingsPage() {
   const [loadingPayment, setLoadingPayment] = useState<boolean>(false);
   const [savingPayment, setSavingPayment] = useState<boolean>(false);
 
-  const loadPaymentSettings = async () => {
+  const serverPaymentSettingsRef = useRef<{
+    enabled: boolean;
+    environment: string;
+    gateway: string;
+    keyId: string;
+    isConfigured: boolean;
+  } | null>(null);
+  const paymentDraftRef = useRef<boolean>(false);
+  const paymentInitializedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    serverPaymentSettingsRef.current = serverPaymentSettings;
+  }, [serverPaymentSettings]);
+
+  useEffect(() => {
+    paymentDraftRef.current = paymentDraftEnabled;
+  }, [paymentDraftEnabled]);
+
+  const loadPaymentSettings = async (forceDraftSync = false) => {
     try {
       setLoadingPayment(true);
       const res = await fetchApi<any>('/admin/settings/payment');
       if (res) {
         const isEn = Boolean(res.enabled);
-        setServerPaymentSettings({
+        const newServerSettings = {
           enabled: isEn,
           environment: res.environment || 'TEST',
           gateway: res.gateway || 'Razorpay',
           keyId: res.keyId || '',
           isConfigured: Boolean(res.isConfigured),
-        });
-        setPaymentDraftEnabled(isEn);
+        };
+
+        // Determine if we should update the draft state:
+        // Update ONLY IF:
+        // 1. Explicitly forced (initial load, explicit reset, or post-save), OR
+        // 2. Draft has not yet been initialized from server, OR
+        // 3. User draft matches previous server state (no unsaved edits)
+        const wasUninitialized = !paymentInitializedRef.current;
+        const isDraftClean =
+          serverPaymentSettingsRef.current === null ||
+          paymentDraftRef.current === serverPaymentSettingsRef.current.enabled;
+
+        setServerPaymentSettings(newServerSettings);
+        serverPaymentSettingsRef.current = newServerSettings;
+
+        if (forceDraftSync || wasUninitialized || isDraftClean) {
+          setPaymentDraftEnabled(isEn);
+          paymentDraftRef.current = isEn;
+        }
+        paymentInitializedRef.current = true;
       }
     } catch {
       setServerPaymentSettings(null);
+      serverPaymentSettingsRef.current = null;
     } finally {
       setLoadingPayment(false);
     }
   };
 
   const handleSavePaymentSettings = async () => {
+    if (savingPayment) return;
     try {
       setSavingPayment(true);
       setMsg(null);
+      const targetEnabled = paymentDraftRef.current;
       const res = await fetchApi<any>('/admin/settings/payment', {
         method: 'POST',
-        body: JSON.stringify({ enabled: paymentDraftEnabled }),
+        body: JSON.stringify({ enabled: targetEnabled }),
       });
+      const finalEnabled = typeof res?.enabled === 'boolean' ? res.enabled : targetEnabled;
+
+      // Update both server and draft state authoritatively
+      setServerPaymentSettings((prev) =>
+        prev
+          ? { ...prev, enabled: finalEnabled }
+          : {
+              enabled: finalEnabled,
+              environment: 'TEST',
+              gateway: 'Razorpay',
+              keyId: '',
+              isConfigured: false,
+            }
+      );
+      serverPaymentSettingsRef.current = {
+        ...(serverPaymentSettingsRef.current || {
+          environment: 'TEST',
+          gateway: 'Razorpay',
+          keyId: '',
+          isConfigured: false,
+        }),
+        enabled: finalEnabled,
+      };
+      setPaymentDraftEnabled(finalEnabled);
+      paymentDraftRef.current = finalEnabled;
+
       setMsg({
-        text: res?.message || 'Payment settings saved successfully.',
+        text: res?.message || `Payment settings saved successfully. Razorpay is now ${finalEnabled ? 'ON' : 'OFF'}.`,
         type: 'success',
       });
-      await loadPaymentSettings();
       broadcastSuperAdminSync();
     } catch (err: any) {
-      if (serverPaymentSettings) {
-        setPaymentDraftEnabled(serverPaymentSettings.enabled);
+      if (serverPaymentSettingsRef.current) {
+        const revertVal = serverPaymentSettingsRef.current.enabled;
+        setPaymentDraftEnabled(revertVal);
+        paymentDraftRef.current = revertVal;
       }
       setMsg({
         text: err.message || 'Failed to save payment settings.',
@@ -135,6 +201,14 @@ export default function AdminSettingsPage() {
       });
     } finally {
       setSavingPayment(false);
+    }
+  };
+
+  const handleResetPaymentDraft = () => {
+    if (serverPaymentSettingsRef.current) {
+      const resetVal = serverPaymentSettingsRef.current.enabled;
+      setPaymentDraftEnabled(resetVal);
+      paymentDraftRef.current = resetVal;
     }
   };
 
@@ -154,7 +228,6 @@ export default function AdminSettingsPage() {
     } catch {
       setSuperAdminData(null);
     }
-    loadPaymentSettings();
   };
 
   const loadSettings = async () => {
@@ -210,7 +283,7 @@ export default function AdminSettingsPage() {
 
     const unsubscribeSync = subscribeToSuperAdminSync(() => {
       loadSuperAdminSettings();
-      loadPaymentSettings();
+      loadPaymentSettings(false);
     });
 
     if (typeof window !== 'undefined' && window.location?.search) {
@@ -219,7 +292,9 @@ export default function AdminSettingsPage() {
         const tabParam = params.get('tab');
         if (tabParam === 'payment') {
           setActiveTab('payment');
-          loadPaymentSettings();
+          if (!paymentInitializedRef.current) {
+            loadPaymentSettings(true);
+          }
         }
       } catch {}
     }
@@ -353,7 +428,7 @@ export default function AdminSettingsPage() {
                 const newTab = tab.id as TabType;
                 setActiveTab(newTab);
                 if (newTab === 'payment') {
-                  loadPaymentSettings();
+                  loadPaymentSettings(!paymentInitializedRef.current);
                 }
               }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
@@ -1169,8 +1244,14 @@ export default function AdminSettingsPage() {
                   <button
                     type="button"
                     data-testid="payment-toggle-on"
-                    onClick={() => setPaymentDraftEnabled(true)}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    disabled={savingPayment || loadingPayment}
+                    onClick={() => {
+                      if (!savingPayment && !loadingPayment) {
+                        setPaymentDraftEnabled(true);
+                        paymentDraftRef.current = true;
+                      }
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                       paymentDraftEnabled
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-stone-600 hover:text-ink'
@@ -1181,8 +1262,14 @@ export default function AdminSettingsPage() {
                   <button
                     type="button"
                     data-testid="payment-toggle-off"
-                    onClick={() => setPaymentDraftEnabled(false)}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    disabled={savingPayment || loadingPayment}
+                    onClick={() => {
+                      if (!savingPayment && !loadingPayment) {
+                        setPaymentDraftEnabled(false);
+                        paymentDraftRef.current = false;
+                      }
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                       !paymentDraftEnabled
                         ? 'bg-rose-600 text-white shadow-xs'
                         : 'text-stone-600 hover:text-ink'
@@ -1202,8 +1289,9 @@ export default function AdminSettingsPage() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setPaymentDraftEnabled(serverPaymentSettings.enabled)}
-                    className="text-[11px] text-amber-700 underline font-bold ml-2 cursor-pointer"
+                    disabled={savingPayment || loadingPayment}
+                    onClick={handleResetPaymentDraft}
+                    className="text-[11px] text-amber-700 underline font-bold ml-2 cursor-pointer disabled:opacity-50"
                   >
                     Reset
                   </button>

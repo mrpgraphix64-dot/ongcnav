@@ -82,5 +82,9 @@ describe('Payment Settings UI Tab Tests', () => {
     expect(html).toContain('Environment');
     expect(html).toContain('Gateway');
     expect(html).toContain('Razorpay');
+    expect(html).toContain('data-testid="payment-toggle-on"');
+    expect(html).toContain('data-testid="payment-toggle-off"');
+    expect(html).toContain('data-testid="server-payment-status"');
+    expect(html).toContain('Disabled (OFF)');
   });
 });
