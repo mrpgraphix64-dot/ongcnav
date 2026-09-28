@@ -149,7 +149,8 @@ jobs:
       - name: Sync repository to VPS
         run: |
           rsync -az \
-            -e "ssh -o StrictHostKeyChecking=accept-new -p 22" \
+            -e "ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -p 22" \
+            --skip-compress=mp4/webm/jpg/png/gz \
             --exclude 'node_modules' \
             --exclude 'dist' \
             --exclude '.next' \
