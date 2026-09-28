@@ -947,15 +947,15 @@ export default function BookPassPage() {
                 EVENT ORGANISER
               </div>
               <img
-                src="/images/logo-web.png"
-                alt="ONGC Logo"
-                className="h-10 w-auto object-contain mx-auto"
+                src="/images/digant-art-logo.png"
+                alt="Digant Art"
+                className="h-12 w-auto object-contain mx-auto rounded-lg"
               />
               <div className="font-outfit font-extrabold text-base text-maroon">
-                ONGC Navratri 2026 Organizing Committee
+                Digant Art
               </div>
               <p className="text-xs text-ink-soft">
-                Oil and Natural Gas Corporation Ltd. - Ahmedabad
+                Official Event Organiser
               </p>
             </div>
 

@@ -271,7 +271,6 @@ export class MailService {
         ? '12:00 AM – 4:00 AM'
         : '8:00 PM – 4:00 AM';
 
-    const portalUrl = `${this.webUrl}/my-tickets?orderNumber=${encodeURIComponent(data.orderNumber)}`;
     const brandingUrls = getEmailBrandingUrls(this.webUrl);
     const attachments: EmailAttachment[] = [];
 
@@ -510,16 +509,6 @@ export class MailService {
                 </tr>
               </table>
 
-              <!-- 7. RECOVERY / MY TICKETS PORTAL LINK -->
-              <div style="background-color: #F5EFEB; border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: center;">
-                <p style="font-size: 13px; color: #5A4A3E; margin: 0 0 10px 0;">
-                  Access your passes anytime online by entering your <strong>Order Number</strong> and <strong>Registered Email Address</strong>:
-                </p>
-                <a href="${portalUrl}" style="display: inline-block; background-color: #7A1930; color: #FFFFFF; font-weight: bold; font-size: 13px; padding: 10px 20px; text-decoration: none; border-radius: 8px;">
-                  Access My Tickets Portal &rarr;
-                </a>
-              </div>
-
               <!-- 8. ENTRY GUIDELINES -->
               <div style="background-color: #FAF5F0; border: 1px solid #D4AF37; border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;">
                 <h4 style="font-size: 13px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px 0;">
@@ -700,9 +689,6 @@ Event: ONGC Navratri 2026
 Event Dates: 11–19 October 2026
 Gates Open: From 7:00 PM
 Pass Timing: ${passTiming}
-
-ONLINE PORTAL:
-Access your passes anytime online: ${portalUrl}
 
 ENTRY GUIDELINES:
 - Keep your digital pass ready at the entry gate.

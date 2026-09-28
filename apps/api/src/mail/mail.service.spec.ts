@@ -154,6 +154,13 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).not.toContain('rzp_');
       expect(body.html).not.toContain('order_DBJOW');
 
+      // Verify "Access My Tickets Portal" section has been removed completely
+      expect(body.html).not.toContain('Access My Tickets Portal');
+      expect(body.html).not.toContain('Access your passes anytime online');
+      expect(body.html).not.toContain('/my-tickets');
+      expect(body.text).not.toContain('ONLINE PORTAL');
+      expect(body.text).not.toContain('Access your passes anytime online');
+
       // Verify attachments contain ONLY the dynamic entry QR pass (no static branding images to prevent Gmail attachment chips)
       expect(body.attachments).toBeDefined();
       expect(body.attachments.length).toBe(1);
