@@ -124,11 +124,11 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).toContain('OUR PARTNERS');
       expect(body.html).toContain('TITLE SPONSOR');
       expect(body.html).toContain('MEDIA PARTNER');
-      expect(body.html).toContain('src="cid:zaira-logo"');
-      expect(body.html).toContain('src="cid:om-sanctuary-logo"');
-      expect(body.html).toContain('src="cid:lalkaar-logo"');
+      expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/zaira-diamond-logo.png"');
+      expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/om-sanctuary-palace-logo.png"');
+      expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/lalkaar-news-logo.png"');
       expect(body.html).toContain('EVENT ORGANISER');
-      expect(body.html).toContain('src="cid:digant-art-logo"');
+      expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/digant-art-logo.png"');
       expect(body.html).toContain('ONGC Navratri 2026');
 
       // Verify support emails order and labels
@@ -154,21 +154,21 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).not.toContain('rzp_');
       expect(body.html).not.toContain('order_DBJOW');
 
-      // Verify attachments contain 1 QR + 5 branding inline CID images = 6 attachments
+      // Verify attachments contain ONLY the dynamic entry QR pass (no static branding images to prevent Gmail attachment chips)
       expect(body.attachments).toBeDefined();
-      expect(body.attachments.length).toBe(6);
+      expect(body.attachments.length).toBe(1);
       expect(body.attachments[0].filename).toBe('QR-TK-COMM-TEST1-1-A1B2.png');
       expect(body.attachments[0].contentType).toBe('image/png');
       expect(body.attachments[0].cid).toBe('qr-TKCOMMTEST11A1B2-1');
       expect(body.html).toContain(`src="cid:${body.attachments[0].cid}"`);
 
-      // Verify branding attachments are present
+      // Verify static branding logos are NOT attached as files
       const cids = body.attachments.map((a: any) => a.cid);
-      expect(cids).toContain('ongc-logo');
-      expect(cids).toContain('zaira-logo');
-      expect(cids).toContain('om-sanctuary-logo');
-      expect(cids).toContain('lalkaar-logo');
-      expect(cids).toContain('digant-art-logo');
+      expect(cids).not.toContain('ongc-logo');
+      expect(cids).not.toContain('zaira-logo');
+      expect(cids).not.toContain('om-sanctuary-logo');
+      expect(cids).not.toContain('lalkaar-logo');
+      expect(cids).not.toContain('digant-art-logo');
     });
 
     it('correctly handles MANDLI pass timing (12:00 AM – 4:00 AM)', async () => {
@@ -310,11 +310,11 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(body.html).toContain('11–19 October 2026 (All 9 Nights)');
       expect(body.html).toContain('Mehul Desai');
       expect(body.html).toContain('Rina Desai');
-      expect(body.attachments).toHaveLength(7);
+      expect(body.attachments).toHaveLength(2);
       expect(body.attachments[0].filename).toBe('QR-TK-COMM-SEAS-1-A1.png');
       expect(body.attachments[1].filename).toBe('QR-TK-COMM-SEAS-2-B2.png');
-      // Plus 5 branding attachments
-      expect(body.attachments.map((a: any) => a.cid)).toEqual(
+      // No static branding attachments (avoids Gmail attachment chips)
+      expect(body.attachments.map((a: any) => a.cid)).not.toEqual(
         expect.arrayContaining(['ongc-logo', 'zaira-logo', 'om-sanctuary-logo', 'lalkaar-logo', 'digant-art-logo']),
       );
     });
@@ -450,52 +450,45 @@ describe('MailService (Hostinger Mail API)', () => {
 
         const attachmentCids = body.attachments.map((a: any) => a.cid);
 
-        // 1. ONGC logo CID is included and is an authentic transparent RGBA PNG (colorType: 6).
-        expect(attachmentCids).toContain('ongc-logo');
-        const ongcAttachment = body.attachments.find((a: any) => a.cid === 'ongc-logo');
-        expect(ongcAttachment).toBeDefined();
-        const logoBuf = Buffer.from(ongcAttachment.content, 'base64');
-        expect([2, 6]).toContain(logoBuf.readUInt8(25)); // Valid PNG image color type (RGB / RGBA)
+        // 1. Static branding logos are NOT attached as files (avoids Gmail attachment chips)
+        expect(attachmentCids).not.toContain('ongc-logo');
+        expect(attachmentCids).not.toContain('zaira-logo');
+        expect(attachmentCids).not.toContain('om-sanctuary-logo');
+        expect(attachmentCids).not.toContain('lalkaar-logo');
+        expect(attachmentCids).not.toContain('digant-art-logo');
 
-        // 2. Zaira Diamond logo CID is included.
-        expect(attachmentCids).toContain('zaira-logo');
+        // 2. HTML references publicly accessible HTTPS URLs
+        expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/logo-web.png"');
+        expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/zaira-diamond-logo.png"');
+        expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/om-sanctuary-palace-logo.png"');
+        expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/lalkaar-news-logo.png"');
+        expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/digant-art-logo.png"');
 
-        // 3. Om Sanctuary Palace logo CID is included.
-        expect(attachmentCids).toContain('om-sanctuary-logo');
+        // 3. No CID image references for static branding logos remain
+        expect(body.html).not.toContain('src="cid:ongc-logo"');
+        expect(body.html).not.toContain('src="cid:zaira-logo"');
+        expect(body.html).not.toContain('src="cid:om-sanctuary-logo"');
+        expect(body.html).not.toContain('src="cid:lalkaar-logo"');
+        expect(body.html).not.toContain('src="cid:digant-art-logo"');
 
-        // 4. Lalkaar News logo CID is included.
-        expect(attachmentCids).toContain('lalkaar-logo');
-
-        // 5. Digant Art logo CID is included.
-        expect(attachmentCids).toContain('digant-art-logo');
-
-        // 6. HTML references the exact matching CIDs.
-        expect(body.html).toContain('src="cid:ongc-logo"');
-        expect(body.html).toContain('src="cid:zaira-logo"');
-        expect(body.html).toContain('src="cid:om-sanctuary-logo"');
-        expect(body.html).toContain('src="cid:lalkaar-logo"');
-        expect(body.html).toContain('src="cid:digant-art-logo"');
-
-        // 7. No local filesystem paths appear in HTML.
+        // 4. No local filesystem paths or localhost appear in HTML
         expect(body.html).not.toMatch(/C:[\\/]/);
         expect(body.html).not.toMatch(/\/apps\/api/);
-        expect(body.html).not.toMatch(/\/images\//);
+        expect(body.html).not.toContain('localhost');
 
-        // 8. No external image URLs are required.
-        expect(body.html).not.toMatch(/<img[^>]+src=["']https?:\/\//);
-
-        // 9. QR CID still works.
+        // 5. QR CID still works and is attached for each pass
         expect(attachmentCids).toContain('qr-TKBRAND1-1');
         expect(attachmentCids).toContain('qr-TKBRAND2-2');
         expect(body.html).toContain('src="cid:qr-TKBRAND1-1"');
         expect(body.html).toContain('src="cid:qr-TKBRAND2-2"');
 
-        // 10. Multi-pass emails still contain each unique QR.
+        // 6. Multi-pass emails strictly contain only the 2 entry QR codes (no extra logo attachments)
+        expect(body.attachments).toHaveLength(2);
         const qrAttachments = body.attachments.filter((a: any) => a.filename.startsWith('QR-'));
         expect(qrAttachments).toHaveLength(2);
         expect(qrAttachments[0].cid).not.toBe(qrAttachments[1].cid);
 
-        // 11. Existing ticket/order information is unchanged.
+        // 7. Existing ticket/order information is unchanged
         expect(body.html).toContain('ORD-COMM-BRANDING-1');
         expect(body.html).toContain('Pooja Shah');
         expect(body.html).toContain('Rohan Shah');
@@ -503,39 +496,45 @@ describe('MailService (Hostinger Mail API)', () => {
         expect(body.html).toContain('TK-BRAND-2');
         expect(body.html).toContain('₹1,000');
 
-        // 12. No raw QR token is exposed outside secure link.
+        // 8. No raw QR token is exposed outside secure link
         expect(body.html).toContain('/ticket/token_pooja_1');
         expect(body.html).toContain('/ticket/token_pooja_2');
         const token1Count = body.html.split('token_pooja_1').length - 1;
         expect(token1Count).toBe(1);
 
-        // 13. No payment/internal IDs are exposed.
+        // 9. No payment/internal IDs are exposed
         expect(body.html).not.toContain('rzp_');
         expect(body.html).not.toContain('order_DBJOW');
         expect(body.html).not.toContain('staffId');
         expect(body.html).not.toContain('SUPER_ADMIN');
 
-        // 14. Support emails order: ongcnavratri@gmail.com must appear before ticket@ongcnavratri.tech
+        // 10. Support emails order: ongcnavratri@gmail.com must appear before ticket@ongcnavratri.tech
         const generalSupportIdx = body.html.indexOf('ongcnavratri@gmail.com');
         const ticketSupportIdx = body.html.indexOf('ticket@ongcnavratri.tech');
         expect(generalSupportIdx).toBeGreaterThan(-1);
         expect(ticketSupportIdx).toBeGreaterThan(-1);
         expect(generalSupportIdx).toBeLessThan(ticketSupportIdx);
 
-        // 15. Organiser attribution: Digant Art as official event organiser
+        // 11. Organiser attribution: Digant Art as official event organiser
         expect(body.html).toContain('EVENT ORGANISER');
         expect(body.html).toContain('Digant Art');
         expect(body.html).toContain('Official Event Organiser');
         expect(body.html).not.toContain('ONGC Organising Committee');
         expect(body.html).not.toContain('Organised by ONGC');
 
-        // 16. Reworkzone.com credit at absolute bottom
+        // 12. Sizing & Branding Design: ONGC logo is modestly enlarged to 95px, Digant Art is 65px
+        expect(body.html).toContain('alt="ONGC Logo" width="95" height="95"');
+        expect(body.html).toContain('alt="Digant Art" width="65" height="65"');
+        expect(body.html).not.toContain('◆'); // No gold diamond divider exists
+
+        // 13. Reworkzone.com credit at absolute bottom in a single non-wrapping line
         expect(body.html).toContain('E-Ticketing &amp; E-Pass System by');
         expect(body.html).toContain('href="https://reworkzone.com"');
         expect(body.html).toContain('Reworkzone.com');
+        expect(body.html).toContain('white-space: nowrap;');
 
         // Hierarchy check: ONGC logo header -> NAVRATRI 2026 -> Digital Pass -> Sponsors -> Organiser -> Support -> Reworkzone
-        const ongcLogoIdx = body.html.indexOf('src="cid:ongc-logo"');
+        const ongcLogoIdx = body.html.indexOf('src="https://ongcnavratri.reworkzone.in/images/logo-web.png"');
         const headerTitleIdx = body.html.indexOf('NAVRATRI 2026');
         const passCardIdx = body.html.indexOf('src="cid:qr-TKBRAND1-1"');
         const sponsorsIdx = body.html.indexOf('OUR PARTNERS');

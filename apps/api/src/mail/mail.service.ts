@@ -7,7 +7,7 @@ import {
   MailSendResult,
   EmailAttachment,
 } from './mail.types';
-import { getEmailBrandingAttachments } from './branding-assets';
+import { getEmailBrandingUrls } from './branding-assets';
 
 @Injectable()
 export class MailService {
@@ -272,6 +272,7 @@ export class MailService {
         : '8:00 PM – 4:00 AM';
 
     const portalUrl = `${this.webUrl}/my-tickets?orderNumber=${encodeURIComponent(data.orderNumber)}`;
+    const brandingUrls = getEmailBrandingUrls(this.webUrl);
     const attachments: EmailAttachment[] = [];
 
     // Generate individual pass cards with real, scannable QR codes (FIRST CONTENT)
@@ -378,10 +379,10 @@ export class MailService {
           <tr>
             <td style="background-color: #3B0813; background: linear-gradient(180deg, #4A0C1A 0%, #150207 100%); padding: 32px 20px 24px 20px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
-                <!-- A) ONGC LOGO (CENTERED, SMALL, BREATHING ROOM, TRANSPARENT) -->
+                <!-- A) ONGC LOGO (CENTERED, MODESTLY SIZED, BREATHING ROOM, TRANSPARENT) -->
                 <tr>
                   <td align="center" style="padding-bottom: 14px;">
-                    <img src="cid:ongc-logo" alt="ONGC Logo" width="75" height="75" style="display: block; width: 75px; max-width: 75px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
+                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="95" height="95" style="display: block; width: 95px; max-width: 95px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
                   </td>
                 </tr>
                 <!-- B) NAVRATRI 2026 (PREMIUM SERIF / DISPLAY-STYLE IN GOLD) -->
@@ -560,7 +561,7 @@ export class MailService {
                             <table cellpadding="0" cellspacing="0" border="0" style="background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
                               <tr>
                                 <td align="center" valign="middle" style="padding: 10px 14px;">
-                                  <img src="cid:zaira-logo" alt="Zaira Diamond" width="150" style="display: block; width: 150px; max-width: 100%; height: auto; max-height: 65px; object-fit: contain; border: 0;" />
+                                  <img src="${brandingUrls.zairaDiamondLogoUrl}" alt="Zaira Diamond" width="150" style="display: block; width: 150px; max-width: 100%; height: auto; max-height: 65px; object-fit: contain; border: 0;" />
                                 </td>
                               </tr>
                             </table>
@@ -572,7 +573,7 @@ export class MailService {
                             <table cellpadding="0" cellspacing="0" border="0" style="background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
                               <tr>
                                 <td align="center" valign="middle" style="padding: 10px 14px;">
-                                  <img src="cid:om-sanctuary-logo" alt="Om Sanctuary Palace" width="130" style="display: block; width: 130px; max-width: 100%; height: auto; max-height: 65px; object-fit: contain; border: 0;" />
+                                  <img src="${brandingUrls.omSanctuaryLogoUrl}" alt="Om Sanctuary Palace" width="130" style="display: block; width: 130px; max-width: 100%; height: auto; max-height: 65px; object-fit: contain; border: 0;" />
                                 </td>
                               </tr>
                             </table>
@@ -594,7 +595,7 @@ export class MailService {
                     <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
                       <tr>
                         <td align="center" valign="middle" style="padding: 10px 18px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
-                          <img src="cid:lalkaar-logo" alt="Lalkaar News" width="95" style="display: block; width: 95px; max-width: 100%; height: auto; max-height: 70px; object-fit: contain; border: 0;" />
+                          <img src="${brandingUrls.lalkaarLogoUrl}" alt="Lalkaar News" width="95" style="display: block; width: 95px; max-width: 100%; height: auto; max-height: 70px; object-fit: contain; border: 0;" />
                         </td>
                       </tr>
                     </table>
@@ -612,7 +613,7 @@ export class MailService {
                     <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
                       <tr>
                         <td align="center" style="padding: 5px 8px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
-                          <img src="cid:digant-art-logo" alt="Digant Art" width="65" style="display: block; width: 65px; max-width: 100%; height: auto; max-height: 65px; border-radius: 6px; border: 0;" />
+                          <img src="${brandingUrls.digantArtLogoUrl}" alt="Digant Art" width="65" height="65" style="display: block; width: 65px; max-width: 100%; height: auto; max-height: 65px; border-radius: 6px; border: 0;" />
                         </td>
                       </tr>
                     </table>
@@ -738,8 +739,8 @@ E-Ticketing & E-Pass System by
 Reworkzone.com (https://reworkzone.com)
     `.trim();
 
-    // Attach static branding assets (Navratri logo, sponsors, organiser)
-    attachments.push(...getEmailBrandingAttachments());
+    // Attachments strictly contain only individual scannable entry QR pass code(s).
+    // Static branding images are delivered via public HTTPS URLs to avoid Gmail attachment chips.
 
     return this.sendEmail({
       to: data.customerEmail,
