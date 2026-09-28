@@ -34,9 +34,11 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import Link from 'next/link';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser } from '@/lib/auth-session';
 import { fetchSuperAdminSettings, subscribeToSuperAdminSync } from '@/lib/super-admin-state';
+import { AdminModal } from '@/components/admin/AdminModal';
 
 interface AttendeePass {
   id: string;
@@ -44,11 +46,14 @@ interface AttendeePass {
   status: string;
   category: string;
   bookingDays?: string[] | null;
+  isCheckedIn?: boolean;
+  latestCheckin?: { gateName: string; checkinTime: string } | null;
 }
 
 interface OrderRecord {
   id: string;
   orderNumber: string;
+  ticketNumber?: string;
   source: 'PUBLIC' | 'AGENT' | 'FREE';
   paymentMode?: string | null;
   agentId?: string | null;
@@ -77,6 +82,8 @@ interface OrderRecord {
   razorpayPaymentId?: string | null;
   passesCount: number;
   attendees: AttendeePass[];
+  checkedInCount?: number;
+  isCheckedIn?: boolean;
   createdAt: string;
   paidAt?: string | null;
 }
@@ -173,11 +180,22 @@ export default function CommercialOrdersAuditPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
-  // Channel Tabs: ONLINE PASSES, AGENT PASSES, FREE PASSES
-  const [channelTab, setChannelTab] = useState<'PUBLIC' | 'AGENT' | 'FREE'>('PUBLIC');
+  // Channel Tabs: ALL PASSES, ONLINE PASSES, AGENT PASSES, FREE PASSES
+  const [channelTab, setChannelTab] = useState<'ALL' | 'PUBLIC' | 'AGENT' | 'FREE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [ticketTypeFilter, setTicketTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [checkinFilter, setCheckinFilter] = useState<'ALL' | 'CHECKED_IN' | 'NOT_CHECKED_IN'>('ALL');
+
+  // Overall pass summary counters (TOTAL, WEBSITE, AGENT, EMPLOYEE, CHECKED IN, NOT CHECKED IN)
+  const [passSummary, setPassSummary] = useState<{
+    total: number;
+    website: number;
+    agent: number;
+    employee: number;
+    checkedIn: number;
+    notCheckedIn: number;
+  } | null>(null);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -297,9 +315,14 @@ export default function CommercialOrdersAuditPage() {
 
       if (ticketTypeFilter !== 'ALL') params.set('ticketType', ticketTypeFilter);
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
+      if (checkinFilter !== 'ALL') params.set('checkinStatus', checkinFilter);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
-      const res = await fetchApi<any>(`/admin/commercial/orders?${params.toString()}`);
+      const [res, summaryData] = await Promise.all([
+        fetchApi<any>(`/admin/commercial/orders?${params.toString()}`),
+        fetchApi<any>('/admin/pass-summary').catch(() => null),
+      ]);
+
       setOrders(res.orders || []);
       setTotalOrdersCount(res.total || 0);
       setTestDataDeleteEnabled(Boolean(res.testDataDeleteEnabled));
@@ -320,13 +343,16 @@ export default function CommercialOrdersAuditPage() {
           freeAvailableCount: res.summary.freeAvailableCount ?? 0,
         });
       }
+      if (summaryData) {
+        setPassSummary(summaryData);
+      }
       if (res.agentGroups) setAgentGroups(res.agentGroups);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load E-Pass orders audit.');
     } finally {
       setLoading(false);
     }
-  }, [page, limit, channelTab, ticketTypeFilter, statusFilter, searchQuery]);
+  }, [page, limit, channelTab, ticketTypeFilter, statusFilter, checkinFilter, searchQuery]);
 
   useEffect(() => {
     loadOrders();
@@ -535,15 +561,19 @@ export default function CommercialOrdersAuditPage() {
                 <th className="px-3 py-3 w-8 text-center">
                   <span className="sr-only">Select</span>
                 </th>
-                <th className="px-4 py-3">Order Number</th>
-                <th className="px-4 py-3">Customer Details</th>
-                <th className="px-4 py-3">Pass Type & Dates</th>
-                <th className="px-4 py-3 text-center">Qty</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3">Payment Mode</th>
-                <th className="px-4 py-3">Order Date</th>
-                <th className="px-4 py-3 text-center">Passes</th>
-                <th className="px-4 py-3 text-center">Action</th>
+                <th className="px-3 py-3">Pass / Ticket ID</th>
+                <th className="px-3 py-3">Order #</th>
+                <th className="px-4 py-3">Pass Holder</th>
+                <th className="px-3 py-3">Pass Type & Dates</th>
+                <th className="px-3 py-3 text-center">Source</th>
+                <th className="px-3 py-3">Agent</th>
+                <th className="px-3 py-3 text-center">Qty</th>
+                <th className="px-3 py-3 text-right">Amount</th>
+                <th className="px-3 py-3">Payment</th>
+                <th className="px-3 py-3">Check-in Status</th>
+                <th className="px-3 py-3">Order Date</th>
+                <th className="px-3 py-3 text-center">Passes</th>
+                <th className="px-3 py-3 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 text-stone-900">
@@ -551,6 +581,8 @@ export default function CommercialOrdersAuditPage() {
                 const showPasses = !!expandedOrderPasses[ord.id];
                 const isSelected = selectedOrderIds.has(ord.id);
                 const protCheck = isOrderProtected(ord, isStagingTestCleanupActive);
+                const ticketId = ord.ticketNumber || (ord.attendees?.[0]?.ticketNumber) || ord.orderNumber;
+                const isCheckedIn = ord.isCheckedIn || (ord.attendees || []).some(a => a.status === 'CHECKED_IN' || a.isCheckedIn);
 
                 return (
                   <React.Fragment key={ord.id}>
@@ -569,11 +601,28 @@ export default function CommercialOrdersAuditPage() {
                         </button>
                       </td>
 
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-bold text-[#7A1113]">
-                            {ord.orderNumber}
-                          </span>
+                      {/* Pass / Ticket ID */}
+                      <td className="px-3 py-3 font-mono font-bold text-amber-900 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <span>{ticketId}</span>
+                          <button
+                            onClick={() => copyToClipboard(ticketId, `tk-${ord.id}`)}
+                            className="text-stone-400 hover:text-stone-700 p-0.5"
+                            title="Copy Ticket ID"
+                          >
+                            {copiedOrderId === `tk-${ord.id}` ? (
+                              <Check className="w-3 h-3 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Order # */}
+                      <td className="px-3 py-3 font-mono text-stone-700 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold">{ord.orderNumber}</span>
                           <button
                             onClick={() => copyToClipboard(ord.orderNumber, ord.id)}
                             className="text-stone-400 hover:text-stone-700 p-0.5"
@@ -595,7 +644,7 @@ export default function CommercialOrdersAuditPage() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <div className="font-semibold text-stone-800">
                           {ord.ticketType === 'COMMERCIAL_SEASON'
                             ? 'Season Pass (All 9 Days)'
@@ -609,21 +658,51 @@ export default function CommercialOrdersAuditPage() {
                         )}
                       </td>
 
-                      <td className="px-4 py-3 font-bold text-center">
+                      {/* Source */}
+                      <td className="px-3 py-3 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          AGENT
+                        </span>
+                      </td>
+
+                      {/* Agent */}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="font-bold text-stone-900">{agentName}</div>
+                        {ord.agent?.staffId && (
+                          <div className="text-[10px] font-mono text-stone-500">ID: {ord.agent.staffId}</div>
+                        )}
+                      </td>
+
+                      <td className="px-3 py-3 font-bold text-center">
                         {ord.quantity}
                       </td>
 
-                      <td className="px-4 py-3 font-outfit font-black text-right text-stone-900">
+                      <td className="px-3 py-3 font-outfit font-black text-right text-stone-900">
                         ₹{ord.amountInr.toLocaleString('en-IN')}
                       </td>
 
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                           {ord.paymentMode || 'AGENT OFFLINE'}
                         </span>
                       </td>
 
-                      <td className="px-4 py-3 text-stone-500 whitespace-nowrap">
+                      {/* Check-in Status */}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {isCheckedIn ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Checked In
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+                            Not Checked In
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-3 py-3 text-stone-500 whitespace-nowrap">
                         {new Date(ord.createdAt).toLocaleDateString('en-IN', {
                           day: '2-digit',
                           month: 'short',
@@ -632,7 +711,7 @@ export default function CommercialOrdersAuditPage() {
                         })}
                       </td>
 
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center">
                         <button
                           type="button"
                           onClick={() => toggleOrderPasses(ord.id)}
@@ -647,7 +726,7 @@ export default function CommercialOrdersAuditPage() {
                         </button>
                       </td>
 
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center">
                         <button
                           type="button"
                           onClick={() => handleOpenSingleDeleteModal(ord)}
@@ -668,7 +747,7 @@ export default function CommercialOrdersAuditPage() {
                     {/* Nested Attendee Passes View */}
                     {showPasses && (
                       <tr>
-                        <td colSpan={10} className="p-3 bg-stone-50 border-y border-stone-200">
+                        <td colSpan={14} className="p-3 bg-stone-50 border-y border-stone-200">
                           <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
                             <div className="flex items-center justify-between text-xs font-bold text-stone-700">
                               <span className="flex items-center gap-1.5 text-[#7A1113]">
@@ -750,133 +829,111 @@ export default function CommercialOrdersAuditPage() {
         </button>
       </div>
 
-      {/* Top 3 Compact Channel Summary Cards (Clicking activates section/filter) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        {/* Card 1: ONLINE PASSES */}
+      {/* Top 6 Compact Channel & Pass Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Card 1: TOTAL PASSES */}
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-xs">
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+            <Ticket className="w-3.5 h-3.5 text-[#7A1113]" />
+            TOTAL PASSES
+          </div>
+          <div className="font-outfit font-black text-2xl text-stone-900 mt-2">
+            {(passSummary?.total ?? summary.totalPasses).toLocaleString()}
+          </div>
+          <div className="text-[10px] text-stone-400 font-medium mt-0.5">All issued passes</div>
+        </div>
+
+        {/* Card 2: WEBSITE PASSES */}
         <button
           type="button"
           onClick={() => {
             setChannelTab('PUBLIC');
             setPage(1);
           }}
-          className={`text-left p-4 rounded-2xl border transition-all shadow-xs flex flex-col justify-between ${
+          className={`text-left p-3.5 rounded-2xl border transition-all shadow-xs ${
             channelTab === 'PUBLIC'
               ? 'bg-blue-50/60 border-blue-400 ring-2 ring-blue-400/20'
-              : 'bg-white border-stone-200/80 hover:border-blue-200 hover:bg-blue-50/20'
+              : 'bg-white border-stone-200/80 hover:border-blue-200'
           }`}
         >
-          <div className="flex items-center justify-between w-full">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
-              <CreditCard className="w-4 h-4 text-blue-600" />
-              ONLINE PASSES ({summary.publicPassesCount} Tickets)
-            </span>
-            {channelTab === 'PUBLIC' && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
-                Active
-              </span>
-            )}
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+            <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+            WEBSITE
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <div>
-              <div className="font-outfit font-black text-2xl text-blue-950">
-                {summary.publicOrdersCount.toLocaleString()}
-              </div>
-              <div className="text-[11px] text-blue-700/80 font-medium">Orders Placed</div>
-            </div>
-            <div className="text-right">
-              <div className="font-outfit font-extrabold text-base text-blue-900">
-                ₹{summary.publicSalesInr.toLocaleString('en-IN')}
-              </div>
-              <div className="text-[11px] text-blue-700/80 font-medium">
-                {summary.publicPassesCount.toLocaleString()} tickets sold
-              </div>
-            </div>
+          <div className="font-outfit font-black text-2xl text-blue-950 mt-2">
+            {(passSummary?.website ?? summary.publicPassesCount).toLocaleString()}
+          </div>
+          <div className="text-[10px] text-blue-700/80 font-medium mt-0.5">
+            ₹{summary.publicSalesInr.toLocaleString('en-IN')} online
           </div>
         </button>
 
-        {/* Card 2: AGENT PASSES */}
+        {/* Card 3: AGENT PASSES */}
         <button
           type="button"
           onClick={() => {
             setChannelTab('AGENT');
             setPage(1);
           }}
-          className={`text-left p-4 rounded-2xl border transition-all shadow-xs flex flex-col justify-between ${
+          className={`text-left p-3.5 rounded-2xl border transition-all shadow-xs ${
             channelTab === 'AGENT'
               ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-400/20'
-              : 'bg-white border-stone-200/80 hover:border-amber-200 hover:bg-amber-50/20'
+              : 'bg-white border-stone-200/80 hover:border-amber-200'
           }`}
         >
-          <div className="flex items-center justify-between w-full">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-amber-600" />
-              AGENT PASSES ({summary.agentPassesCount} Tickets)
-            </span>
-            {channelTab === 'AGENT' && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-600 text-white">
-                Active
-              </span>
-            )}
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-amber-600" />
+            AGENT
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <div>
-              <div className="font-outfit font-black text-2xl text-amber-950">
-                {summary.agentOrdersCount.toLocaleString()}
-              </div>
-              <div className="text-[11px] text-amber-700/80 font-medium">Orders Placed</div>
-            </div>
-            <div className="text-right">
-              <div className="font-outfit font-extrabold text-base text-amber-900">
-                ₹{summary.agentSalesInr.toLocaleString('en-IN')}
-              </div>
-              <div className="text-[11px] text-amber-700/80 font-medium">
-                {summary.agentPassesCount.toLocaleString()} tickets sold
-              </div>
-            </div>
+          <div className="font-outfit font-black text-2xl text-amber-950 mt-2">
+            {(passSummary?.agent ?? summary.agentPassesCount).toLocaleString()}
+          </div>
+          <div className="text-[10px] text-amber-700/80 font-medium mt-0.5">
+            ₹{summary.agentSalesInr.toLocaleString('en-IN')} agent
           </div>
         </button>
 
-        {/* Card 3: FREE PASSES */}
-        <button
-          type="button"
-          onClick={() => {
-            setChannelTab('FREE');
-            setPage(1);
-          }}
-          className={`text-left p-4 rounded-2xl border transition-all shadow-xs flex flex-col justify-between ${
-            channelTab === 'FREE'
-              ? 'bg-emerald-50/60 border-emerald-400 ring-2 ring-emerald-400/20'
-              : 'bg-white border-stone-200/80 hover:border-emerald-200 hover:bg-emerald-50/20'
-          }`}
+        {/* Card 4: EMPLOYEE PASSES */}
+        <Link
+          href="/admin/employees"
+          className="bg-white p-3.5 rounded-2xl border border-stone-200/80 hover:border-purple-300 hover:bg-purple-50/20 transition-all shadow-xs block"
         >
-          <div className="flex items-center justify-between w-full">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
-              <Gift className="w-4 h-4 text-emerald-600" />
-              FREE PASSES ({summary.freePassesCount} Tickets)
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-purple-900 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-purple-600" />
+              EMPLOYEE
             </span>
-            {channelTab === 'FREE' && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
-                Active
-              </span>
-            )}
+            <span className="text-[9px] font-bold text-purple-600 underline">View</span>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <div>
-              <div className="font-outfit font-black text-2xl text-emerald-950">
-                {summary.freePassesCount.toLocaleString()}
-              </div>
-              <div className="text-[11px] text-emerald-700/80 font-medium">Total Issued</div>
-            </div>
-            <div className="text-right">
-              <div className="font-outfit font-extrabold text-base text-emerald-900">
-                {summary.freeCheckedInCount.toLocaleString()}
-              </div>
-              <div className="text-[11px] text-emerald-700/80 font-medium">
-                Checked In • {summary.freeAvailableCount.toLocaleString()} unused
-              </div>
-            </div>
+          <div className="font-outfit font-black text-2xl text-purple-950 mt-2">
+            {(passSummary?.employee ?? 0).toLocaleString()}
           </div>
-        </button>
+          <div className="text-[10px] text-purple-700/80 font-medium mt-0.5">ONGC Staff & Family</div>
+        </Link>
+
+        {/* Card 5: CHECKED IN */}
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-xs">
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            CHECKED IN
+          </div>
+          <div className="font-outfit font-black text-2xl text-emerald-950 mt-2">
+            {(passSummary?.checkedIn ?? 0).toLocaleString()}
+          </div>
+          <div className="text-[10px] text-emerald-700/80 font-medium mt-0.5">Scanned at gates</div>
+        </div>
+
+        {/* Card 6: NOT CHECKED IN */}
+        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-xs">
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-stone-500" />
+            NOT CHECKED IN
+          </div>
+          <div className="font-outfit font-black text-2xl text-stone-900 mt-2">
+            {(passSummary?.notCheckedIn ?? 0).toLocaleString()}
+          </div>
+          <div className="text-[10px] text-stone-500 font-medium mt-0.5">Pending check-in</div>
+        </div>
       </div>
 
       {/* Success Notification Banner */}
@@ -914,14 +971,27 @@ export default function CommercialOrdersAuditPage() {
       {/* Channel Tabs & Filter Controls */}
       <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
-          {/* Segmented Channel Tabs with EXACT Labels */}
-          <div className="flex items-center p-1 bg-stone-100 rounded-xl text-xs font-bold self-start">
+          {/* Segmented Channel Tabs */}
+          <div className="flex items-center p-1 bg-stone-100 rounded-xl text-xs font-bold self-start overflow-x-auto max-w-full">
+            <button
+              onClick={() => {
+                setChannelTab('ALL');
+                setPage(1);
+              }}
+              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
+                channelTab === 'ALL'
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              ALL PASSES ({passSummary?.total ?? summary.totalPasses})
+            </button>
             <button
               onClick={() => {
                 setChannelTab('PUBLIC');
                 setPage(1);
               }}
-              className={`px-4 py-2 rounded-lg transition-all ${
+              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
                 channelTab === 'PUBLIC'
                   ? 'bg-white text-blue-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -934,7 +1004,7 @@ export default function CommercialOrdersAuditPage() {
                 setChannelTab('AGENT');
                 setPage(1);
               }}
-              className={`px-4 py-2 rounded-lg transition-all ${
+              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
                 channelTab === 'AGENT'
                   ? 'bg-white text-amber-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -947,7 +1017,7 @@ export default function CommercialOrdersAuditPage() {
                 setChannelTab('FREE');
                 setPage(1);
               }}
-              className={`px-4 py-2 rounded-lg transition-all ${
+              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
                 channelTab === 'FREE'
                   ? 'bg-white text-emerald-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -1001,7 +1071,7 @@ export default function CommercialOrdersAuditPage() {
                   ? 'Search agent by name, phone, or customer order under agent...'
                   : channelTab === 'FREE'
                   ? 'Search by ticket number, recipient name, mobile, or email...'
-                  : 'Search by order number, customer name, mobile, or email...'
+                  : 'Search by ticket number, order number, customer name, mobile, or agent...'
               }
               value={searchQuery}
               onChange={(e) => {
@@ -1012,7 +1082,7 @@ export default function CommercialOrdersAuditPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2.5 w-full md:w-auto">
+          <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
             {channelTab !== 'FREE' && (
               <>
                 <select
@@ -1041,6 +1111,19 @@ export default function CommercialOrdersAuditPage() {
                   <option value="PENDING">Pending</option>
                   <option value="CANCELLED">Cancelled</option>
                   <option value="FAILED">Failed</option>
+                </select>
+
+                <select
+                  value={checkinFilter}
+                  onChange={(e) => {
+                    setCheckinFilter(e.target.value as any);
+                    setPage(1);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+                >
+                  <option value="ALL">All Check-in Status</option>
+                  <option value="CHECKED_IN">Checked In</option>
+                  <option value="NOT_CHECKED_IN">Not Checked In</option>
                 </select>
               </>
             )}
@@ -1319,11 +1402,11 @@ export default function CommercialOrdersAuditPage() {
         </div>
       )}
 
-      {/* SECTION 2: ONLINE PASSES TABLE */}
-      {channelTab === 'PUBLIC' && (
+      {/* SECTION 2: E-PASS REGISTRY TABLE (ALL & ONLINE CHANNELS) */}
+      {(channelTab === 'ALL' || channelTab === 'PUBLIC') && (
         <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[1300px]">
               <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="px-3 py-3.5 w-8 text-center">
@@ -1340,30 +1423,41 @@ export default function CommercialOrdersAuditPage() {
                       )}
                     </button>
                   </th>
-                  <th className="px-4 py-3.5">Order Number</th>
-                  <th className="px-4 py-3.5">Customer Information</th>
-                  <th className="px-4 py-3.5">Pass Details</th>
-                  <th className="px-4 py-3.5 text-center">Qty</th>
-                  <th className="px-4 py-3.5 text-right">Amount (₹)</th>
-                  <th className="px-4 py-3.5">Payment</th>
-                  <th className="px-4 py-3.5">Date</th>
-                  <th className="px-4 py-3.5 text-center">Passes</th>
-                  <th className="px-4 py-3.5 text-center">Action</th>
+                  <th className="px-3 py-3.5">Pass / Ticket ID</th>
+                  <th className="px-3 py-3.5">Order #</th>
+                  <th className="px-4 py-3.5">Pass Holder</th>
+                  <th className="px-4 py-3.5">Contact</th>
+                  <th className="px-3 py-3.5">Pass Type</th>
+                  <th className="px-3 py-3.5 text-center">Source</th>
+                  <th className="px-3 py-3.5">Agent</th>
+                  <th className="px-3 py-3.5 text-center">Qty</th>
+                  <th className="px-3 py-3.5 text-right">Amount</th>
+                  <th className="px-3 py-3.5">Payment</th>
+                  <th className="px-3 py-3.5">Pass Status</th>
+                  <th className="px-3 py-3.5">Valid Dates</th>
+                  <th className="px-3 py-3.5">Check-in Status</th>
+                  <th className="px-3 py-3.5">Created At</th>
+                  <th className="px-3 py-3.5 text-center">Passes</th>
+                  <th className="px-3 py-3.5 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 text-stone-900">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-stone-400">
+                    <td colSpan={17} className="px-4 py-12 text-center text-stone-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#7A1113] mb-2" />
-                      <span>Loading online passes...</span>
+                      <span>Loading passes and orders...</span>
                     </td>
                   </tr>
                 ) : orders.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-stone-400">
+                    <td colSpan={17} className="px-4 py-12 text-center text-stone-400">
                       <CreditCard className="w-10 h-10 text-stone-300 mx-auto mb-2" />
-                      <p className="font-semibold text-stone-600">No Online Public orders found.</p>
+                      <p className="font-semibold text-stone-600">
+                        {channelTab === 'ALL'
+                          ? 'No pass orders found matching current filter criteria.'
+                          : 'No Online Public orders found.'}
+                      </p>
                       <p className="text-stone-400 text-xs mt-1">
                         Try adjusting your search query or filter settings.
                       </p>
@@ -1374,6 +1468,8 @@ export default function CommercialOrdersAuditPage() {
                     const showPasses = !!expandedOrderPasses[order.id];
                     const isSelected = selectedOrderIds.has(order.id);
                     const protCheck = isOrderProtected(order, isStagingTestCleanupActive);
+                    const ticketId = order.ticketNumber || (order.attendees?.[0]?.ticketNumber) || order.orderNumber;
+                    const isOrderCheckedIn = order.isCheckedIn || (order.attendees || []).some(a => a.status === 'CHECKED_IN' || a.isCheckedIn);
 
                     return (
                       <React.Fragment key={order.id}>
@@ -1393,10 +1489,28 @@ export default function CommercialOrdersAuditPage() {
                             </button>
                           </td>
 
+                          {/* Pass / Ticket ID */}
+                          <td className="px-3 py-3.5 font-mono font-bold text-[#7A1113] whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <span>{ticketId}</span>
+                              <button
+                                onClick={() => copyToClipboard(ticketId, `tk-${order.id}`)}
+                                className="text-stone-400 hover:text-stone-700 p-0.5"
+                                title="Copy Ticket ID"
+                              >
+                                {copiedOrderId === `tk-${order.id}` ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+
                           {/* Order Number */}
-                          <td className="px-4 py-3.5 font-mono font-bold text-[#7A1113] whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              <span>{order.orderNumber}</span>
+                          <td className="px-3 py-3.5 font-mono text-stone-700 whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold">{order.orderNumber}</span>
                               <button
                                 onClick={() => copyToClipboard(order.orderNumber, order.id)}
                                 className="text-stone-400 hover:text-stone-700 p-0.5"
@@ -1411,36 +1525,69 @@ export default function CommercialOrdersAuditPage() {
                             </div>
                           </td>
 
-                          {/* Customer */}
+                          {/* Pass Holder */}
                           <td className="px-4 py-3.5">
                             <div className="font-bold text-stone-900">{order.customerName}</div>
-                            <div className="text-[11px] text-stone-500">
-                              {order.customerMobile} • {order.customerEmail}
+                          </td>
+
+                          {/* Contact */}
+                          <td className="px-4 py-3.5">
+                            <div className="font-medium text-stone-800">{order.customerMobile}</div>
+                            <div className="text-[11px] text-stone-500 truncate max-w-[160px]">{order.customerEmail}</div>
+                          </td>
+
+                          {/* Pass Type */}
+                          <td className="px-3 py-3.5">
+                            <div className="font-semibold text-stone-800">
+                              {order.ticketType === 'COMMERCIAL_SEASON'
+                                ? 'Season Pass'
+                                : order.ticketType === 'FREE_PASS'
+                                ? 'Free Pass'
+                                : 'Daily Pass'}
                             </div>
                           </td>
 
-                          {/* Pass Type & Dates */}
-                          <td className="px-4 py-3.5">
-                            <div className="font-semibold text-stone-800">
-                              {order.ticketType === 'COMMERCIAL_SEASON' ? 'Season Pass' : 'Daily Pass'}
-                            </div>
-                            {order.selectedDates && order.selectedDates.length > 0 && (
-                              <div className="text-[10px] text-stone-400 mt-0.5 truncate max-w-xs">
-                                {order.selectedDates.join(', ')}
+                          {/* Source Badge */}
+                          <td className="px-3 py-3.5 text-center whitespace-nowrap">
+                            {order.source === 'PUBLIC' ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                WEBSITE
+                              </span>
+                            ) : order.source === 'AGENT' ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                AGENT
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                FREE
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Agent */}
+                          <td className="px-3 py-3.5 whitespace-nowrap">
+                            {order.agent ? (
+                              <div>
+                                <div className="font-bold text-stone-900">{order.agent.name}</div>
+                                {order.agent.staffId && (
+                                  <div className="text-[10px] font-mono text-stone-500">ID: {order.agent.staffId}</div>
+                                )}
                               </div>
+                            ) : (
+                              <span className="text-stone-400">—</span>
                             )}
                           </td>
 
                           {/* Qty */}
-                          <td className="px-4 py-3.5 font-bold text-center">{order.quantity}</td>
+                          <td className="px-3 py-3.5 font-bold text-center">{order.quantity}</td>
 
                           {/* Amount */}
-                          <td className="px-4 py-3.5 font-outfit font-black text-right text-stone-900">
+                          <td className="px-3 py-3.5 font-outfit font-black text-right text-stone-900 whitespace-nowrap">
                             ₹{order.amountInr.toLocaleString('en-IN')}
                           </td>
 
                           {/* Payment */}
-                          <td className="px-4 py-3.5 whitespace-nowrap">
+                          <td className="px-3 py-3.5 whitespace-nowrap">
                             {order.isTestPayment ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                 TEST PAID
@@ -1456,8 +1603,41 @@ export default function CommercialOrdersAuditPage() {
                             )}
                           </td>
 
-                          {/* Date */}
-                          <td className="px-4 py-3.5 text-stone-500 whitespace-nowrap">
+                          {/* Pass Status */}
+                          <td className="px-3 py-3.5 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-700 border border-stone-200">
+                              {order.orderStatus || 'ACTIVE'}
+                            </span>
+                          </td>
+
+                          {/* Valid Dates */}
+                          <td className="px-3 py-3.5 text-stone-600 whitespace-nowrap text-[11px]">
+                            {order.selectedDates && order.selectedDates.length > 0 ? (
+                              <span title={order.selectedDates.join(', ')}>
+                                {order.selectedDates.length === 9 ? 'All 9 Days' : `${order.selectedDates.length} Days Selected`}
+                              </span>
+                            ) : (
+                              'All 9 Days'
+                            )}
+                          </td>
+
+                          {/* Check-in Status */}
+                          <td className="px-3 py-3.5 whitespace-nowrap">
+                            {isOrderCheckedIn ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Checked In
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+                                Not Checked In
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Created At Date */}
+                          <td className="px-3 py-3.5 text-stone-500 whitespace-nowrap">
                             {new Date(order.createdAt).toLocaleDateString('en-IN', {
                               day: '2-digit',
                               month: 'short',
@@ -1467,7 +1647,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Attendee Passes Drilldown Toggle */}
-                          <td className="px-4 py-3.5 text-center">
+                          <td className="px-3 py-3.5 text-center">
                             <button
                               type="button"
                               onClick={() => toggleOrderPasses(order.id)}
@@ -1483,7 +1663,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Action (Delete) */}
-                          <td className="px-4 py-3.5 text-center">
+                          <td className="px-3 py-3.5 text-center">
                             <button
                               type="button"
                               onClick={() => handleOpenSingleDeleteModal(order)}
@@ -1504,7 +1684,7 @@ export default function CommercialOrdersAuditPage() {
                         {/* Nested Passes Row */}
                         {showPasses && (
                           <tr>
-                            <td colSpan={10} className="p-3 bg-stone-50 border-y border-stone-200">
+                            <td colSpan={17} className="p-3 bg-stone-50 border-y border-stone-200">
                               <div className="rounded-xl border border-stone-200 bg-white p-3 space-y-2">
                                 <div className="flex items-center justify-between text-xs font-bold text-stone-700">
                                   <span className="flex items-center gap-1.5 text-[#7A1113]">
@@ -1530,8 +1710,13 @@ export default function CommercialOrdersAuditPage() {
                                       <div className="text-[11px] text-stone-600 font-medium">
                                         Type: {att.category || 'E-Pass'}
                                       </div>
-                                      <div className="text-[10px] text-stone-500">
-                                        Status: <span className="font-semibold text-emerald-700">{att.status}</span>
+                                      <div className="text-[10px] text-stone-500 flex items-center justify-between">
+                                        <span>Status: <strong className="text-stone-700">{att.status}</strong></span>
+                                        {att.isCheckedIn || att.status === 'CHECKED_IN' ? (
+                                          <span className="text-emerald-700 font-bold">Checked In</span>
+                                        ) : (
+                                          <span className="text-stone-400">Not Checked In</span>
+                                        )}
                                       </div>
                                     </div>
                                   ))}
@@ -1756,147 +1941,129 @@ export default function CommercialOrdersAuditPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL (NO window.confirm()) */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-stone-200 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-stone-100 flex items-start gap-4">
-              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-outfit font-bold text-base text-stone-900">
-                  {fullPowerActive ? '⚡ Full Power Order Deletion' : 'Confirm Order Deletion'}
-                </h3>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  {fullPowerActive
-                    ? 'SUPER_ADMIN Full Power is active. All safeguards are bypassed.'
-                    : 'Verify order dependency safety before proceeding.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(false)}
-                disabled={isDeleting}
-                className="text-stone-400 hover:text-stone-700 p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      {/* DELETE CONFIRMATION MODAL (AdminModal portal eliminates top white line) */}
+      <AdminModal
+        isOpen={showDeleteModal}
+        onClose={() => !isDeleting && setShowDeleteModal(false)}
+        title={fullPowerActive ? '⚡ Full Power Order Deletion' : 'Confirm Order Deletion'}
+        subtitle={
+          fullPowerActive
+            ? 'SUPER_ADMIN Full Power is active. All safeguards are bypassed.'
+            : 'Verify order dependency safety before proceeding.'
+        }
+        icon={<AlertTriangle className="w-5 h-5 text-rose-600" />}
+        maxWidth="md"
+        showCloseButton={!isDeleting}
+      >
+        <div className="space-y-4">
+          <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-2 text-xs">
+            <div className="flex justify-between items-center text-stone-600">
+              <span>Total Selected for Deletion:</span>
+              <span className="font-bold font-mono text-stone-900">{deleteAnalysis.total}</span>
             </div>
-
-            {/* Modal Body */}
-            <div className="p-6 space-y-4">
-              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-2 text-xs">
-                <div className="flex justify-between items-center text-stone-600">
-                  <span>Total Selected for Deletion:</span>
-                  <span className="font-bold font-mono text-stone-900">{deleteAnalysis.total}</span>
-                </div>
-                <div className="flex justify-between items-center text-rose-700">
-                  <span className="font-semibold">{fullPowerActive ? 'Will Permanently Delete:' : 'Safe to Delete:'}</span>
-                  <span className="font-bold font-mono text-rose-900">{deleteAnalysis.safeCount}</span>
-                </div>
-                <div className="flex justify-between items-center text-stone-500">
-                  <span className="font-medium">{fullPowerActive ? 'Protected Records:' : 'Protected (Cannot be deleted):'}</span>
-                  <span className="font-bold font-mono text-stone-700">{deleteAnalysis.protectedCount}</span>
-                </div>
-              </div>
-
-              {/* Full Power Special Notice */}
-              {fullPowerActive ? (
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-950 text-xs space-y-1">
-                  <div className="font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 text-rose-800">
-                    <Zap className="w-3.5 h-3.5 text-rose-600 fill-rose-600 shrink-0" />
-                    <span>SUPER_ADMIN FULL POWER IS ACTIVE:</span>
-                  </div>
-                  <p className="text-[11px] text-rose-900 leading-relaxed font-medium">
-                    Deletion protections are bypassed for this operation. All {deleteAnalysis.total} selected order(s) will be permanently and irreversibly purged from the database, including attendee passes, daily check-in records, scan logs, payment webhooks, and agent allocations. This action is permanent and cannot be undone.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* Staging Test Order Special Notice */}
-                  {isStagingTestCleanupActive && deleteAnalysis.hasTestOrders && (
-                    <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
-                      <div className="font-bold flex items-center gap-1.5">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-600 text-white">
-                          {deleteAnalysis.testCount === 1 ? 'STAGING TEST ORDER' : 'STAGING TEST ORDERS'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                        {deleteAnalysis.testCount === 1
-                          ? 'This order is marked as a staging test transaction and can be permanently deleted by SUPER_ADMIN.'
-                          : `${deleteAnalysis.testCount} selected order(s) are marked as staging test transactions and can be permanently deleted by SUPER_ADMIN.`}
-                      </p>
-                    </div>
-                  )}
-
-                  {deleteAnalysis.protectedCount > 0 && (
-                    <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
-                      <div className="font-bold flex items-center gap-1.5">
-                        <Shield className="w-3.5 h-3.5 text-amber-700" />
-                        <span>Protected orders will not be deleted</span>
-                      </div>
-                      <p className="text-[11px] text-amber-800 leading-relaxed">
-                        {deleteAnalysis.protectedCount} order(s) are locked because they have captured payments, confirmed paid status, or active check-ins. The system will preserve them automatically.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {deleteAnalysis.safeCount === 0 ? (
-                <div className="p-3 rounded-xl bg-stone-100 text-stone-600 text-xs text-center font-medium">
-                  None of the selected orders can be deleted because all are protected.
-                </div>
-              ) : (
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Proceeding will permanently remove{' '}
-                  <strong className="text-stone-900 font-bold">{deleteAnalysis.safeCount}</strong>{' '}
-                  {fullPowerActive ? 'order(s) under Full Power mode' : deleteAnalysis.isAllTestOrders ? 'test order(s)' : 'unfulfilled/pending order(s)'}. This action cannot be reversed.
-                </p>
-              )}
+            <div className="flex justify-between items-center text-rose-700">
+              <span className="font-semibold">{fullPowerActive ? 'Will Permanently Delete:' : 'Safe to Delete:'}</span>
+              <span className="font-bold font-mono text-rose-900">{deleteAnalysis.safeCount}</span>
             </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 bg-[#FAF7F2] border-t border-stone-100 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(false)}
-                disabled={isDeleting}
-                className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 font-bold text-xs hover:bg-stone-50 transition-colors"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                disabled={isDeleting || deleteAnalysis.safeCount === 0}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 disabled:opacity-40 transition-colors shadow-xs"
-              >
-                {isDeleting ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>
-                      {fullPowerActive
-                        ? `⚡ Permanently Delete ${deleteAnalysis.total} Order(s)`
-                        : deleteAnalysis.isAllTestOrders
-                        ? (deleteAnalysis.testCount === 1 ? 'Delete Test Order' : `Delete ${deleteAnalysis.testCount} Test Orders`)
-                        : (deleteAnalysis.safeCount === 1 ? 'Delete 1 Order' : `Delete ${deleteAnalysis.safeCount} Orders`)}
-                    </span>
-                  </>
-                )}
-              </button>
+            <div className="flex justify-between items-center text-stone-500">
+              <span className="font-medium">{fullPowerActive ? 'Protected Records:' : 'Protected (Cannot be deleted):'}</span>
+              <span className="font-bold font-mono text-stone-700">{deleteAnalysis.protectedCount}</span>
             </div>
           </div>
+
+          {/* Full Power Special Notice */}
+          {fullPowerActive ? (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-950 text-xs space-y-1">
+              <div className="font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 text-rose-800">
+                <Zap className="w-3.5 h-3.5 text-rose-600 fill-rose-600 shrink-0" />
+                <span>SUPER_ADMIN FULL POWER IS ACTIVE:</span>
+              </div>
+              <p className="text-[11px] text-rose-900 leading-relaxed font-medium">
+                Deletion protections are bypassed for this operation. All {deleteAnalysis.total} selected order(s) will be permanently and irreversibly purged from the database, including attendee passes, daily check-in records, scan logs, payment webhooks, and agent allocations. This action is permanent and cannot be undone.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Staging Test Order Special Notice */}
+              {isStagingTestCleanupActive && deleteAnalysis.hasTestOrders && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-600 text-white">
+                      {deleteAnalysis.testCount === 1 ? 'STAGING TEST ORDER' : 'STAGING TEST ORDERS'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                    {deleteAnalysis.testCount === 1
+                      ? 'This order is marked as a staging test transaction and can be permanently deleted by SUPER_ADMIN.'
+                      : `${deleteAnalysis.testCount} selected order(s) are marked as staging test transactions and can be permanently deleted by SUPER_ADMIN.`}
+                  </p>
+                </div>
+              )}
+
+              {deleteAnalysis.protectedCount > 0 && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Protected orders will not be deleted</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    {deleteAnalysis.protectedCount} order(s) are locked because they have captured payments, confirmed paid status, or active check-ins. The system will preserve them automatically.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {deleteAnalysis.safeCount === 0 ? (
+            <div className="p-3 rounded-xl bg-stone-100 text-stone-600 text-xs text-center font-medium">
+              None of the selected orders can be deleted because all are protected.
+            </div>
+          ) : (
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Proceeding will permanently remove{' '}
+              <strong className="text-stone-900 font-bold">{deleteAnalysis.safeCount}</strong>{' '}
+              {fullPowerActive ? 'order(s) under Full Power mode' : deleteAnalysis.isAllTestOrders ? 'test order(s)' : 'unfulfilled/pending order(s)'}. This action cannot be reversed.
+            </p>
+          )}
+
+          {/* Modal Actions */}
+          <div className="pt-4 border-t border-stone-100 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={isDeleting}
+              className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 font-bold text-xs hover:bg-stone-50 transition-colors"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting || deleteAnalysis.safeCount === 0}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 disabled:opacity-40 transition-colors shadow-xs"
+            >
+              {isDeleting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Deleting...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>
+                    {fullPowerActive
+                      ? `⚡ Permanently Delete ${deleteAnalysis.total} Order(s)`
+                      : deleteAnalysis.isAllTestOrders
+                      ? (deleteAnalysis.testCount === 1 ? 'Delete Test Order' : `Delete ${deleteAnalysis.testCount} Test Orders`)
+                      : (deleteAnalysis.safeCount === 1 ? 'Delete 1 Order' : `Delete ${deleteAnalysis.safeCount} Orders`)}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      )}
+      </AdminModal>
     </div>
   );
 }

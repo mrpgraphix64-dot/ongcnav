@@ -881,6 +881,7 @@ export class CommercialService {
           agentId?: string;
           ticketType?: string;
           status?: string;
+          checkinStatus?: string;
           search?: string;
           date?: string;
           groupBy?: string;
@@ -913,6 +914,8 @@ export class CommercialService {
       limit = legacyLimit || 20;
     }
 
+    const checkinStatus = (pageOrOptions as any)?.checkinStatus;
+
     const skip = (Math.max(1, page) - 1) * limit;
     const where: any = {};
 
@@ -943,6 +946,12 @@ export class CommercialService {
 
     if (status && status !== 'ALL') {
       where.orderStatus = status as any;
+    }
+
+    if (checkinStatus === 'CHECKED_IN') {
+      where.attendees = { some: { dailyCheckins: { some: {} } } };
+    } else if (checkinStatus === 'NOT_CHECKED_IN') {
+      where.attendees = { none: { dailyCheckins: { some: {} } } };
     }
 
     if (search && search.trim() !== '') {
@@ -998,6 +1007,15 @@ export class CommercialService {
               status: true,
               category: true,
               bookingDays: true,
+              dailyCheckins: {
+                select: {
+                  id: true,
+                  checkinTime: true,
+                  gate: { select: { name: true } },
+                },
+                take: 1,
+                orderBy: { checkinTime: 'desc' },
+              },
             },
             take: 20,
           },
@@ -1177,13 +1195,30 @@ export class CommercialService {
         razorpayOrderId: o.razorpayOrderId,
         razorpayPaymentId: o.razorpayPaymentId,
         passesCount: o._count.attendees,
-        attendees: (o.attendees || []).map((a: any) => ({
-          id: a.id.toString(),
-          ticketNumber: a.ticketNumber,
-          status: a.status,
-          category: a.category,
-          bookingDays: a.bookingDays,
-        })),
+        ticketNumber: (o.attendees && o.attendees[0]) ? o.attendees[0].ticketNumber : o.orderNumber,
+        attendees: (o.attendees || []).map((a: any) => {
+          const isCheckedIn = (a.dailyCheckins || []).length > 0;
+          return {
+            id: a.id.toString(),
+            ticketNumber: a.ticketNumber,
+            status: isCheckedIn ? 'CHECKED_IN' : a.status,
+            category: a.category,
+            bookingDays: a.bookingDays,
+            isCheckedIn,
+            latestCheckin: a.dailyCheckins?.[0]
+              ? {
+                  gateName: a.dailyCheckins[0].gate?.name || 'Gate',
+                  checkinTime: a.dailyCheckins[0].checkinTime.toISOString(),
+                }
+              : null,
+          };
+        }),
+        checkedInCount: (o.attendees || []).filter(
+          (a: any) => (a.dailyCheckins || []).length > 0,
+        ).length,
+        isCheckedIn: (o.attendees || []).some(
+          (a: any) => (a.dailyCheckins || []).length > 0,
+        ),
         createdAt: o.createdAt.toISOString(),
         paidAt: o.paidAt?.toISOString() || null,
       };
@@ -1201,40 +1236,48 @@ export class CommercialService {
         },
       });
 
-      ordersResult = freeAttendees.map((fa: any) => ({
-        id: fa.id.toString(),
-        orderNumber: `FREE-${fa.ticketNumber}`,
-        registrationType: RegistrationType.FREE,
-        source: 'FREE',
-        paymentMode: 'COMPLIMENTARY',
-        agentId: null,
-        agent: null,
-        customerName: fa.name || 'Complimentary Guest',
-        customerMobile: fa.mobile || '—',
-        customerEmail: fa.email || '—',
-        ticketType: fa.category || 'FREE_PASS',
-        selectedDates: fa.bookingDays || [],
-        quantity: 1,
-        amountInr: 0,
-        currency: 'INR',
-        orderStatus: OrderStatus.PAID,
-        paymentStatus: PaymentStatus.CAPTURED,
-        isTestPayment: false,
-        razorpayOrderId: null,
-        razorpayPaymentId: null,
-        passesCount: 1,
-        attendees: [
-          {
-            id: fa.id.toString(),
-            ticketNumber: fa.ticketNumber,
-            status: fa.status,
-            category: fa.category,
-            bookingDays: fa.bookingDays,
-          },
-        ],
-        createdAt: fa.createdAt ? fa.createdAt.toISOString() : new Date().toISOString(),
-        paidAt: fa.createdAt ? fa.createdAt.toISOString() : new Date().toISOString(),
-      }));
+      ordersResult = freeAttendees.map((fa: any) => {
+        const isCheckedIn = (fa.dailyCheckins || []).length > 0;
+        return {
+          id: fa.id.toString(),
+          orderNumber: `FREE-${fa.ticketNumber}`,
+          registrationType: RegistrationType.FREE,
+          source: 'FREE',
+          paymentMode: 'COMPLIMENTARY',
+          agentId: null,
+          agent: null,
+          customerName: fa.name || 'Complimentary Guest',
+          customerMobile: fa.mobile || '—',
+          customerEmail: fa.email || '—',
+          ticketType: fa.category || 'FREE_PASS',
+          selectedDates: fa.bookingDays || [],
+          quantity: 1,
+          amountInr: 0,
+          currency: 'INR',
+          orderStatus: OrderStatus.PAID,
+          paymentStatus: PaymentStatus.CAPTURED,
+          isTestPayment: false,
+          razorpayOrderId: null,
+          razorpayPaymentId: null,
+          passesCount: 1,
+          ticketNumber: fa.ticketNumber,
+          attendees: [
+            {
+              id: fa.id.toString(),
+              ticketNumber: fa.ticketNumber,
+              status: isCheckedIn ? 'CHECKED_IN' : fa.status,
+              category: fa.category,
+              bookingDays: fa.bookingDays,
+              isCheckedIn,
+              latestCheckin: null,
+            },
+          ],
+          checkedInCount: isCheckedIn ? 1 : 0,
+          isCheckedIn,
+          createdAt: fa.createdAt ? fa.createdAt.toISOString() : new Date().toISOString(),
+          paidAt: fa.createdAt ? fa.createdAt.toISOString() : new Date().toISOString(),
+        };
+      });
     }
 
     return {

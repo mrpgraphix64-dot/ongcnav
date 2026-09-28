@@ -94,6 +94,7 @@ export class CommercialAdminController {
     @Query('status') status?: string,
     @Query('search') search?: string,
     @Query('date') date?: string,
+    @Query('checkinStatus') checkinStatus?: string,
     @Query('groupBy') groupBy?: string,
     @Req() req?: Request,
   ) {
@@ -109,6 +110,7 @@ export class CommercialAdminController {
       status,
       search,
       date,
+      checkinStatus,
       groupBy,
       userRole: user?.role,
     });

@@ -123,11 +123,17 @@ const EMPLOYEE_ADMIN_NAV_ITEMS: NavItem[] = [
     roles: ['EMPLOYEE_ADMIN'],
   },
   {
+    label: 'Employees',
+    href: '/admin/employees',
+    icon: Users,
+    roles: ['EMPLOYEE_ADMIN'],
+    isSectionHeader: 'EMPLOYEES',
+  },
+  {
     label: 'Employee Registrations',
     href: '/admin/attendees',
     icon: Users,
     roles: ['EMPLOYEE_ADMIN'],
-    isSectionHeader: 'EMPLOYEES',
   },
   {
     label: 'Bulk Upload',
@@ -192,11 +198,17 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
   // EMPLOYEES
   {
+    label: 'Employees',
+    href: '/admin/employees',
+    icon: Users,
+    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'REGISTRATION_STAFF'],
+    isSectionHeader: 'EMPLOYEES',
+  },
+  {
     label: 'Attendees & Passes',
     href: '/admin/attendees',
     icon: Users,
     roles: ['SUPER_ADMIN', 'REGISTRATION_STAFF'],
-    isSectionHeader: 'EMPLOYEES',
   },
   {
     label: 'Bulk Upload',
@@ -379,6 +391,12 @@ function getPageMeta(pathname: string, userRole?: string): { title: string; subt
     return {
       title: 'Staff Management',
       subtitle: 'Manage gate operators, supervisors, roles, and credential access.',
+    };
+  }
+  if (pathname.startsWith('/admin/employees')) {
+    return {
+      title: 'Employees Directory',
+      subtitle: 'ONGC employee roster, digital E-Pass status, and venue check-in verification.',
     };
   }
   if (pathname.startsWith('/admin/attendees')) {

@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateGateDto } from './dto/create-gate.dto';
 import { UpdateGateDto } from './dto/update-gate.dto';
 import { GateStatus, GateType } from '@prisma/client';
+import { UserRole } from '@ongc/shared-types';
 
 function getTodayIST(): string {
   const now = new Date();
@@ -525,7 +526,7 @@ export class GatesService {
     };
   }
 
-  async remove(id: bigint) {
+  async remove(id: bigint, currentUser?: { role?: string; id?: bigint }, force: boolean = false) {
     const gate = await this.prisma.gate.findUnique({
       where: { id },
       include: {
@@ -543,8 +544,10 @@ export class GatesService {
     }
 
     const hasHistory = gate._count.dailyCheckins > 0 || gate._count.scanLogs > 0;
+    const isSuperAdmin =
+      currentUser?.role === UserRole.SUPER_ADMIN || currentUser?.role === 'SUPER_ADMIN';
 
-    if (hasHistory) {
+    if (hasHistory && (!isSuperAdmin || !force)) {
       const updated = await this.prisma.gate.update({
         where: { id },
         data: { status: GateStatus.INACTIVE },
@@ -558,22 +561,50 @@ export class GatesService {
       };
     }
 
-    await this.prisma.$transaction([
-      this.prisma.gateUser.deleteMany({ where: { gateId: id } }),
-      this.prisma.gate.delete({ where: { id } }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      if (tx.scanLog?.updateMany) {
+        await tx.scanLog.updateMany({
+          where: { gateId: id },
+          data: { gateId: null },
+        });
+      }
+      if (tx.incident?.updateMany) {
+        await tx.incident.updateMany({
+          where: { gateId: id },
+          data: { gateId: null },
+        });
+      }
+      if (tx.dailyCheckin?.deleteMany) {
+        await tx.dailyCheckin.deleteMany({
+          where: { gateId: id },
+        });
+      }
+      if (tx.gateUser?.deleteMany) {
+        await tx.gateUser.deleteMany({
+          where: { gateId: id },
+        });
+      }
+      await tx.gate.delete({
+        where: { id },
+      });
+    });
 
     return {
       success: true,
       action: 'deleted',
-      message: `Gate '${gate.name}' was deleted successfully.`,
+      message: isSuperAdmin && hasHistory
+        ? `Gate '${gate.name}' and all associated gate records were permanently deleted under SUPER_ADMIN privileges.`
+        : `Gate '${gate.name}' was deleted successfully.`,
     };
   }
 
-  async bulkRemove(ids: bigint[]) {
+  async bulkRemove(ids: bigint[], currentUser?: { role?: string; id?: bigint }, force: boolean = false) {
     if (!ids || ids.length === 0) {
       throw new BadRequestException('No gate IDs provided');
     }
+
+    const isSuperAdmin =
+      currentUser?.role === UserRole.SUPER_ADMIN || currentUser?.role === 'SUPER_ADMIN';
 
     const gates = await this.prisma.gate.findMany({
       where: { id: { in: ids } },
@@ -592,7 +623,7 @@ export class GatesService {
 
     for (const gate of gates) {
       const hasHistory = gate._count.dailyCheckins > 0 || gate._count.scanLogs > 0;
-      if (hasHistory) {
+      if (hasHistory && (!isSuperAdmin || !force)) {
         await this.prisma.gate.update({
           where: { id: gate.id },
           data: { status: GateStatus.INACTIVE },
@@ -608,10 +639,33 @@ export class GatesService {
     }
 
     if (deletableIds.length > 0) {
-      await this.prisma.$transaction([
-        this.prisma.gateUser.deleteMany({ where: { gateId: { in: deletableIds } } }),
-        this.prisma.gate.deleteMany({ where: { id: { in: deletableIds } } }),
-      ]);
+      await this.prisma.$transaction(async (tx) => {
+        if (tx.scanLog?.updateMany) {
+          await tx.scanLog.updateMany({
+            where: { gateId: { in: deletableIds } },
+            data: { gateId: null },
+          });
+        }
+        if (tx.incident?.updateMany) {
+          await tx.incident.updateMany({
+            where: { gateId: { in: deletableIds } },
+            data: { gateId: null },
+          });
+        }
+        if (tx.dailyCheckin?.deleteMany) {
+          await tx.dailyCheckin.deleteMany({
+            where: { gateId: { in: deletableIds } },
+          });
+        }
+        if (tx.gateUser?.deleteMany) {
+          await tx.gateUser.deleteMany({
+            where: { gateId: { in: deletableIds } },
+          });
+        }
+        await tx.gate.deleteMany({
+          where: { id: { in: deletableIds } },
+        });
+      });
     }
 
     const deletedCount = deletableIds.length;
@@ -619,7 +673,9 @@ export class GatesService {
 
     let message = '';
     if (deletedCount > 0 && deactivatedCount === 0) {
-      message = `Successfully deleted ${deletedCount} gate(s).`;
+      message = isSuperAdmin && force
+        ? `Successfully permanently deleted ${deletedCount} gate(s) under SUPER_ADMIN privileges.`
+        : `Successfully deleted ${deletedCount} gate(s).`;
     } else if (deletedCount > 0 && deactivatedCount > 0) {
       message = `Deleted ${deletedCount} gate(s). ${deactivatedCount} gate(s) had historical records and were deactivated instead.`;
     } else {

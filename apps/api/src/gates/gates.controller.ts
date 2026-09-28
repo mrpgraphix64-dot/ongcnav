@@ -8,6 +8,7 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -78,17 +79,24 @@ export class GatesController {
 
   @Post('bulk-delete')
   @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.GATE_MANAGER)
-  @ApiOperation({ summary: 'Bulk safe gate deletion with entry history preservation' })
-  async bulkRemove(@Body() body: { ids: string[] }) {
+  @ApiOperation({ summary: 'Bulk safe gate deletion with entry history preservation or Super Admin permanent deletion' })
+  async bulkRemove(@Body() body: { ids: string[]; force?: boolean }, @Req() req?: any) {
+    const user = req?.user;
     const gateIds = (body.ids || []).map((id) => BigInt(id));
-    return this.gatesService.bulkRemove(gateIds);
+    return this.gatesService.bulkRemove(gateIds, user, Boolean(body.force));
   }
 
   @Delete(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.GATE_MANAGER)
-  @ApiOperation({ summary: 'Safe gate deletion with entry history preservation' })
-  async remove(@Param('id') id: string) {
-    return this.gatesService.remove(BigInt(id));
+  @ApiOperation({ summary: 'Safe gate deletion with entry history preservation or Super Admin permanent deletion' })
+  async remove(
+    @Param('id') id: string,
+    @Req() req?: any,
+    @Query('force') force?: string,
+  ) {
+    const user = req?.user;
+    const isForce = force === 'true' || force === '1';
+    return this.gatesService.remove(BigInt(id), user, isForce);
   }
 
   @Patch(':id/toggle-open')

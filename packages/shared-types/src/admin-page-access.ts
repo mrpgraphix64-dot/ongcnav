@@ -95,7 +95,7 @@ export const EMPLOYEE_ADMIN_PAGE_PERMISSIONS: PagePermissionDefinition[] = [
     label: 'Employee Registrations',
     description: 'Search, view, and manage ONGC employee registrations',
     domain: 'employee',
-    routes: ['/admin/attendees'],
+    routes: ['/admin/attendees', '/admin/employees'],
   },
   {
     key: 'employee.family_passes',
@@ -195,6 +195,7 @@ export const DOMAIN_PAGE_ROUTES: Record<AdminDomain, string[]> = {
     '/admin/commercial/tickets',
   ],
   employee: [
+    '/admin/employees',
     '/admin/attendees',
     '/admin/bulk-upload',
     '/admin/employee',
@@ -315,7 +316,7 @@ export function isRoutePermittedForRole(
     if (cleanPath === '/admin' || cleanPath === '/admin/employee') {
       return perms.includes('employee.dashboard');
     }
-    if (cleanPath.startsWith('/admin/attendees')) {
+    if (cleanPath.startsWith('/admin/attendees') || cleanPath.startsWith('/admin/employees')) {
       return perms.includes('employee.attendees') || perms.includes('employee.family_passes');
     }
     if (cleanPath.startsWith('/admin/bulk-upload')) {

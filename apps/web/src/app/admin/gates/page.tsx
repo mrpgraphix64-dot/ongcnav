@@ -21,6 +21,8 @@ import {
   Square,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser } from '@/lib/auth-session';
+import AdminModal from '@/components/admin/AdminModal';
 
 interface StaffUser {
   id: string;
@@ -64,10 +66,20 @@ export default function AdminGatesPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentUserRole, setCurrentUserRole] = useState<string>('EVENT_ADMIN');
   const [msg, setMsg] = useState<{
     text: string;
     type: 'success' | 'warning' | 'error';
   } | null>(null);
+
+  useEffect(() => {
+    const user = getStoredAuthUser();
+    if (user?.role) {
+      setCurrentUserRole(user.role);
+    }
+  }, []);
+
+  const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
 
   // Create Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -269,12 +281,15 @@ export default function AdminGatesPage() {
     }
   };
 
-  // Handle Safe Delete
+  // Handle Safe Delete / Super Admin Permanent Delete
   const handleConfirmDelete = async () => {
     if (!gateToDelete) return;
     try {
       setActionLoading(`delete-${gateToDelete.id}`);
-      const res = await fetchApi(`/admin/gates/${gateToDelete.id}`, {
+      const endpoint = isSuperAdmin
+        ? `/admin/gates/${gateToDelete.id}?force=true`
+        : `/admin/gates/${gateToDelete.id}`;
+      const res = await fetchApi(endpoint, {
         method: 'DELETE',
       });
 
@@ -332,7 +347,10 @@ export default function AdminGatesPage() {
       setBulkDeleteLoading(true);
       const res = await fetchApi('/admin/gates/bulk-delete', {
         method: 'POST',
-        body: JSON.stringify({ ids: Array.from(selectedGateIds) }),
+        body: JSON.stringify({
+          ids: Array.from(selectedGateIds),
+          force: isSuperAdmin,
+        }),
       });
       setShowBulkDeleteModal(false);
       setSelectedGateIds(new Set());
@@ -712,385 +730,396 @@ export default function AdminGatesPage() {
       </div>
 
       {/* CREATE GATE MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 border border-stone-200 shadow-xl">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-              <h3 className="font-outfit font-bold text-lg text-maroon flex items-center gap-2">
-                <DoorOpen className="w-5 h-5 text-gold" />
-                <span>Create Event Entry Gate</span>
-              </h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-ink-soft hover:text-ink"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <AdminModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Create Event Entry Gate"
+        subtitle="Configure physical turnstile or scanner station"
+        icon={<DoorOpen className="w-5 h-5 text-gold" />}
+        maxWidth="lg"
+      >
+        <form onSubmit={handleCreateSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Gate Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={createForm.name}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, name: e.target.value })
+                }
+                placeholder="e.g. Gate 1, VIP North Gate"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              />
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Gate Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={createForm.name}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, name: e.target.value })
-                    }
-                    placeholder="e.g. Gate 1, VIP North Gate"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Gate Code (Unique) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={createForm.code}
-                    onChange={(e) =>
-                      setCreateForm({
-                        ...createForm,
-                        code: e.target.value.toUpperCase(),
-                      })
-                    }
-                    placeholder="e.g. G1, G2, VIP-1"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm uppercase focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Gate Type *
-                  </label>
-                  <select
-                    required
-                    value={createForm.type}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, type: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  >
-                    {GATE_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type} Entry
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Status *
-                  </label>
-                  <select
-                    required
-                    value={createForm.status}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, status: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-ink uppercase mb-1">
-                  Location / Landmark
-                </label>
-                <input
-                  type="text"
-                  value={createForm.location}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, location: e.target.value })
-                  }
-                  placeholder="e.g. Near West Parking, Main Pavilion"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-ink uppercase mb-1">
-                  Description / Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={createForm.description}
-                  onChange={(e) =>
-                    setCreateForm({
-                      ...createForm,
-                      description: e.target.value,
-                    })
-                  }
-                  placeholder="Operational instructions or notes for scanning operators"
-                  className="w-full px-3.5 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                />
-              </div>
-
-              {/* Assigned Staff Multiselect */}
-              <div>
-                <label className="block text-xs font-bold text-ink uppercase mb-1">
-                  Assign Staff Operators ({createForm.staff_ids.length} Selected)
-                </label>
-                <div className="max-h-36 overflow-y-auto border border-stone-200 rounded-xl p-2.5 space-y-1.5 bg-cream-soft">
-                  {availableStaff.map((staff) => (
-                    <label
-                      key={staff.id}
-                      className="flex items-center gap-2.5 text-xs text-ink cursor-pointer hover:bg-white p-1.5 rounded-lg transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={createForm.staff_ids.includes(staff.id)}
-                        onChange={() => toggleStaffSelection(staff.id, false)}
-                        className="rounded text-maroon focus:ring-maroon border-stone-300"
-                      />
-                      <span className="font-semibold">{staff.name}</span>
-                      <span className="text-ink-soft">
-                        ({staff.role || 'Staff'})
-                      </span>
-                    </label>
-                  ))}
-                  {availableStaff.length === 0 && (
-                    <div className="text-xs text-ink-soft py-2 text-center">
-                      No active staff available. Create staff under Staff
-                      Management.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-ink-soft hover:text-ink"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading === 'create'}
-                  className="px-5 py-2.5 rounded-xl bg-maroon text-white text-sm font-semibold hover:bg-maroon-light transition-all shadow-sm disabled:opacity-50"
-                >
-                  {actionLoading === 'create' ? 'Creating...' : 'Create Gate'}
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Gate Code (Unique) *
+              </label>
+              <input
+                type="text"
+                required
+                value={createForm.code}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    code: e.target.value.toUpperCase(),
+                  })
+                }
+                placeholder="e.g. G1, G2, VIP-1"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm uppercase focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Gate Type *
+              </label>
+              <select
+                required
+                value={createForm.type}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, type: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              >
+                {GATE_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type} Entry
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Status *
+              </label>
+              <select
+                required
+                value={createForm.status}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, status: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-ink uppercase mb-1">
+              Location / Landmark
+            </label>
+            <input
+              type="text"
+              value={createForm.location}
+              onChange={(e) =>
+                setCreateForm({ ...createForm, location: e.target.value })
+              }
+              placeholder="e.g. Near West Parking, Main Pavilion"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-ink uppercase mb-1">
+              Description / Notes
+            </label>
+            <textarea
+              rows={2}
+              value={createForm.description}
+              onChange={(e) =>
+                setCreateForm({
+                  ...createForm,
+                  description: e.target.value,
+                })
+              }
+              placeholder="Operational instructions or notes for scanning operators"
+              className="w-full px-3.5 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+            />
+          </div>
+
+          {/* Assigned Staff Multiselect */}
+          <div>
+            <label className="block text-xs font-bold text-ink uppercase mb-1">
+              Assign Staff Operators ({createForm.staff_ids.length} Selected)
+            </label>
+            <div className="max-h-36 overflow-y-auto border border-stone-200 rounded-xl p-2.5 space-y-1.5 bg-cream-soft">
+              {availableStaff.map((staff) => (
+                <label
+                  key={staff.id}
+                  className="flex items-center gap-2.5 text-xs text-ink cursor-pointer hover:bg-white p-1.5 rounded-lg transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={createForm.staff_ids.includes(staff.id)}
+                    onChange={() => toggleStaffSelection(staff.id, false)}
+                    className="rounded text-maroon focus:ring-maroon border-stone-300"
+                  />
+                  <span className="font-semibold">{staff.name}</span>
+                  <span className="text-ink-soft">
+                    ({staff.role || 'Staff'})
+                  </span>
+                </label>
+              ))}
+              {availableStaff.length === 0 && (
+                <div className="text-xs text-ink-soft py-2 text-center">
+                  No active staff available. Create staff under Staff
+                  Management.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(false)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-ink-soft hover:text-ink cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={actionLoading === 'create'}
+              className="px-5 py-2.5 rounded-xl bg-maroon text-white text-sm font-semibold hover:bg-maroon-light transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              {actionLoading === 'create' ? 'Creating...' : 'Create Gate'}
+            </button>
+          </div>
+        </form>
+      </AdminModal>
 
       {/* EDIT GATE MODAL */}
-      {showEditModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 border border-stone-200 shadow-xl">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-              <h3 className="font-outfit font-bold text-lg text-maroon flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-gold" />
-                <span>Edit Event Gate</span>
-              </h3>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="text-ink-soft hover:text-ink"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <AdminModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit Event Gate"
+        subtitle="Update gate name, location, status, or staff assignment"
+        icon={<Edit3 className="w-5 h-5 text-gold" />}
+        maxWidth="lg"
+      >
+        <form onSubmit={handleEditSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Gate Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              />
             </div>
 
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Gate Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editForm.name}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, name: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Gate Code (Unique) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editForm.code}
-                    onChange={(e) =>
-                      setEditForm({
-                        ...editForm,
-                        code: e.target.value.toUpperCase(),
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm uppercase focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Gate Type *
-                  </label>
-                  <select
-                    required
-                    value={editForm.type}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, type: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  >
-                    {GATE_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type} Entry
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">
-                    Status *
-                  </label>
-                  <select
-                    required
-                    value={editForm.status}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, status: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-ink uppercase mb-1">
-                  Location / Landmark
-                </label>
-                <input
-                  type="text"
-                  value={editForm.location}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, location: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-ink uppercase mb-1">
-                  Description / Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={editForm.description}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, description: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
-                />
-              </div>
-
-              {/* Assigned Staff Multiselect */}
-              <div>
-                <label className="block text-xs font-bold text-ink uppercase mb-1">
-                  Assign Staff Operators ({editForm.staff_ids.length} Selected)
-                </label>
-                <div className="max-h-36 overflow-y-auto border border-stone-200 rounded-xl p-2.5 space-y-1.5 bg-cream-soft">
-                  {availableStaff.map((staff) => (
-                    <label
-                      key={staff.id}
-                      className="flex items-center gap-2.5 text-xs text-ink cursor-pointer hover:bg-white p-1.5 rounded-lg transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={editForm.staff_ids.includes(staff.id)}
-                        onChange={() => toggleStaffSelection(staff.id, true)}
-                        className="rounded text-maroon focus:ring-maroon border-stone-300"
-                      />
-                      <span className="font-semibold">{staff.name}</span>
-                      <span className="text-ink-soft">
-                        ({staff.role || 'Staff'})
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-ink-soft hover:text-ink"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading === 'edit'}
-                  className="px-5 py-2.5 rounded-xl bg-maroon text-white text-sm font-semibold hover:bg-maroon-light transition-all shadow-sm disabled:opacity-50"
-                >
-                  {actionLoading === 'edit' ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Gate Code (Unique) *
+              </label>
+              <input
+                type="text"
+                required
+                value={editForm.code}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    code: e.target.value.toUpperCase(),
+                  })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm uppercase focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              />
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* SAFE DELETE CONFIRMATION MODAL */}
-      {gateToDelete && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
-              </div>
-              <div>
-                <h3 className="font-outfit font-bold text-lg text-ink">
-                  Remove Gate &lsquo;{gateToDelete.name}&rsquo;?
-                </h3>
-                <span className="text-xs text-ink-soft">
-                  Code: {gateToDelete.code || gateToDelete.gateNumber}
-                </span>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Gate Type *
+              </label>
+              <select
+                required
+                value={editForm.type}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, type: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              >
+                {GATE_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type} Entry
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <p className="text-xs text-ink-soft leading-relaxed">
-              Are you sure you want to remove this gate?
-            </p>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-normal">
-              <strong>Historical Data Protection:</strong> If this gate has any
-              historical scan or check-in records, it will <em>not</em> be
-              deleted. Instead, it will be safely deactivated to protect audit
-              compliance.
+            <div>
+              <label className="block text-xs font-bold text-ink uppercase mb-1">
+                Status *
+              </label>
+              <select
+                required
+                value={editForm.status}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, status: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-ink uppercase mb-1">
+              Location / Landmark
+            </label>
+            <input
+              type="text"
+              value={editForm.location}
+              onChange={(e) =>
+                setEditForm({ ...editForm, location: e.target.value })
+              }
+              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-ink uppercase mb-1">
+              Description / Notes
+            </label>
+            <textarea
+              rows={2}
+              value={editForm.description}
+              onChange={(e) =>
+                setEditForm({ ...editForm, description: e.target.value })
+              }
+              className="w-full px-3.5 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon"
+            />
+          </div>
+
+          {/* Assigned Staff Multiselect */}
+          <div>
+            <label className="block text-xs font-bold text-ink uppercase mb-1">
+              Assign Staff Operators ({editForm.staff_ids.length} Selected)
+            </label>
+            <div className="max-h-36 overflow-y-auto border border-stone-200 rounded-xl p-2.5 space-y-1.5 bg-cream-soft">
+              {availableStaff.map((staff) => (
+                <label
+                  key={staff.id}
+                  className="flex items-center gap-2.5 text-xs text-ink cursor-pointer hover:bg-white p-1.5 rounded-lg transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={editForm.staff_ids.includes(staff.id)}
+                    onChange={() => toggleStaffSelection(staff.id, true)}
+                    className="rounded text-maroon focus:ring-maroon border-stone-300"
+                  />
+                  <span className="font-semibold">{staff.name}</span>
+                  <span className="text-ink-soft">
+                    ({staff.role || 'Staff'})
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(false)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-ink-soft hover:text-ink cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={actionLoading === 'edit'}
+              className="px-5 py-2.5 rounded-xl bg-maroon text-white text-sm font-semibold hover:bg-maroon-light transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              {actionLoading === 'edit' ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </AdminModal>
+
+      {/* SAFE DELETE / SUPER ADMIN PERMANENT DELETE CONFIRMATION MODAL */}
+      <AdminModal
+        isOpen={!!gateToDelete}
+        onClose={() => setGateToDelete(null)}
+        title={
+          isSuperAdmin
+            ? `Permanently Delete Gate '${gateToDelete?.name || ''}'?`
+            : `Remove Gate '${gateToDelete?.name || ''}'?`
+        }
+        subtitle={
+          gateToDelete ? `Gate Code: ${gateToDelete.code || gateToDelete.gateNumber}` : ''
+        }
+        icon={
+          <div className="w-9 h-9 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-rose-600" />
+          </div>
+        }
+        maxWidth="md"
+      >
+        {gateToDelete && (
+          <div className="space-y-4">
+            {isSuperAdmin ? (
+              <>
+                <p className="text-xs text-ink-soft leading-relaxed">
+                  You are performing a <strong>permanent deletion</strong> as Super Admin.
+                </p>
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 leading-normal space-y-1.5">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-700">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>SUPER ADMIN PERMANENT DELETION PRIVILEGE</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    This action will <strong>permanently remove</strong> this gate from the system.
+                    Turnstile staff assignments and gate-level records will be cleaned up safely in a transaction.
+                    Attendee passes and customer orders will remain completely untouched.
+                  </p>
+                  <p className="text-[11px] font-bold text-rose-800">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-ink-soft leading-relaxed">
+                  Are you sure you want to remove this gate?
+                </p>
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-normal space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Historical Data Protection</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    If this gate has any historical scan or check-in records, it will <em>not</em> be deleted.
+                    Instead, it will be safely deactivated to protect audit compliance and reporting.
+                  </p>
+                </div>
+              </>
+            )}
 
             <div className="pt-2 flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setGateToDelete(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink cursor-pointer"
               >
                 Cancel
               </button>
@@ -1098,63 +1127,93 @@ export default function AdminGatesPage() {
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={actionLoading === `delete-${gateToDelete.id}`}
-                className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50"
+                className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {actionLoading === `delete-${gateToDelete.id}`
                   ? 'Processing...'
+                  : isSuperAdmin
+                  ? 'Permanently Delete Gate'
                   : 'Confirm Removal'}
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </AdminModal>
 
       {/* BULK DELETE CONFIRMATION MODAL */}
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border border-stone-200 shadow-xl">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
+      <AdminModal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        title={
+          isSuperAdmin
+            ? `Bulk Permanently Delete ${selectedGateIds.size} Gate${selectedGateIds.size > 1 ? 's' : ''}`
+            : 'Bulk Delete Gates'
+        }
+        subtitle={`${selectedGateIds.size} gate${selectedGateIds.size > 1 ? 's' : ''} selected`}
+        icon={
+          <div className="w-9 h-9 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-rose-600" />
+          </div>
+        }
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          {isSuperAdmin ? (
+            <>
+              <p className="text-xs text-ink-soft leading-relaxed">
+                You are about to permanently delete <strong>{selectedGateIds.size}</strong> selected gate{selectedGateIds.size > 1 ? 's' : ''} as Super Admin.
+              </p>
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 leading-normal space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-rose-700">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>SUPER ADMIN BULK PERMANENT DELETION</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  All selected gates will be permanently removed. Gate-level associations will be cleanly unlinked in a single database transaction. This action cannot be undone.
+                </p>
               </div>
-              <div>
-                <h3 className="font-outfit font-bold text-lg text-ink">
-                  Bulk Delete Gates
-                </h3>
-                <span className="text-xs text-ink-soft">
-                  {selectedGateIds.size} gate{selectedGateIds.size > 1 ? 's' : ''} selected
-                </span>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-ink-soft leading-relaxed">
+                Are you sure you want to remove the {selectedGateIds.size} selected gate{selectedGateIds.size > 1 ? 's' : ''}?
+              </p>
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-normal space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>Historical Data Protection</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Any selected gates that have historical scan or check-in records will <em>not</em> be deleted. They will be safely deactivated to preserve complete audit and telemetry reporting.
+                </p>
               </div>
-            </div>
+            </>
+          )}
 
-            <p className="text-xs text-ink-soft leading-relaxed">
-              Are you sure you want to remove the {selectedGateIds.size} selected gate{selectedGateIds.size > 1 ? 's' : ''}?
-            </p>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-normal">
-              <strong>Historical Data Protection:</strong> Any selected gates that have historical scan or check-in records will <em>not</em> be deleted. They will be safely deactivated to preserve complete audit and telemetry reporting.
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowBulkDeleteModal(false)}
-                disabled={bulkDeleteLoading}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmBulkDelete}
-                disabled={bulkDeleteLoading}
-                className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50"
-              >
-                {bulkDeleteLoading ? 'Processing...' : `Confirm Delete (${selectedGateIds.size})`}
-              </button>
-            </div>
+          <div className="pt-2 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowBulkDeleteModal(false)}
+              disabled={bulkDeleteLoading}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink disabled:opacity-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmBulkDelete}
+              disabled={bulkDeleteLoading}
+              className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              {bulkDeleteLoading
+                ? 'Processing...'
+                : isSuperAdmin
+                ? `Permanently Delete (${selectedGateIds.size})`
+                : `Confirm Delete (${selectedGateIds.size})`}
+            </button>
           </div>
         </div>
-      )}
+      </AdminModal>
     </div>
   );
 }

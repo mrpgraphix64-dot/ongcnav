@@ -224,6 +224,61 @@ describe('GatesService', () => {
       expect(prisma.gateUser.deleteMany).toHaveBeenCalledWith({ where: { gateId: BigInt(9) } });
       expect(prisma.gate.delete).toHaveBeenCalledWith({ where: { id: BigInt(9) } });
     });
+
+    it('should permanently delete gate with history when requested by SUPER_ADMIN with force=true', async () => {
+      prisma.gate.findUnique.mockResolvedValue({
+        id: BigInt(2),
+        name: 'Historic Gate',
+        _count: {
+          dailyCheckins: 25,
+          scanLogs: 60,
+        },
+      });
+
+      const res = await service.remove(
+        BigInt(2),
+        { role: 'SUPER_ADMIN', id: BigInt(1) },
+        true,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.action).toBe('deleted');
+      expect(res.message).toContain('SUPER_ADMIN');
+      expect(prisma.gate.delete).toHaveBeenCalledWith({ where: { id: BigInt(2) } });
+    });
+
+    it('should NOT permanently delete gate with history when requested by EVENT_ADMIN even if force=true', async () => {
+      prisma.gate.findUnique.mockResolvedValue({
+        id: BigInt(3),
+        name: 'Protected Gate',
+        _count: {
+          dailyCheckins: 10,
+          scanLogs: 20,
+        },
+      });
+
+      prisma.gate.update.mockResolvedValue({
+        id: BigInt(3),
+        name: 'Protected Gate',
+        status: GateStatus.INACTIVE,
+      });
+
+      const res = await service.remove(
+        BigInt(3),
+        { role: 'EVENT_ADMIN', id: BigInt(4) },
+        true,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.action).toBe('deactivated');
+      expect(res.warning).toContain('cannot be permanently deleted');
+      expect(prisma.gate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(3) },
+          data: { status: GateStatus.INACTIVE },
+        }),
+      );
+    });
   });
 
   describe('toggleStatus', () => {
