@@ -8,7 +8,6 @@ import {
   HelpCircle,
   Mail,
   Search,
-  Lock,
 } from 'lucide-react';
 
 export default function PublicFooter() {
@@ -114,15 +113,12 @@ export default function PublicFooter() {
 
         </div>
 
-        {/* COPYRIGHT & DISCREET ADMIN */}
+        {/* COPYRIGHT & FOOTER LINKS */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-cream/50">
           <p>&copy; 2026 ONGC Navratri. All rights reserved.</p>
           <div className="flex items-center gap-6">
             <Link href="/information" className="hover:text-gold/80 transition-colors">Event Guidelines</Link>
             <Link href="/faq" className="hover:text-gold/80 transition-colors">Help</Link>
-            <Link href="/login" className="hover:text-gold/80 transition-colors opacity-60 hover:opacity-100 flex items-center gap-1 text-[11px]">
-              <Lock className="w-3 h-3" /> Admin
-            </Link>
           </div>
         </div>
 

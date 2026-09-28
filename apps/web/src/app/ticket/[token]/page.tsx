@@ -27,7 +27,9 @@ export default function TicketPassPage() {
   useEffect(() => {
     // Ensure viewport starts at the top on mount and re-verifies at the top
     // when asynchronous ticket data finishes loading and the full pass renders.
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
   }, [token, loading]);
 
   useEffect(() => {

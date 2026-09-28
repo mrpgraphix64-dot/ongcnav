@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
@@ -324,6 +325,20 @@ export default function BookPassPage() {
   const [isTestOrder, setIsTestOrder] = useState(false);
   const [confirmedOrderSummary, setConfirmedOrderSummary] = useState<ConfirmedOrderSummary | null>(null);
 
+  const router = useRouter();
+
+  const handleViewTicket = (e: React.MouseEvent<HTMLAnchorElement>, qrCodeToken: string) => {
+    // If opening in a new tab via modifier keys, allow native browser behavior
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.button !== 0) {
+      return;
+    }
+    e.preventDefault();
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    router.push(`/ticket/${qrCodeToken}`);
+  };
+
   const handleDownloadPass = (pass: GeneratedPass, passLabel: string, formattedDates: string) => {
     if (pass.qrSvg) {
       const passSvg = generateDownloadablePassSvg({
@@ -471,6 +486,9 @@ export default function BookPassPage() {
           customerEmail: orderData.customer?.email || email.trim().toLowerCase(),
           customerName: orderData.customer?.name || name.trim(),
         });
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
         setSubmitting(false);
         return;
       }
@@ -577,6 +595,9 @@ export default function BookPassPage() {
           customerEmail: res.customerEmail || pendingOrder?.customer?.email || email.trim().toLowerCase(),
           customerName: pendingOrder?.customer?.name || name.trim(),
         });
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
         setPendingOrder(null);
       } else {
         throw new Error(res.message || 'Payment signature verification failed.');
@@ -759,7 +780,7 @@ export default function BookPassPage() {
                         <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                           <Link
                             href={`/ticket/${pass.qrCodeToken}`}
-                            scroll={true}
+                            onClick={(e) => handleViewTicket(e, pass.qrCodeToken)}
                             className="flex-1 py-3 px-4 rounded-xl bg-gold text-maroon-deep font-bold text-xs sm:text-sm hover:bg-gold-light transition-all text-center border border-maroon/20 flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                           >
                             <ExternalLink className="w-4 h-4" />

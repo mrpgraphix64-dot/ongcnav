@@ -14,7 +14,7 @@ interface GalleryVideoItem {
   caption: string;
 }
 
-const categories = ['ALL', 'GARBA', 'CULTURE', 'CELEBRATION', 'MANDLI', 'MOMENTS'];
+const categories = ['ALL', 'GARBA', 'CULTURE', 'CELEBRATION', 'LIVE GARBA', 'MOMENTS'];
 
 const galleryVideos: GalleryVideoItem[] = [
   {
@@ -41,7 +41,7 @@ const galleryVideos: GalleryVideoItem[] = [
   {
     id: 'garba-4',
     title: 'Mandli Garba Traditional Steps',
-    category: 'MANDLI',
+    category: 'LIVE GARBA',
     videoSrc: '/Video/Garba4.mp4',
     caption: 'Authentic acoustic Mandli Garba with traditional clapping rhythms under the midnight starlit sky.',
   },
@@ -124,10 +124,10 @@ export default function GalleryPage() {
                 <div
                   key={item.id}
                   onClick={() => setActiveVideo(item)}
-                  className="bg-white rounded-3xl overflow-hidden border border-stone-200/90 shadow-sm hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col justify-between"
+                  className="bg-white rounded-3xl overflow-hidden border border-stone-200/90 shadow-sm hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col"
                 >
-                  {/* Video Preview Wrap */}
-                  <div className="relative overflow-hidden bg-stone-900 aspect-16/10 flex items-center justify-center">
+                  {/* Video Preview Wrap - Consistent 16:9 responsive media area */}
+                  <div className="relative overflow-hidden bg-stone-900 aspect-video w-full flex items-center justify-center">
                     <video
                       src={item.videoSrc}
                       preload="metadata"
@@ -163,7 +163,7 @@ export default function GalleryPage() {
                   </div>
 
                   {/* Card Caption Info */}
-                  <div className="p-5 space-y-1.5 bg-white">
+                  <div className="p-5 space-y-1.5 bg-white flex-1 flex flex-col justify-start">
                     <h3 className="font-cinzel font-bold text-base text-ink group-hover:text-maroon transition-colors line-clamp-1">
                       {item.title}
                     </h3>
