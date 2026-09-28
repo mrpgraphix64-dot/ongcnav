@@ -42,14 +42,14 @@ describe('Commercial Constants & Server-Authoritative Price Calculation', () => 
       }).toThrow('A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.');
     });
 
-    it('rejects multiple different booking dates for Any Day Pass', () => {
-      expect(() => {
-        calculateServerPricePaise(
-          'COMMERCIAL_ANY_DAY',
-          ['2026-10-13', '2026-10-14'],
-          2,
-        );
-      }).toThrow('A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.');
+    it('Any Day Pass returns empty validDates even if dates are passed', () => {
+      const res = calculateServerPricePaise(
+        'COMMERCIAL_ANY_DAY',
+        ['2026-10-13', '2026-10-14'],
+        2,
+      );
+      expect(res.validDates).toEqual([]);
+      expect(res.totalAmountPaise).toBe(55800);
     });
 
     it('accepts duplicate submissions of the same date by deduplicating to exactly one booking date', () => {
@@ -67,13 +67,13 @@ describe('Commercial Constants & Server-Authoritative Price Calculation', () => 
       expect(res.validDates).toEqual(['2026-10-11']);
     });
 
-    it('correctly calculates price for Any Day Pass (₹279 / 27,900 paise, original ₹499) for exactly one booking date', () => {
-      const res = calculateServerPricePaise('COMMERCIAL_ANY_DAY', ['2026-10-14'], 2);
+    it('correctly calculates price for Any Day Pass (₹279 / 27,900 paise, original ₹499) without requiring date selection', () => {
+      const res = calculateServerPricePaise('COMMERCIAL_ANY_DAY', undefined, 2);
       expect(res.unitPricePaise).toBe(27900); // ₹279.00
       expect(res.originalPricePaise).toBe(49900); // ₹499.00
       expect(res.totalAmountPaise).toBe(55800); // ₹558.00 for 2 passes
       expect(res.totalOriginalAmountPaise).toBe(99800);
-      expect(res.validDates).toEqual(['2026-10-14']);
+      expect(res.validDates).toEqual([]);
     });
 
     it('Season Pass automatically and authoritatively covers all 9 event dates even if frontend sends an arbitrary or single date', () => {

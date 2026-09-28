@@ -55,9 +55,10 @@ export class CommercialController {
   @ApiOperation({ summary: 'Get order details, payment status, and passes by order number' })
   async getOrder(
     @Param('orderNumber') orderNumber: string,
+    @Query('email') email?: string,
     @Query('mobile') mobile?: string,
   ) {
-    return this.commercialService.getOrder(orderNumber, mobile);
+    return this.commercialService.getOrder(orderNumber, email, mobile);
   }
 
   @Post('orders/:orderNumber/email')
@@ -68,7 +69,8 @@ export class CommercialController {
     @Req() req: Request,
   ) {
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.ip;
-    return this.commercialService.resendTicketEmail(orderNumber, body.mobile, clientIp);
+    const identifier = (body.email || body.mobile || '').trim();
+    return this.commercialService.resendTicketEmail(orderNumber, identifier, clientIp);
   }
 }
 

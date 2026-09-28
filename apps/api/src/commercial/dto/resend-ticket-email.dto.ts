@@ -1,13 +1,21 @@
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ResendTicketEmailDto {
-  @ApiProperty({
-    example: '9876543210',
-    description: 'Registered customer mobile number used during pass booking',
+  @ApiPropertyOptional({
+    example: 'test@example.com',
+    description: 'Registered customer email address used during pass booking',
   })
+  @IsOptional()
+  @IsEmail({}, { message: 'Please provide a valid registered email address.' })
+  email?: string;
+
+  @ApiPropertyOptional({
+    example: '9876543210',
+    description: 'Registered customer mobile number used during pass booking (legacy fallback)',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Customer mobile number is required to verify identity.' })
   @MaxLength(20)
-  mobile: string;
+  mobile?: string;
 }

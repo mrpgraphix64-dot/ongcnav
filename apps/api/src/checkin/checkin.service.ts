@@ -317,6 +317,7 @@ export class CheckinService {
       include: {
         employee: true,
         familyMember: true,
+        order: true,
       },
     });
 
@@ -362,12 +363,53 @@ export class CheckinService {
       };
     }
 
+    // Determine if this is an Any Day Pass (flexible single-night entry pass)
+    const isAnyDayPass =
+      (attendee as any).order?.ticketType === 'COMMERCIAL_ANY_DAY' ||
+      attendee.category === 'COMMERCIAL_ANY_DAY' ||
+      attendee.category === 'Any Day Pass';
+
     // 8. Event Date Booking Check — this person's OWN dates, independent of
-    // the employee they're linked to and any other family member. Falls
-    // back to the employee's legacy shared bookingDays for attendees
-    // created before per-person dates existed. Also validates commercial passes.
-    const bookingDays = resolveBookingDays(attendee);
-    if (bookingDays.length > 0 && !bookingDays.includes(activeDate)) {
+    // the employee they're linked to and any other family member.
+    // For Any Day Pass: valid for ONE entry on ANY ONE official event night (11-19 Oct 2026).
+    if (isAnyDayPass) {
+      if (!OFFICIAL_EVENT_DATES.includes(activeDate)) {
+        await this.recordScanLog({
+          attendeeId: attendee.id,
+          gateId,
+          scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+          result: CheckinResult.NOT_BOOKED_TODAY,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
+        });
+
+        if (isSuperAdminTest && scannedByUser?.id) {
+          await this.recordSimulationAudit({
+            userId: scannedByUser.id,
+            testEventDate: activeDate,
+            gateId: gate.id.toString(),
+            token,
+            result: CheckinResult.NOT_BOOKED_TODAY,
+            attendeeId: attendee.id.toString(),
+          });
+        }
+
+        return {
+          success: false,
+          result: CheckinResult.NOT_BOOKED_TODAY,
+          message: `Pass is not valid for date (${activeDate}). Any Day Pass is valid for one entry on any official event night (11 Oct – 19 Oct 2026).`,
+          statusCode: 403,
+          attendeeName: attendee.familyMember
+            ? attendee.familyMember.name
+            : (attendee.employee?.name || attendee.name || 'Attendee'),
+        };
+      }
+    } else {
+      const bookingDays = resolveBookingDays(attendee);
+      if (bookingDays.length > 0 && !bookingDays.includes(activeDate)) {
         await this.recordScanLog({
           attendeeId: attendee.id,
           gateId,
@@ -401,6 +443,7 @@ export class CheckinService {
             : (attendee.employee?.name || attendee.name || 'Attendee'),
         };
       }
+    }
 
     // 9. Gate Type Privilege Check
     const des = (attendee.employee?.designation || attendee.category || '').toLowerCase();
@@ -418,7 +461,10 @@ export class CheckinService {
     }
 
     // 10. ATOMIC CONCURRENCY LOCK (Redis + DB Transaction)
-    const lockKey = `lock:checkin:${attendee.id.toString()}:${activeDate}`;
+    // For Any Day Pass, lock across all event dates because it can only be redeemed once in total
+    const lockKey = isAnyDayPass
+      ? `lock:checkin:${attendee.id.toString()}`
+      : `lock:checkin:${attendee.id.toString()}:${activeDate}`;
     const lockAcquired = await this.redis.acquireLock(lockKey, 5000);
 
     if (!lockAcquired) {
@@ -436,16 +482,27 @@ export class CheckinService {
       const checkinResult = await this.prisma.$transaction(
         async (tx) => {
           // Lock attendee row or check for existing daily_checkin
-          const existingCheckin = await tx.dailyCheckin.findFirst({
-            where: {
-              attendeeId: attendee.id,
-              eventDate: activeDate,
-              status: CheckinStatus.SUCCESS as any,
-            },
-            include: {
-              gate: true,
-            },
-          });
+          // For Any Day Pass: verify no prior check-in on ANY event date
+          const existingCheckin = isAnyDayPass
+            ? await tx.dailyCheckin.findFirst({
+                where: {
+                  attendeeId: attendee.id,
+                  status: CheckinStatus.SUCCESS as any,
+                },
+                include: {
+                  gate: true,
+                },
+              })
+            : await tx.dailyCheckin.findFirst({
+                where: {
+                  attendeeId: attendee.id,
+                  eventDate: activeDate,
+                  status: CheckinStatus.SUCCESS as any,
+                },
+                include: {
+                  gate: true,
+                },
+              });
 
           if (existingCheckin) {
             return {
@@ -510,10 +567,15 @@ export class CheckinService {
           second: '2-digit',
         });
 
+        const duplicateMsg =
+          isAnyDayPass && prev.eventDate !== activeDate
+            ? `Already checked in on ${prev.eventDate} at ${timeStr} (Gate: ${prev.gate?.name || 'Gate ' + prev.gateId}). Any Day Pass has already been used.`
+            : `Already checked in at ${timeStr} (Gate: ${prev.gate?.name || 'Gate ' + prev.gateId})`;
+
         return {
           success: false,
           result: CheckinResult.ALREADY_CHECKED_IN,
-          message: `Already checked in at ${timeStr} (Gate: ${prev.gate?.name || 'Gate ' + prev.gateId})`,
+          message: duplicateMsg,
           statusCode: 409,
           checkedInAt: prev.checkinTime,
           gateName: prev.gate?.name,

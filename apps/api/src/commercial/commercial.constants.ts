@@ -87,8 +87,8 @@ export const COMMERCIAL_TICKET_TYPES: Record<string, CommercialTicketTypeConfig>
  */
 export function calculateServerPricePaise(
   ticketTypeCode: string,
-  selectedDates: string[],
-  quantity: number,
+  selectedDates?: string[],
+  quantity?: number,
 ): {
   unitPricePaise: number;
   originalPricePaise: number;
@@ -97,7 +97,7 @@ export function calculateServerPricePaise(
   validDates: string[];
 } {
   const config = COMMERCIAL_TICKET_TYPES[ticketTypeCode] || COMMERCIAL_TICKET_TYPES.COMMERCIAL_DAILY;
-  const qty = Math.max(1, Math.min(10, Math.floor(quantity)));
+  const qty = Math.max(1, Math.min(10, Math.floor(quantity || 1)));
 
   let validDates: string[];
   let unitPricePaise: number;
@@ -105,6 +105,12 @@ export function calculateServerPricePaise(
 
   if (config.isSeasonPass) {
     validDates = [...COMMERCIAL_EVENT_DATES];
+    unitPricePaise = config.unitPricePaise;
+    originalPricePaise = config.originalPricePaise;
+  } else if (ticketTypeCode === 'COMMERCIAL_ANY_DAY') {
+    // Any Day Pass is a flexible single-night entry pass valid on any one official event date.
+    // No specific booking date is required or assigned.
+    validDates = [];
     unitPricePaise = config.unitPricePaise;
     originalPricePaise = config.originalPricePaise;
   } else {

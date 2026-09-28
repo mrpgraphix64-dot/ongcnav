@@ -49,14 +49,14 @@ export class CreateCommercialOrderDto {
   @IsString()
   ticketType?: string;
 
-  @ApiProperty({
-    example: ['2026-10-11', '2026-10-12'],
-    description: 'Selected event date(s) (YYYY-MM-DD)',
+  @ApiPropertyOptional({
+    example: ['2026-10-11'],
+    description: 'Selected event date(s) (YYYY-MM-DD). Optional for Any Day Pass.',
   })
+  @IsOptional()
   @IsArray({ message: 'Selected dates must be provided as an array.' })
   @IsString({ each: true })
-  @ArrayMinSize(1, { message: 'Please select at least one event date.' })
-  selectedDates: string[];
+  selectedDates?: string[];
 
   @ApiProperty({ example: 1, description: 'Number of passes (1 to 10)' })
   @IsInt({ message: 'Quantity must be an integer.' })

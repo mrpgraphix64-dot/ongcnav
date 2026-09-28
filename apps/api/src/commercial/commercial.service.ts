@@ -119,31 +119,68 @@ export class CommercialService {
   /**
    * Resilient asynchronous transactional email trigger.
    * Runs in background so payment confirmation is never delayed or blocked by email dispatch.
-   * Logs safely without exposing secrets, QR tokens, or email bodies.
+   * Implements automated retries and delivery telemetry without exposing secrets or QR tokens.
    */
   sendTicketEmailSafe(order: any, passes: any[]): void {
     if (!order?.customerEmail) return;
 
+    const recipientEmail = order.customerEmail.trim();
+    const maskedEmail = this.maskCustomerEmail(recipientEmail);
+    const orderNumber = order.orderNumber;
+
     setImmediate(async () => {
-      try {
-        await this.mailService.sendCommercialTicketEmail({
-          orderNumber: order.orderNumber,
-          customerName: order.customerName,
-          customerEmail: order.customerEmail,
-          ticketType: order.ticketType,
-          selectedDates: (order.selectedDates as string[]) || [],
-          quantity: order.quantity || passes.length,
-          amountInr: order.amountPaise ? order.amountPaise / 100 : 0,
-          passes: passes.map((p) => ({
-            ticketNumber: p.ticketNumber,
-            token: p.qrCodeToken,
-            category: p.category,
-            attendeeName: p.name,
-          })),
-        });
-      } catch (err: any) {
+      const maxAttempts = 3;
+      let attempt = 0;
+      let lastError = '';
+      let delivered = false;
+
+      while (attempt < maxAttempts && !delivered) {
+        attempt++;
+        try {
+          const mailResult = await this.mailService.sendCommercialTicketEmail({
+            orderNumber: order.orderNumber,
+            customerName: order.customerName,
+            customerEmail: recipientEmail,
+            ticketType: order.ticketType,
+            selectedDates: (order.selectedDates as string[]) || [],
+            quantity: order.quantity || passes.length,
+            amountInr: order.amountPaise ? order.amountPaise / 100 : 0,
+            passes: passes.map((p) => ({
+              ticketNumber: p.ticketNumber,
+              token: p.qrCodeToken,
+              category: p.category,
+              attendeeName: p.name,
+            })),
+          });
+
+          if (mailResult && mailResult.success) {
+            delivered = true;
+            this.logger.log(
+              `[EmailDelivery] Order: ${orderNumber} | Recipient: ${maskedEmail} | Attempt: ${attempt}/${maxAttempts} | Status: SENT | ProviderMsgId: ${mailResult.messageId || 'N/A'}`,
+            );
+            return;
+          } else {
+            lastError = mailResult?.error || 'Unknown provider error';
+            this.logger.warn(
+              `[EmailDelivery] Order: ${orderNumber} | Recipient: ${maskedEmail} | Attempt: ${attempt}/${maxAttempts} | Status: FAILED | Reason: ${lastError}`,
+            );
+          }
+        } catch (err: any) {
+          lastError = err?.message || 'Network error';
+          this.logger.warn(
+            `[EmailDelivery] Order: ${orderNumber} | Recipient: ${maskedEmail} | Attempt: ${attempt}/${maxAttempts} | Status: FAILED | Reason: ${lastError}`,
+          );
+        }
+
+        if (attempt < maxAttempts) {
+          // Linear backoff before retry (1s, 2s)
+          await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+        }
+      }
+
+      if (!delivered) {
         this.logger.error(
-          `Safe email error: Failed to dispatch ticket email for order ${order.orderNumber}: ${err?.message || 'Unknown error'}`,
+          `[EmailDelivery] Order: ${orderNumber} | Recipient: ${maskedEmail} | Status: ALL_RETRIES_EXHAUSTED | FailureReason: ${lastError}. Order remains confirmed. Customer may retrieve passes anytime via /my-tickets using Order Number and registered email without recharging.`,
         );
       }
     });
@@ -303,7 +340,7 @@ export class CommercialService {
                 name: newOrder.customerName,
                 mobile: newOrder.customerMobile,
                 email: newOrder.customerEmail,
-                category: 'Commercial Pass',
+                category: newOrder.ticketType === 'COMMERCIAL_ANY_DAY' ? 'Any Day Pass' : (newOrder.ticketType === 'COMMERCIAL_SEASON' ? 'Season Pass' : (newOrder.ticketType === 'COMMERCIAL_MANDLI' ? 'Mandli Pass' : 'Daily Pass')),
                 ticketNumber,
                 qrCodeToken: qrToken,
                 status: AttendeeStatus.ACTIVE,
@@ -500,7 +537,7 @@ export class CommercialService {
               name: order.customerName,
               mobile: order.customerMobile,
               email: order.customerEmail,
-              category: 'Commercial Pass',
+              category: order.ticketType === 'COMMERCIAL_ANY_DAY' ? 'Any Day Pass' : (order.ticketType === 'COMMERCIAL_SEASON' ? 'Season Pass' : (order.ticketType === 'COMMERCIAL_MANDLI' ? 'Mandli Pass' : 'Daily Pass')),
               ticketNumber,
               qrCodeToken: qrToken,
               status: AttendeeStatus.ACTIVE,
@@ -635,7 +672,7 @@ export class CommercialService {
                   name: targetOrder.customerName,
                   mobile: targetOrder.customerMobile,
                   email: targetOrder.customerEmail,
-                  category: 'Commercial Pass',
+                  category: targetOrder.ticketType === 'COMMERCIAL_ANY_DAY' ? 'Any Day Pass' : (targetOrder.ticketType === 'COMMERCIAL_SEASON' ? 'Season Pass' : (targetOrder.ticketType === 'COMMERCIAL_MANDLI' ? 'Mandli Pass' : 'Daily Pass')),
                   ticketNumber,
                   qrCodeToken: qrToken,
                   status: AttendeeStatus.ACTIVE,
@@ -680,16 +717,26 @@ export class CommercialService {
     return { success: true };
   }
 
-  async getOrder(orderOrTicketNumber: string, mobileQuery?: string) {
+  async getOrder(orderOrTicketNumber: string, emailQuery?: string, mobileQuery?: string) {
     const rawIdentifier = (orderOrTicketNumber || '').trim();
     if (!rawIdentifier) {
       throw new NotFoundException('Order number or ticket number is required.');
     }
 
     const cleanIdentifier = rawIdentifier.toUpperCase();
-    const cleanMobile = (mobileQuery || '').trim().replace(/\D/g, '');
-    if (!cleanMobile) {
-      throw new NotFoundException('Registered mobile number is required.');
+
+    // Determine whether emailQuery is an email or a mobile (if called with legacy mobile signature)
+    let email = (emailQuery || '').trim();
+    let mobile = (mobileQuery || '').trim();
+
+    if (email && !email.includes('@') && /^\d+$/.test(email.replace(/\D/g, '')) && !mobile) {
+      // Legacy argument signature where second param was mobile number
+      mobile = email;
+      email = '';
+    }
+
+    if (!email && !mobile) {
+      throw new NotFoundException('Registered email address is required.');
     }
 
     // 1. Try finding by orderNumber
@@ -733,16 +780,30 @@ export class CommercialService {
       throw new NotFoundException(`E-Pass record '${cleanIdentifier}' not found.`);
     }
 
-    // Security: Require mobile number and verify against order.customerMobile
-    const orderMobileDigits = (order.customerMobile || '').replace(/\D/g, '');
-    const isVerified =
-      cleanMobile.length >= 4 &&
-      (cleanMobile === orderMobileDigits ||
-        orderMobileDigits.endsWith(cleanMobile) ||
-        cleanMobile.endsWith(orderMobileDigits));
+    // Security: Require registered email match (or mobile fallback for backward compatibility)
+    let isVerified = false;
+    if (email) {
+      const cleanEmail = email.toLowerCase();
+      const orderEmail = (order.customerEmail || '').trim().toLowerCase();
+      isVerified = cleanEmail === orderEmail;
+      if (!isVerified) {
+        throw new NotFoundException('Verification failed: Invalid email address for this E-Pass.');
+      }
+    } else if (mobile) {
+      const cleanMobile = mobile.replace(/\D/g, '');
+      const orderMobileDigits = (order.customerMobile || '').replace(/\D/g, '');
+      isVerified =
+        cleanMobile.length >= 4 &&
+        (cleanMobile === orderMobileDigits ||
+          orderMobileDigits.endsWith(cleanMobile) ||
+          cleanMobile.endsWith(orderMobileDigits));
+      if (!isVerified) {
+        throw new NotFoundException('Verification failed: Invalid mobile number for this E-Pass.');
+      }
+    }
 
     if (!isVerified) {
-      throw new NotFoundException(`Verification failed: Invalid mobile number for this E-Pass.`);
+      throw new NotFoundException('Verification failed: Invalid credentials for this E-Pass.');
     }
 
     // If searching by ticket number, reorder attendees so the searched ticket is first
@@ -1190,15 +1251,15 @@ export class CommercialService {
    * 3. Sends strictly to the registered customerEmail, never to an arbitrary user email.
    * 4. Multi-level rate limiting (Redis or in-memory fallback).
    */
-  async resendTicketEmail(orderNumber: string, mobile: string, clientIp?: string) {
+  async resendTicketEmail(orderNumber: string, emailOrMobile: string, clientIp?: string) {
     const cleanOrderNumber = (orderNumber || '').trim().toUpperCase();
-    const cleanMobile = (mobile || '').trim();
+    const cleanInput = (emailOrMobile || '').trim();
 
     if (!cleanOrderNumber) {
       throw new BadRequestException('Order reference number is required.');
     }
-    if (!cleanMobile) {
-      throw new BadRequestException('Customer mobile number is required.');
+    if (!cleanInput) {
+      throw new BadRequestException('Registered email address or mobile number is required.');
     }
 
     // 1. Rate limiting check (max 3 requests per 10 minutes per order)
@@ -1270,13 +1331,18 @@ export class CommercialService {
       throw new BadRequestException('Tickets can only be emailed for confirmed, paid orders.');
     }
 
-    // 3. Verify mobile matches registered purchaser mobile
-    const isVerified =
-      cleanMobile === order.customerMobile ||
-      order.customerMobile.endsWith(cleanMobile);
+    // 3. Verify email or mobile matches registered purchaser
+    const isEmailInput = cleanInput.includes('@');
+    const isVerified = isEmailInput
+      ? cleanInput.toLowerCase() === (order.customerEmail || '').trim().toLowerCase()
+      : (cleanInput === order.customerMobile || order.customerMobile.endsWith(cleanInput));
 
     if (!isVerified) {
-      throw new BadRequestException('Verification failed: Mobile number does not match this order.');
+      throw new BadRequestException(
+        isEmailInput
+          ? 'Verification failed: Email address does not match this order.'
+          : 'Verification failed: Mobile number does not match this order.',
+      );
     }
 
     if (!order.customerEmail) {

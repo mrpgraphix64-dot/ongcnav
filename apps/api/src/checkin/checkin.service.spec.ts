@@ -672,5 +672,151 @@ describe('CheckinService Concurrency & Security Tests', () => {
       expect(res.data?.attendeeName).toBe('Priya Shah');
       expect(res.data?.employee).toBeNull();
     });
+
+    it('21. Any Day Pass allows entry on any official event night (11-19 Oct 2026) without pre-selected dates', async () => {
+      prisma.setting.findUnique.mockImplementation(({ where }: { where: { key: string } }) => {
+        if (where.key === 'emergency_stop') return Promise.resolve({ value: 'false' });
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-13' });
+        return Promise.resolve(null);
+      });
+
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(501),
+        ticketNumber: 'TK-COMM-ANY-001',
+        qrCodeToken: 'test-token-any-day',
+        status: AttendeeStatus.ACTIVE,
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Aarav Patel',
+        mobile: '9876543210',
+        category: 'Any Day Pass',
+        bookingDays: [],
+        employee: null,
+        familyMember: null,
+        order: { ticketType: 'COMMERCIAL_ANY_DAY' },
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-any-day', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+      expect(res.data?.attendeeName).toBe('Aarav Patel');
+      expect(redis.acquireLock).toHaveBeenCalledWith('lock:checkin:501', 5000);
+    });
+
+    it('22. Any Day Pass second scan on the same day is rejected as already used', async () => {
+      prisma.setting.findUnique.mockImplementation(({ where }: { where: { key: string } }) => {
+        if (where.key === 'emergency_stop') return Promise.resolve({ value: 'false' });
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-13' });
+        return Promise.resolve(null);
+      });
+
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(501),
+        ticketNumber: 'TK-COMM-ANY-001',
+        qrCodeToken: 'test-token-any-day',
+        status: AttendeeStatus.ACTIVE,
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Aarav Patel',
+        category: 'Any Day Pass',
+        bookingDays: [],
+        employee: null,
+        familyMember: null,
+        order: { ticketType: 'COMMERCIAL_ANY_DAY' },
+      });
+
+      prisma.dailyCheckin.findFirst.mockResolvedValueOnce({
+        id: BigInt(888),
+        attendeeId: BigInt(501),
+        gateId: BigInt(1),
+        eventDate: '2026-10-13',
+        checkinTime: new Date('2026-10-13T20:30:00+05:30'),
+        status: CheckinStatus.SUCCESS as any,
+        gate: mockGate,
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-any-day', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.ALREADY_CHECKED_IN);
+    });
+
+    it('23. Any Day Pass second scan on a DIFFERENT day is rejected with cross-date message', async () => {
+      prisma.setting.findUnique.mockImplementation(({ where }: { where: { key: string } }) => {
+        if (where.key === 'emergency_stop') return Promise.resolve({ value: 'false' });
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-15' });
+        return Promise.resolve(null);
+      });
+
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(501),
+        ticketNumber: 'TK-COMM-ANY-001',
+        qrCodeToken: 'test-token-any-day',
+        status: AttendeeStatus.ACTIVE,
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Aarav Patel',
+        category: 'Any Day Pass',
+        bookingDays: [],
+        employee: null,
+        familyMember: null,
+        order: { ticketType: 'COMMERCIAL_ANY_DAY' },
+      });
+
+      prisma.dailyCheckin.findFirst.mockResolvedValueOnce({
+        id: BigInt(888),
+        attendeeId: BigInt(501),
+        gateId: BigInt(1),
+        eventDate: '2026-10-12',
+        checkinTime: new Date('2026-10-12T21:15:00+05:30'),
+        status: CheckinStatus.SUCCESS as any,
+        gate: mockGate,
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-any-day', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.ALREADY_CHECKED_IN);
+      expect(res.message).toContain('Already checked in on 2026-10-12');
+      expect(res.message).toContain('Any Day Pass has already been used.');
+    });
+
+    it('24. Any Day Pass scan outside official event dates (e.g. 2026-10-25) is rejected with NOT_BOOKED_TODAY', async () => {
+      prisma.setting.findUnique.mockImplementation(({ where }: { where: { key: string } }) => {
+        if (where.key === 'emergency_stop') return Promise.resolve({ value: 'false' });
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-25' });
+        return Promise.resolve(null);
+      });
+
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(501),
+        ticketNumber: 'TK-COMM-ANY-001',
+        qrCodeToken: 'test-token-any-day',
+        status: AttendeeStatus.ACTIVE,
+        registrationType: RegistrationType.COMMERCIAL,
+        name: 'Aarav Patel',
+        category: 'Any Day Pass',
+        bookingDays: [],
+        employee: null,
+        familyMember: null,
+        order: { ticketType: 'COMMERCIAL_ANY_DAY' },
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-any-day', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.NOT_BOOKED_TODAY);
+      expect(res.message).toContain('11 Oct – 19 Oct 2026');
+    });
   });
 });

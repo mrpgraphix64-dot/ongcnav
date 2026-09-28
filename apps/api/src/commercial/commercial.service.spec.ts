@@ -225,18 +225,18 @@ describe('CommercialService', () => {
         expect(res.order.amountInr).toBe(298); // 149 * 2
       });
 
-      it('3. Any Day Pass accepts exactly one selected booking date', async () => {
+      it('3. Any Day Pass does not require a booking date and stores empty selectedDates', async () => {
         prisma.commercialOrder.create.mockImplementationOnce(({ data }: any) =>
           Promise.resolve({ id: BigInt(13), ...data }),
         );
         const res = await service.createOrder({
           ...validDto,
           ticketType: 'COMMERCIAL_ANY_DAY',
-          selectedDates: ['2026-10-16'],
+          selectedDates: [],
           quantity: 1,
         });
         expect(res.success).toBe(true);
-        expect(res.order.selectedDates).toEqual(['2026-10-16']);
+        expect(res.order.selectedDates).toEqual([]);
         expect(res.order.amountInr).toBe(279);
       });
 
@@ -276,17 +276,6 @@ describe('CommercialService', () => {
             ...validDto,
             ticketType: 'COMMERCIAL_MANDLI',
             selectedDates: ['2026-10-11', '2026-10-13'],
-          }),
-        ).rejects.toThrow(
-          'A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.',
-        );
-
-        // Any Day pass with multiple dates
-        await expect(
-          service.createOrder({
-            ...validDto,
-            ticketType: 'COMMERCIAL_ANY_DAY',
-            selectedDates: ['2026-10-14', '2026-10-15'],
           }),
         ).rejects.toThrow(
           'A commercial order cannot contain multiple different booking dates. Please select exactly one booking date per order.',
@@ -754,16 +743,28 @@ describe('CommercialService', () => {
       ],
     };
 
-    it('rejects lookup when order number alone is provided without mobile number', async () => {
+    it('rejects lookup when order number alone is provided without mobile number or email', async () => {
       await expect(service.getOrder('ORD-COMM-20261011-LOOKUP1')).rejects.toThrow(
-        new NotFoundException('Registered mobile number is required.'),
+        new NotFoundException('Registered email address is required.'),
       );
     });
 
-    it('rejects lookup when ticket number alone is provided without mobile number', async () => {
+    it('rejects lookup when ticket number alone is provided without mobile number or email', async () => {
       await expect(service.getOrder('TK-COMM-10')).rejects.toThrow(
-        new NotFoundException('Registered mobile number is required.'),
+        new NotFoundException('Registered email address is required.'),
       );
+    });
+
+    it('returns full passes when verified with valid Order Number + matching email', async () => {
+      prisma.commercialOrder.findUnique.mockResolvedValueOnce(mockPaidOrder);
+
+      const res = await service.getOrder('ORD-COMM-20261011-LOOKUP1', 'suresh@example.com');
+
+      expect(res.customerName).toBe('Suresh Trivedi');
+      expect(res.customerMobile).toBe('9876543210');
+      expect(res.customerEmail).toBe('suresh@example.com');
+      expect(res.passes).toHaveLength(1);
+      expect(res.searchedBy).toBe('ORDER');
     });
 
     it('returns full passes when verified with valid Order Number + matching mobile', async () => {
