@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -9,9 +9,17 @@ import {
   AlertCircle,
   ArrowRight,
   ArrowLeft,
+  Loader2,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
-import { setStoredAuthUser } from '@/lib/auth-session';
+import {
+  setStoredAuthUser,
+  getStoredAuthUser,
+  clearStoredAuth,
+  subscribeToAuthSync,
+  getPortalForRole,
+  isAgentRole,
+} from '@/lib/auth-session';
 import { isRoutePermittedForRole } from '@ongc/shared-types';
 import PasswordInput from '@/components/PasswordInput';
 
@@ -24,6 +32,83 @@ function AdminLoginForm() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // If local storage already indicates an active session, display a verifying state
+  // while checking with the server (/auth/me) as single source of truth
+  const [checkingAuth, setCheckingAuth] = useState(() => {
+    return !!getStoredAuthUser();
+  });
+
+  const resolveDestination = (user?: any): string => {
+    const role = String(user?.role || '').toUpperCase();
+    if (isAgentRole(role)) {
+      return '/agent';
+    }
+    if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
+      return '/scanner';
+    }
+    if (redirectUrl && redirectUrl.startsWith('/admin') && isRoutePermittedForRole(redirectUrl, role)) {
+      return redirectUrl;
+    }
+    return getPortalForRole(role);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkServerSession() {
+      try {
+        const res = await fetchApi('/auth/me');
+        if (!isMounted) return;
+
+        if (res?.user) {
+          setStoredAuthUser(res.user);
+          const destination = resolveDestination(res.user);
+          router.replace(destination);
+          return;
+        }
+        throw new Error('Not authenticated');
+      } catch {
+        // Not authenticated on server; clear any stale client storage and show login form
+        if (isMounted) {
+          clearStoredAuth();
+          setCheckingAuth(false);
+        }
+      }
+    }
+
+    // 1. Verify session on mount (covers direct navigation and refresh)
+    checkServerSession();
+
+    // 2. Cross-tab real-time auth synchronization via BroadcastChannel / Storage events
+    const unsubscribe = subscribeToAuthSync(async (event) => {
+      if (!isMounted) return;
+
+      if (event.type === 'LOGIN') {
+        // Security rule: Do NOT accept a broadcast event as proof of authentication.
+        // Always re-check the existing session with the server as source of truth.
+        await checkServerSession();
+      } else if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
+        setCheckingAuth(false);
+      }
+    });
+
+    // 3. Re-verify session when tab becomes visible or gains window focus
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkServerSession();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, [router, redirectUrl]);
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -42,22 +127,30 @@ function AdminLoginForm() {
         setStoredAuthUser(res.user);
       }
 
-      const role = String(res?.user?.role || '').toUpperCase();
-      if (role === 'COMMERCIAL_AGENT' || role === 'COMMERCIAL_SUB_AGENT') {
-        router.push('/agent');
-      } else if (role === 'SCANNER_STAFF' || role === 'GATE_OPERATOR') {
-        router.push('/scanner');
-      } else if (redirectUrl && redirectUrl.startsWith('/admin') && isRoutePermittedForRole(redirectUrl, role)) {
-        router.push(redirectUrl);
-      } else {
-        router.push('/admin');
-      }
+      const destination = resolveDestination(res?.user);
+      router.push(destination);
     } catch (err: any) {
       setError(err.message || 'Invalid credentials. Enter your registered Email address.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen font-sans bg-cream text-ink flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative selection:bg-maroon selection:text-white">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center space-y-4">
+          <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-8 flex flex-col items-center justify-center space-y-4">
+            <Loader2 className="w-8 h-8 text-maroon animate-spin" />
+            <div className="space-y-1">
+              <p className="text-sm font-bold font-outfit text-ink">Verifying Admin Session...</p>
+              <p className="text-xs text-ink-soft">Redirecting to operations portal...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen font-sans bg-cream text-ink flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative selection:bg-maroon selection:text-white">

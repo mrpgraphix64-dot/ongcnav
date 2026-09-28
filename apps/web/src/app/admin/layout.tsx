@@ -551,16 +551,9 @@ export default function AdminLayout({
         setUser(null);
         setAuthChecking(false);
         router.replace('/admin/login');
-      } else if (event.type === 'LOGIN' && event.user) {
-        if (isAgentRole(event.user.role)) {
-          // If another tab logged in as an Agent, this tab must not stay in admin!
-          setUser(null);
-          router.replace('/agent');
-        } else {
-          // Another tab logged in as an admin account
-          setUser(event.user);
-          setAuthChecking(false);
-        }
+      } else if (event.type === 'LOGIN') {
+        // Re-verify session with the server as single source of truth
+        loadUserProfile();
       }
     });
 

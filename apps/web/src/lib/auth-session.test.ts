@@ -196,5 +196,33 @@ describe('Web Auth Session & Cross-Tab Synchronization', () => {
 
       unsubscribe();
     });
+
+    it('processes dedicated AUTH_SYNC_EVENT_KEY events without leaking credentials', () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToAuthSync(listener);
+
+      const syncPayload = {
+        type: 'LOGIN',
+        user: { id: 'admin-1', name: 'Admin', email: 'admin@ongc.co.in', role: 'SUPER_ADMIN' },
+        timestamp: Date.now(),
+      };
+
+      const storageEvent = new (global as any).StorageEvent('storage', {
+        key: 'ongc_auth_sync_event',
+        newValue: JSON.stringify(syncPayload),
+      });
+      mockWindow.dispatchEvent(storageEvent);
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'LOGIN' }),
+      );
+
+      // Verify no sensitive tokens or password keys in payload
+      const calledArg = listener.mock.calls[0][0];
+      expect(calledArg.user.password).toBeUndefined();
+      expect(calledArg.user.token).toBeUndefined();
+
+      unsubscribe();
+    });
   });
 });
