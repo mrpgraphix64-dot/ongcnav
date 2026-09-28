@@ -127,4 +127,45 @@ describe('SettingsService', () => {
       ).rejects.toThrow('Confirmation phrase must be RESET.');
     });
   });
+
+  describe('Payment Settings', () => {
+    it('should allow SUPER_ADMIN to get payment settings', async () => {
+      prisma.setting.findUnique = jest.fn().mockResolvedValue({ key: 'payment.razorpay_enabled', value: '1' });
+      const res = await service.getPaymentSettings('SUPER_ADMIN');
+      expect(res.gateway).toBe('Razorpay');
+      expect(res.enabled).toBe(true);
+    });
+
+    it('should forbid non-SUPER_ADMIN from getting payment settings', async () => {
+      await expect(service.getPaymentSettings('EVENT_ADMIN')).rejects.toThrow(
+        'Only SUPER_ADMIN can access Payment Settings.',
+      );
+    });
+
+    it('should allow SUPER_ADMIN to update payment settings and create audit log', async () => {
+      prisma.setting.findUnique = jest.fn().mockResolvedValue({ key: 'payment.razorpay_enabled', value: '1' });
+      const res = await service.updatePaymentSettings(false, { id: '1', role: 'SUPER_ADMIN' });
+      expect(res.success).toBe(true);
+      expect(res.enabled).toBe(false);
+      expect(prisma.setting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'payment.razorpay_enabled' },
+          update: { value: '0' },
+        }),
+      );
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'PAYMENT_GATEWAY_DISABLED',
+          }),
+        }),
+      );
+    });
+
+    it('should forbid non-SUPER_ADMIN from updating payment settings', async () => {
+      await expect(
+        service.updatePaymentSettings(true, { id: '2', role: 'EVENT_ADMIN' }),
+      ).rejects.toThrow('Only SUPER_ADMIN can modify Payment Settings.');
+    });
+  });
 });

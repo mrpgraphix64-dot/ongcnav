@@ -31,6 +31,7 @@ import {
   Ticket,
   Layers,
   Zap,
+  Eye,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
@@ -289,6 +290,12 @@ const ALL_NAV_ITEMS: NavItem[] = [
     icon: FlaskConical,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
     isSectionHeader: 'TEST LAB',
+  },
+  {
+    label: 'Testing & Preview',
+    href: '/admin/testing',
+    icon: Eye,
+    roles: ['SUPER_ADMIN'],
   },
 ];
 

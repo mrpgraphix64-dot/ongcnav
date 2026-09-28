@@ -16,6 +16,7 @@ import {
   ResetEventDataDto,
   ToggleFullPowerDto,
   ToggleMaintenanceModeDto,
+  UpdatePaymentSettingsDto,
 } from './dto/update-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -59,6 +60,22 @@ export class SettingsController {
   async toggleMaintenanceMode(@Body() dto: ToggleMaintenanceModeDto, @Req() req: Request) {
     const user = (req as any).user;
     return this.settingsService.toggleMaintenanceMode(dto.enabled, dto.confirmation, user);
+  }
+
+  @Get('payment')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get Razorpay payment gateway configuration and toggle state' })
+  async getPaymentSettings(@Req() req: Request) {
+    const user = (req as any).user;
+    return this.settingsService.getPaymentSettings(user?.role);
+  }
+
+  @Post('payment')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Update Razorpay payment enabled/disabled state' })
+  async updatePaymentSettings(@Body() dto: UpdatePaymentSettingsDto, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.settingsService.updatePaymentSettings(dto.enabled, user);
   }
 
   @Post('reset-data')

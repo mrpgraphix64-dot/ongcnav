@@ -26,11 +26,14 @@ export interface CommercialTicketEmailData {
   orderNumber: string;
   customerName: string;
   customerEmail: string;
+  customerMobile?: string;
   ticketType: string;
   selectedDates: string[];
   quantity: number;
   amountInr: number;
+  amountPaise?: number;
   passes: CommercialPassEmailItem[];
+  subject?: string;
 }
 
 export interface MailSendResult {

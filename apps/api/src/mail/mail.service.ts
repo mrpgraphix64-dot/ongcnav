@@ -253,9 +253,19 @@ export class MailService {
   }
 
   /**
-   * Sends the official commercial ticket confirmation email
+   * Builds the official commercial ticket confirmation email HTML and text payload.
+   * If embedQrAsDataUri is true, QR code is embedded as inline base64 data-uri for browser preview.
    */
-  async sendCommercialTicketEmail(data: CommercialTicketEmailData): Promise<MailSendResult> {
+  async buildCommercialTicketEmail(
+    data: CommercialTicketEmailData,
+    options?: { embedQrAsDataUri?: boolean },
+  ): Promise<{
+    subject: string;
+    html: string;
+    text: string;
+    attachments: EmailAttachment[];
+  }> {
+    const embedAsDataUri = Boolean(options?.embedQrAsDataUri);
     const formattedDates = this.formatDates(data.selectedDates, data.ticketType);
     const passTypeLabel =
       data.ticketType === 'COMMERCIAL_SEASON'
@@ -295,7 +305,7 @@ export class MailService {
           this.logger.error(`Failed to generate QR buffer for ticket ${pass.ticketNumber}`);
         }
 
-        if (base64Png) {
+        if (base64Png && !embedAsDataUri) {
           attachments.push({
             filename: `QR-${pass.ticketNumber}.png`,
             content: base64Png,
@@ -305,7 +315,11 @@ export class MailService {
           });
         }
 
-        const qrImgSrc = base64Png ? `cid:${cid}` : '';
+        const qrImgSrc = base64Png
+          ? embedAsDataUri
+            ? `data:image/png;base64,${base64Png}`
+            : `cid:${cid}`
+          : '';
 
         return `
           <!-- PASS CARD ${idx + 1} -->
@@ -725,16 +739,49 @@ E-Ticketing & E-Pass System by
 Reworkzone.com (https://reworkzone.com)
     `.trim();
 
-    // Attachments strictly contain only individual scannable entry QR pass code(s).
-    // Static branding images are delivered via public HTTPS URLs to avoid Gmail attachment chips.
+    const emailSubject =
+      data.subject || `Your ONGC Navratri 2026 E-Pass is Ready 🎉 - Order #${data.orderNumber}`;
+
+    return {
+      subject: emailSubject,
+      html: htmlContent,
+      text: textContent,
+      attachments,
+    };
+  }
+
+  /**
+   * Sends the official commercial ticket confirmation email to customer
+   */
+  async sendCommercialTicketEmail(data: CommercialTicketEmailData): Promise<MailSendResult> {
+    const built = await this.buildCommercialTicketEmail(data, { embedQrAsDataUri: false });
 
     return this.sendEmail({
       to: data.customerEmail,
-      subject: `Your ONGC Navratri 2026 E-Pass is Ready 🎉 - Order #${data.orderNumber}`,
-      html: htmlContent,
-      text: textContent,
+      subject: built.subject,
+      html: built.html,
+      text: built.text,
       displayName: 'ONGC Navratri 2026',
-      attachments,
+      attachments: built.attachments,
+    });
+  }
+
+  /**
+   * Sends a test commercial ticket confirmation email to authenticated Super Admin
+   */
+  async sendTestCommercialTicketEmail(
+    data: CommercialTicketEmailData,
+    superAdminEmail: string,
+  ): Promise<MailSendResult> {
+    const built = await this.buildCommercialTicketEmail(data, { embedQrAsDataUri: false });
+
+    return this.sendEmail({
+      to: superAdminEmail,
+      subject: `TEST — ONGC Navratri 2026 E-Pass - ${data.orderNumber}`,
+      html: built.html,
+      text: built.text,
+      displayName: 'ONGC Navratri 2026',
+      attachments: built.attachments,
     });
   }
 

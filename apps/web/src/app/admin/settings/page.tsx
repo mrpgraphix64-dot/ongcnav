@@ -23,12 +23,13 @@ import {
   Power,
   ShieldAlert,
   Wrench,
+  CreditCard,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 import { subscribeToSuperAdminSync, broadcastSuperAdminSync } from '@/lib/super-admin-state';
 
-type TabType = 'general' | 'event' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger';
+type TabType = 'general' | 'event' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger' | 'payment';
 
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('general');
@@ -39,7 +40,9 @@ export default function AdminSettingsPage() {
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Authenticated user & role check
-  const [currentUser, setCurrentUser] = useState<{ id?: string; role?: string; email?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id?: string; role?: string; email?: string } | null>(
+    () => getStoredAuthUser() as any,
+  );
   const isSuperAdmin = (currentUser?.role || '').toUpperCase() === 'SUPER_ADMIN';
 
   // Super Admin Control Center state
@@ -65,6 +68,57 @@ export default function AdminSettingsPage() {
   const [dangerConfirm, setDangerConfirm] = useState('');
   const [dangerSubmitting, setDangerSubmitting] = useState(false);
 
+  // Payment settings state (SUPER_ADMIN only)
+  const [paymentSettings, setPaymentSettings] = useState<{
+    enabled: boolean;
+    environment: string;
+    gateway: string;
+    keyId: string;
+    isConfigured: boolean;
+  } | null>(null);
+  const [savingPayment, setSavingPayment] = useState(false);
+
+  const loadPaymentSettings = async () => {
+    try {
+      const res = await fetchApi<any>('/admin/settings/payment');
+      if (res) {
+        setPaymentSettings({
+          enabled: Boolean(res.enabled),
+          environment: res.environment || 'TEST',
+          gateway: res.gateway || 'Razorpay',
+          keyId: res.keyId || '',
+          isConfigured: Boolean(res.isConfigured),
+        });
+      }
+    } catch {
+      setPaymentSettings(null);
+    }
+  };
+
+  const handleSavePaymentSettings = async () => {
+    if (!paymentSettings) return;
+    try {
+      setSavingPayment(true);
+      setMsg(null);
+      const res = await fetchApi<any>('/admin/settings/payment', {
+        method: 'POST',
+        body: JSON.stringify({ enabled: paymentSettings.enabled }),
+      });
+      setMsg({
+        text: res?.message || 'Payment settings saved successfully.',
+        type: 'success',
+      });
+      await loadPaymentSettings();
+    } catch (err: any) {
+      setMsg({
+        text: err.message || 'Failed to save payment settings.',
+        type: 'error',
+      });
+    } finally {
+      setSavingPayment(false);
+    }
+  };
+
   const loadSuperAdminSettings = async () => {
     try {
       const res = await fetchApi<any>('/admin/settings/super-admin');
@@ -81,6 +135,7 @@ export default function AdminSettingsPage() {
     } catch {
       setSuperAdminData(null);
     }
+    loadPaymentSettings();
   };
 
   const loadSettings = async () => {
@@ -130,12 +185,21 @@ export default function AdminSettingsPage() {
       } else if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
         setCurrentUser(null);
         setSuperAdminData(null);
+        setPaymentSettings(null);
       }
     });
 
     const unsubscribeSync = subscribeToSuperAdminSync(() => {
       loadSuperAdminSettings();
     });
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'payment') {
+        setActiveTab('payment');
+      }
+    }
 
     loadSettings();
 
@@ -251,6 +315,9 @@ export default function AdminSettingsPage() {
           { id: 'scanner', label: 'Scanner', icon: ScanLine },
           { id: 'notifications', label: 'Notifications', icon: Bell },
           { id: 'security', label: 'Security & Access', icon: Shield },
+          ...(isSuperAdmin
+            ? [{ id: 'payment', label: 'Payment Settings', icon: CreditCard }]
+            : []),
           { id: 'gates', label: 'Gates Overview', icon: DoorOpen },
           { id: 'danger', label: 'Danger Zone', icon: AlertTriangle },
         ].map((tab) => {
@@ -1017,6 +1084,123 @@ export default function AdminSettingsPage() {
                   {dangerSubmitting ? 'Purging...' : 'Execute Data Purge'}
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* 9. Payment Settings (SUPER_ADMIN Only) */}
+        {activeTab === 'payment' && isSuperAdmin && (
+          <div className="space-y-6 max-w-2xl">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+              <div>
+                <h3 className="font-outfit font-extrabold text-xl text-ink">PAYMENT SETTINGS</h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Configure online payment gateway and toggle customer checkout availability.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-gold/15 text-gold-dark text-[11px] font-black uppercase tracking-wider border border-gold/30">
+                SUPER ADMIN
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-stone-200 bg-cream-soft p-5 space-y-5">
+              <div>
+                <h4 className="font-outfit font-bold text-sm text-ink uppercase tracking-wide">
+                  Razorpay Payment
+                </h4>
+                <div className="h-0.5 w-12 bg-maroon rounded-full mt-1.5" />
+              </div>
+
+              {/* Payment Status ON / OFF */}
+              <div className="flex items-center justify-between py-3 border-b border-stone-200/80">
+                <div>
+                  <div className="text-xs font-bold text-ink">Payment Status</div>
+                  <div className="text-[11px] text-stone-500 mt-0.5">
+                    {paymentSettings?.enabled
+                      ? 'ON — Customers can initiate Razorpay pass bookings'
+                      : 'OFF — New Razorpay payment initiation is blocked'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-stone-200/80 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPaymentSettings((prev) =>
+                        prev ? { ...prev, enabled: true } : { enabled: true, environment: 'TEST', gateway: 'Razorpay', keyId: '', isConfigured: false }
+                      )
+                    }
+                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      paymentSettings?.enabled
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-stone-600 hover:text-ink'
+                    }`}
+                  >
+                    ON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPaymentSettings((prev) =>
+                        prev ? { ...prev, enabled: false } : { enabled: false, environment: 'TEST', gateway: 'Razorpay', keyId: '', isConfigured: false }
+                      )
+                    }
+                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      paymentSettings && !paymentSettings.enabled
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-stone-600 hover:text-ink'
+                    }`}
+                  >
+                    OFF
+                  </button>
+                </div>
+              </div>
+
+              {/* Environment */}
+              <div className="flex items-center justify-between py-3 border-b border-stone-200/80">
+                <div>
+                  <div className="text-xs font-bold text-ink">Environment</div>
+                  <div className="text-[11px] text-stone-500 mt-0.5">
+                    Current active runtime gateway environment
+                  </div>
+                </div>
+                <div>
+                  <span
+                    className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${
+                      paymentSettings?.environment === 'LIVE'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}
+                  >
+                    {paymentSettings?.environment || 'TEST'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Gateway */}
+              <div className="flex items-center justify-between py-3 border-b border-stone-200/80">
+                <div>
+                  <div className="text-xs font-bold text-ink">Gateway</div>
+                  <div className="text-[11px] text-stone-500 mt-0.5">
+                    Integrated online payments service provider
+                  </div>
+                </div>
+                <div className="text-xs font-bold text-ink font-mono">
+                  Razorpay
+                </div>
+              </div>
+
+              {/* Save Settings Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleSavePaymentSettings}
+                  disabled={savingPayment || !paymentSettings}
+                  className="px-6 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4 text-gold" />
+                  <span>{savingPayment ? 'Saving Settings...' : 'Save Settings'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

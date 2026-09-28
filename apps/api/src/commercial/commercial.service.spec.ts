@@ -977,4 +977,39 @@ describe('CommercialService', () => {
       expect(res.message).toContain('Email service could not deliver your ticket at this moment');
     });
   });
+
+  describe('Online Payment Guard', () => {
+    it('blocks new commercial order creation when payment is disabled', async () => {
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where.key === 'payment.razorpay_enabled') {
+          return Promise.resolve({ key: 'payment.razorpay_enabled', value: '0' });
+        }
+        return Promise.resolve(null);
+      });
+
+      await expect(
+        service.createOrder({
+          customerName: 'Aarti Patel',
+          customerEmail: 'aarti@example.com',
+          customerMobile: '9876543210',
+          ticketType: 'COMMERCIAL_DAILY',
+          selectedDates: ['2026-10-15'],
+          quantity: 1,
+          termsAccepted: true,
+        }),
+      ).rejects.toThrow('Online payments are currently unavailable. Please try again later.');
+    });
+
+    it('returns paymentEnabled boolean in getConfig', async () => {
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where.key === 'payment.razorpay_enabled') {
+          return Promise.resolve({ key: 'payment.razorpay_enabled', value: '0' });
+        }
+        return Promise.resolve(null);
+      });
+
+      const config = await service.getConfig();
+      expect(config.paymentEnabled).toBe(false);
+    });
+  });
 });

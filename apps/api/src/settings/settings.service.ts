@@ -4,12 +4,15 @@ import {
   UserRole,
   SETTING_SUPER_ADMIN_FULL_POWER,
   SETTING_MAINTENANCE_MODE,
+  SETTING_PAYMENT_RAZORPAY_ENABLED,
   CONFIRMATION_ENABLE_FULL_POWER,
   CONFIRMATION_ENABLE_MAINTENANCE,
   AUDIT_SUPER_ADMIN_FULL_POWER_ENABLED,
   AUDIT_SUPER_ADMIN_FULL_POWER_DISABLED,
   AUDIT_MAINTENANCE_MODE_ENABLED,
   AUDIT_MAINTENANCE_MODE_DISABLED,
+  AUDIT_PAYMENT_GATEWAY_ENABLED,
+  AUDIT_PAYMENT_GATEWAY_DISABLED,
   isSuperAdminFullPowerActive,
   isMaintenanceModeActive,
 } from '@ongc/shared-types';
@@ -67,6 +70,9 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   // system control center defaults
   'system.super_admin_full_power': '0',
   'system.maintenance_mode': '0',
+
+  // payment settings
+  'payment.razorpay_enabled': '1',
 };
 
 export const FIELDS_BY_GROUP: Record<string, string[]> = {
@@ -391,6 +397,112 @@ export class SettingsService {
       message: enabled
         ? 'Maintenance mode activated. Public registration and ticket booking are suspended.'
         : 'Maintenance mode deactivated. Normal public operations restored.',
+    };
+  }
+
+  /**
+   * Authoritative check whether Razorpay online payments are enabled.
+   */
+  async isPaymentEnabled(): Promise<boolean> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: SETTING_PAYMENT_RAZORPAY_ENABLED },
+      });
+      if (!setting) return true;
+      return setting.value === '1' || setting.value === 'true';
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Authoritative retrieval of Razorpay payment gateway settings.
+   * Available ONLY to SUPER_ADMIN.
+   * Strictly avoids exposing the Razorpay secret key.
+   */
+  async getPaymentSettings(userRole?: string | null) {
+    const role = (userRole || '').toUpperCase().trim();
+    if (role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can access Payment Settings.');
+    }
+
+    const enabled = await this.isPaymentEnabled();
+    const rawKeyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+    const rawKeySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+    const isConfigured = Boolean(rawKeyId && rawKeySecret);
+
+    let environment = 'TEST';
+    if (rawKeyId.startsWith('rzp_live')) {
+      environment = 'LIVE';
+    } else if (rawKeyId.startsWith('rzp_test')) {
+      environment = 'TEST';
+    } else if (!isConfigured) {
+      environment = 'TEST / SANDBOX (Mock)';
+    }
+
+    return {
+      enabled,
+      environment,
+      gateway: 'Razorpay',
+      keyId: rawKeyId || 'rzp_test_placeholder',
+      isConfigured,
+    };
+  }
+
+  /**
+   * Update Razorpay payment gateway status (ON / OFF).
+   * Available ONLY to SUPER_ADMIN.
+   * Strictly writes to database Setting table and records an audit log.
+   */
+  async updatePaymentSettings(
+    enabled: boolean,
+    user?: { id?: bigint | string; role?: string } | string,
+  ) {
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
+
+    if ((userRole || '').toUpperCase().trim() !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can modify Payment Settings.');
+    }
+
+    if (typeof enabled !== 'boolean') {
+      throw new BadRequestException('The enabled property must be an explicit boolean.');
+    }
+
+    const previousEnabled = await this.isPaymentEnabled();
+    const valStr = enabled ? '1' : '0';
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.setting.upsert({
+        where: { key: SETTING_PAYMENT_RAZORPAY_ENABLED },
+        update: { value: valStr },
+        create: { key: SETTING_PAYMENT_RAZORPAY_ENABLED, value: valStr },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: userId ? BigInt(userId) : null,
+          action: enabled ? AUDIT_PAYMENT_GATEWAY_ENABLED : AUDIT_PAYMENT_GATEWAY_DISABLED,
+          details: {
+            gateway: 'Razorpay',
+            enabled,
+            previousState: previousEnabled,
+            updatedByRole: userRole,
+            timestamp: new Date().toISOString(),
+            reason: enabled
+              ? 'Razorpay online payments enabled by SUPER_ADMIN.'
+              : 'Razorpay online payments disabled by SUPER_ADMIN. New order initiation blocked.',
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      enabled,
+      message: enabled
+        ? 'Razorpay online payments enabled. Customers can initiate pass bookings.'
+        : 'Razorpay online payments disabled. New online payment initiations are blocked.',
     };
   }
 }

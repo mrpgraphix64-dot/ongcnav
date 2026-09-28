@@ -41,3 +41,9 @@ export class ToggleMaintenanceModeDto {
   @IsOptional()
   confirmation?: string;
 }
+
+export class UpdatePaymentSettingsDto {
+  @ApiProperty({ description: 'Whether Razorpay online payments are enabled', example: true })
+  @IsBoolean()
+  enabled!: boolean;
+}

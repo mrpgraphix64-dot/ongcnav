@@ -213,8 +213,21 @@ export class CommercialService {
       currency: 'INR',
       razorpayKeyId: this.razorpay.getPublicKeyId(),
       isLiveGateway: this.razorpay.isLiveGatewayConfigured(),
+      paymentEnabled: await this.isOnlinePaymentEnabled(),
       maxQuantityPerOrder: 10,
     };
+  }
+
+  async isOnlinePaymentEnabled(): Promise<boolean> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: 'payment.razorpay_enabled' },
+      });
+      if (!setting) return true;
+      return setting.value === '1' || setting.value === 'true';
+    } catch {
+      return true;
+    }
   }
 
   async createOrder(dto: CreateCommercialOrderDto, clientIp?: string) {
@@ -224,6 +237,12 @@ export class CommercialService {
     });
     if (regSetting && regSetting.value === 'false') {
       throw new BadRequestException('Commercial pass booking is currently closed.');
+    }
+
+    // 1b. Check Razorpay payment gateway enabled status
+    const isPaymentEnabled = await this.isOnlinePaymentEnabled();
+    if (!isPaymentEnabled) {
+      throw new BadRequestException('Online payments are currently unavailable. Please try again later.');
     }
 
     // 2. Sensible rate-limiting abuse protection via Redis
