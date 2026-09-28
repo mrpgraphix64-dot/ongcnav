@@ -386,22 +386,10 @@ export class MailService {
                 </tr>
                 <!-- B) NAVRATRI 2026 (PREMIUM SERIF / DISPLAY-STYLE IN GOLD) -->
                 <tr>
-                  <td align="center" style="padding-bottom: 6px;">
+                  <td align="center" style="padding-bottom: 8px;">
                     <div style="font-family: 'Cinzel', 'Georgia', 'Times New Roman', serif; font-size: 24px; font-weight: 800; color: #D4AF37; letter-spacing: 4px; text-transform: uppercase; line-height: 1.2; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
                       NAVRATRI 2026
                     </div>
-                  </td>
-                </tr>
-                <!-- SUBTLE DIVIDER ACCENT -->
-                <tr>
-                  <td align="center" style="padding: 4px 0 8px 0;">
-                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
-                      <tr>
-                        <td style="width: 36px; height: 1px; background-color: #D4AF37; opacity: 0.6;"></td>
-                        <td style="padding: 0 8px; font-size: 10px; color: #D4AF37; opacity: 0.8; line-height: 1;">&#9670;</td>
-                        <td style="width: 36px; height: 1px; background-color: #D4AF37; opacity: 0.6;"></td>
-                      </tr>
-                    </table>
                   </td>
                 </tr>
                 <!-- C) AHMEDABAD • OFFICIAL DIGITAL E-PASS (SMALLER UPPERCASE SUBTITLE) -->
@@ -618,20 +606,20 @@ export class MailService {
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #E5D5BA; margin-top: 18px; padding-top: 22px; text-align: center;">
                 <tr>
                   <td align="center">
-                    <div style="font-size: 10px; font-weight: 800; letter-spacing: 2px; color: #8A7264; text-transform: uppercase; margin-bottom: 12px;">
+                    <div style="font-size: 10px; font-weight: 800; letter-spacing: 2px; color: #8A7264; text-transform: uppercase; margin-bottom: 10px;">
                       EVENT ORGANISER
                     </div>
                     <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
                       <tr>
-                        <td align="center" style="padding: 6px 10px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.05);">
-                          <img src="cid:digant-art-logo" alt="Digant Art" width="100" style="display: block; width: 100px; max-width: 100%; height: auto; max-height: 100px; border-radius: 8px; border: 0;" />
+                        <td align="center" style="padding: 5px 8px; background-color: #FFFFFF; border: 1px solid #EAE0D5; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+                          <img src="cid:digant-art-logo" alt="Digant Art" width="65" style="display: block; width: 65px; max-width: 100%; height: auto; max-height: 65px; border-radius: 6px; border: 0;" />
                         </td>
                       </tr>
                     </table>
-                    <div style="font-size: 12px; font-weight: 700; color: #7A1930; margin-top: 10px; letter-spacing: 0.5px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #7A1930; margin-top: 8px; letter-spacing: 0.5px;">
                       Digant Art
                     </div>
-                    <div style="font-size: 11px; color: #8A7264; margin-top: 2px;">
+                    <div style="font-size: 10px; color: #8A7264; margin-top: 2px;">
                       Official Event Organiser
                     </div>
                   </td>
@@ -658,15 +646,10 @@ export class MailService {
               </div>
 
               <!-- 11. REWORKZONE CREDIT / E-TICKETING SYSTEM (SUBTLE, RESTRAINED, ABSOLUTE BOTTOM) -->
-              <div style="border-top: 1px solid rgba(229, 213, 186, 0.15); padding-top: 14px; margin-top: 14px; text-align: center;">
-                <div style="font-size: 10px; color: #8A7264; letter-spacing: 0.5px; margin-bottom: 2px;">
-                  E-Ticketing &amp; E-Pass System by
-                </div>
-                <div>
-                  <a href="https://reworkzone.com" target="_blank" rel="noopener noreferrer" style="color: #DC2626; font-size: 11px; font-weight: 700; text-decoration: none; letter-spacing: 0.5px;">
-                    Reworkzone.com
-                  </a>
-                </div>
+              <div style="border-top: 1px solid rgba(229, 213, 186, 0.15); padding-top: 12px; margin-top: 14px; text-align: center; white-space: nowrap;">
+                <span style="font-size: 10px; color: #8A7264; letter-spacing: 0.3px; white-space: nowrap; display: inline-block;">
+                  E-Ticketing &amp; E-Pass System by <a href="https://reworkzone.com" target="_blank" rel="noopener noreferrer" style="color: #DC2626; font-size: 10px; font-weight: 700; text-decoration: none; white-space: nowrap;">Reworkzone.com</a>
+                </span>
               </div>
             </td>
           </tr>
