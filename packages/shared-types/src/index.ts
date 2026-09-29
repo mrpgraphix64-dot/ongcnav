@@ -159,7 +159,6 @@ export enum LoadTestStatus {
 export enum LoadTestScenario {
   NORMAL = 'NORMAL',
   DUPLICATE = 'DUPLICATE',
-  INVALID = 'INVALID_QR',
   INVALID_QR = 'INVALID_QR',
   NOT_BOOKED = 'NOT_BOOKED',
   PEAK_BURST = 'PEAK_BURST',

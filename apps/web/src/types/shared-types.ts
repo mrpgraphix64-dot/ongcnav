@@ -133,26 +133,25 @@ export enum IncidentStatus {
 }
 
 export enum LoadTestMode {
-  DRY_RUN = 'dry_run',
-  REAL_HTTP = 'real_http',
+  DRY_RUN = 'DRY_RUN',
+  REAL_HTTP = 'REAL_HTTP',
 }
 
 export enum LoadTestStatus {
-  PREPARING = 'preparing',
-  RUNNING = 'running',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  CANCELLED = 'cancelled',
+  PREPARING = 'PREPARING',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum LoadTestScenario {
-  NORMAL = 'normal',
-  DUPLICATE = 'duplicate',
-  INVALID = 'invalid',
-  INVALID_QR = 'invalid',
-  NOT_BOOKED = 'not_booked',
-  PEAK_BURST = 'mixed',
-  MIXED = 'mixed',
+  NORMAL = 'NORMAL',
+  DUPLICATE = 'DUPLICATE',
+  INVALID_QR = 'INVALID_QR',
+  NOT_BOOKED = 'NOT_BOOKED',
+  PEAK_BURST = 'PEAK_BURST',
+  MIXED = 'MIXED',
 }
 
 export enum ScannerConnectionState {

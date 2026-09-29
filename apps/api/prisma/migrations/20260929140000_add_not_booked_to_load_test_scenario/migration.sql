@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "LoadTestScenario" ADD VALUE IF NOT EXISTS 'NOT_BOOKED';

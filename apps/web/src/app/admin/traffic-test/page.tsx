@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Activity,
   Play,
@@ -28,7 +28,8 @@ import { LoadTestMode, LoadTestScenario, LoadTestStatus } from '@ongc/shared-typ
 export default function AdminTrafficTestPage() {
   const [runs, setRuns] = useState<any[]>([]);
   const [gates, setGates] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [selectedRun, setSelectedRun] = useState<any | null>(null);
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -39,42 +40,101 @@ export default function AdminTrafficTestPage() {
   const [simulatedUsers, setSimulatedUsers] = useState(100);
   const [gateId, setGateId] = useState('1');
 
-  const loadData = async () => {
+  const selectedRunRef = useRef<any | null>(selectedRun);
+  useEffect(() => {
+    selectedRunRef.current = selectedRun;
+  }, [selectedRun]);
+
+  const runsRef = useRef<any[]>(runs);
+  useEffect(() => {
+    runsRef.current = runs;
+  }, [runs]);
+
+  const isFetchingRef = useRef(false);
+
+  const loadData = useCallback(async (isManual = false) => {
+    // Guard against overlapping concurrent requests
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    if (isManual) {
+      setRefreshing(true);
+    }
+
     try {
-      setLoading(true);
       const [runsData, gatesData] = await Promise.all([
         fetchApi('/admin/traffic-test/runs'),
         fetchApi('/admin/gates'),
       ]);
-      setRuns(runsData || []);
-      setGates(gatesData || []);
-      if (gatesData && gatesData.length > 0 && !gateId) {
-        setGateId(gatesData[0].id);
+
+      if (Array.isArray(runsData)) {
+        // Smooth reconciliation: avoid replacing table state if incoming data is identical
+        const prevJson = JSON.stringify(runsRef.current);
+        const nextJson = JSON.stringify(runsData);
+        if (prevJson !== nextJson) {
+          setRuns(runsData);
+          runsRef.current = runsData;
+        }
+      }
+
+      if (Array.isArray(gatesData) && gatesData.length > 0) {
+        setGates(gatesData);
+        setGateId((prev) => prev || gatesData[0].id?.toString() || '1');
       }
 
       // If a run is selected or actively running, refresh its live status
-      if (selectedRun) {
-        const liveStatus = await fetchApi(`/admin/traffic-test/runs/${selectedRun.id}/status`);
-        setSelectedRun(liveStatus);
-      } else if (runsData && runsData.length > 0) {
-        const active = runsData.find((r: any) => r.status === 'RUNNING') || runsData[0];
-        if (active) {
-          const liveStatus = await fetchApi(`/admin/traffic-test/runs/${active.id}/status`);
-          setSelectedRun(liveStatus);
+      const curSelected = selectedRunRef.current;
+      if (curSelected?.id) {
+        try {
+          const liveStatus = await fetchApi(`/admin/traffic-test/runs/${curSelected.id}/status`);
+          if (liveStatus && JSON.stringify(curSelected) !== JSON.stringify(liveStatus)) {
+            setSelectedRun(liveStatus);
+            selectedRunRef.current = liveStatus;
+          }
+        } catch {
+          // Keep existing telemetry display on transient error
+        }
+      } else if (Array.isArray(runsData) && runsData.length > 0) {
+        const active = runsData.find((r: any) => r.status === LoadTestStatus.RUNNING) || runsData[0];
+        if (active?.id) {
+          try {
+            const liveStatus = await fetchApi(`/admin/traffic-test/runs/${active.id}/status`);
+            if (liveStatus) {
+              setSelectedRun(liveStatus);
+              selectedRunRef.current = liveStatus;
+            }
+          } catch {
+            // Keep existing telemetry display on transient error
+          }
         }
       }
     } catch (e: any) {
-      console.error(e);
+      console.error('Failed to load traffic test data:', e);
     } finally {
-      setLoading(false);
+      isFetchingRef.current = false;
+      setInitialLoading(false);
+      if (isManual) {
+        setRefreshing(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 4000); // 4s poll while viewing test lab
-    return () => clearInterval(interval);
-  }, [selectedRun?.id]);
+    let isMounted = true;
+    loadData(false);
+
+    // 4s polling interval without clearing/unmounting table or restarting on run selection
+    const interval = setInterval(() => {
+      if (isMounted) {
+        loadData(false);
+      }
+    }, 4000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [loadData]);
 
   const handleStartTest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +156,7 @@ export default function AdminTrafficTestPage() {
         text: `Traffic test initiated (Run #${res.runId}). Mode: ${mode}, Scenario: ${scenario}`,
         type: 'success',
       });
-      await loadData();
+      await loadData(true);
     } catch (err: any) {
       setMsg({ text: err.message || 'Failed to start load test', type: 'error' });
     } finally {
@@ -108,7 +168,7 @@ export default function AdminTrafficTestPage() {
     try {
       await fetchApi(`/admin/traffic-test/runs/${runId}/stop`, { method: 'POST' });
       setMsg({ text: `Run #${runId} execution stopped.`, type: 'success' });
-      loadData();
+      await loadData(true);
     } catch (e: any) {
       setMsg({ text: e.message || 'Failed to stop run', type: 'error' });
     }
@@ -121,10 +181,24 @@ export default function AdminTrafficTestPage() {
         method: 'DELETE',
       });
       if (selectedRun?.id === runId) setSelectedRun(null);
-      loadData();
+      await loadData(true);
       setMsg({ text: `Run #${runId} and all associated test records purged successfully.`, type: 'success' });
     } catch (e: any) {
       setMsg({ text: e.message || 'Failed to purge test run', type: 'error' });
+    }
+  };
+
+  const handleSelectRun = async (r: any) => {
+    setSelectedRun(r);
+    selectedRunRef.current = r;
+    try {
+      const liveStatus = await fetchApi(`/admin/traffic-test/runs/${r.id}/status`);
+      if (liveStatus) {
+        setSelectedRun(liveStatus);
+        selectedRunRef.current = liveStatus;
+      }
+    } catch (e) {
+      console.error('Failed to load run telemetry:', e);
     }
   };
 
@@ -158,11 +232,11 @@ export default function AdminTrafficTestPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={loadData}
-            disabled={loading}
+            onClick={() => loadData(true)}
+            disabled={refreshing || initialLoading}
             className="px-3.5 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-2 transition"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
         </div>
@@ -289,11 +363,14 @@ export default function AdminTrafficTestPage() {
                 <option value={LoadTestScenario.DUPLICATE}>
                   DUPLICATE (1 User → 2 Requests)
                 </option>
-                <option value={LoadTestScenario.PEAK_BURST}>
-                  PEAK BURST (Concurrency Spike)
-                </option>
                 <option value={LoadTestScenario.INVALID_QR}>
                   INVALID QR (Malformed / Unauthorized)
+                </option>
+                <option value={LoadTestScenario.NOT_BOOKED}>
+                  NOT BOOKED (Valid Pass, Wrong Date)
+                </option>
+                <option value={LoadTestScenario.PEAK_BURST}>
+                  PEAK BURST (Concurrency Spike)
                 </option>
                 <option value={LoadTestScenario.MIXED}>
                   MIXED (70% Norm, 20% Dup, 10% Inv)
@@ -421,8 +498,8 @@ export default function AdminTrafficTestPage() {
 
                 return (
                   <tr
-                    key={r.id}
-                    onClick={() => setSelectedRun(r)}
+                    key={`run-${r.id}`}
+                    onClick={() => handleSelectRun(r)}
                     className={`cursor-pointer transition-colors ${
                       isCurrent ? 'bg-red-950/20' : 'hover:bg-slate-800/30'
                     }`}
@@ -498,10 +575,21 @@ export default function AdminTrafficTestPage() {
                 );
               })}
 
-              {runs.length === 0 && !loading && (
+              {runs.length === 0 && !initialLoading && (
                 <tr>
                   <td colSpan={10} className="px-5 py-12 text-center text-slate-500">
                     No traffic test runs recorded yet. Start one above.
+                  </td>
+                </tr>
+              )}
+
+              {runs.length === 0 && initialLoading && (
+                <tr>
+                  <td colSpan={10} className="px-5 py-12 text-center text-slate-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-red-500" />
+                      <span>Loading test runs...</span>
+                    </div>
                   </td>
                 </tr>
               )}

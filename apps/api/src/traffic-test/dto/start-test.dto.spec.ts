@@ -1,0 +1,91 @@
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
+import { StartLoadTestDto } from './start-test.dto';
+import { LoadTestMode, LoadTestScenario } from '@ongc/shared-types';
+
+describe('StartLoadTestDto', () => {
+  it('should validate all canonical scenarios and modes successfully', async () => {
+    const validScenarios = [
+      LoadTestScenario.NORMAL,
+      LoadTestScenario.DUPLICATE,
+      LoadTestScenario.INVALID_QR,
+      LoadTestScenario.NOT_BOOKED,
+      LoadTestScenario.PEAK_BURST,
+      LoadTestScenario.MIXED,
+    ];
+
+    const validModes = [
+      LoadTestMode.DRY_RUN,
+      LoadTestMode.REAL_HTTP,
+    ];
+
+    for (const scenario of validScenarios) {
+      for (const mode of validModes) {
+        const dto = plainToInstance(StartLoadTestDto, {
+          scenario,
+          mode,
+          simulatedUsers: 100,
+          gateId: '1',
+        });
+
+        const errors = await validate(dto);
+        expect(errors).toHaveLength(0);
+      }
+    }
+  });
+
+  it('should reject invalid scenario and ensure INVALID_QR is not duplicated in error message', async () => {
+    const dto = plainToInstance(StartLoadTestDto, {
+      scenario: 'INVALID_SCENARIO',
+      mode: LoadTestMode.REAL_HTTP,
+      simulatedUsers: 100,
+      gateId: '1',
+    });
+
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+    const scenarioError = errors.find((e) => e.property === 'scenario');
+    expect(scenarioError).toBeDefined();
+
+    const errorMsg = scenarioError?.constraints?.isEnum || '';
+    expect(errorMsg).toContain('NORMAL, DUPLICATE, INVALID_QR, NOT_BOOKED, PEAK_BURST, MIXED');
+    // Ensure INVALID_QR appears exactly once in the allowed values string
+    const occurrences = (errorMsg.match(/INVALID_QR/g) || []).length;
+    expect(occurrences).toBe(1);
+  });
+
+  it('should reject invalid execution mode', async () => {
+    const dto = plainToInstance(StartLoadTestDto, {
+      scenario: LoadTestScenario.PEAK_BURST,
+      mode: 'real_http', // lowercase should be rejected
+      simulatedUsers: 100,
+      gateId: '1',
+    });
+
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+    const modeError = errors.find((e) => e.property === 'mode');
+    expect(modeError).toBeDefined();
+    expect(modeError?.constraints?.isEnum).toContain('DRY_RUN, REAL_HTTP');
+  });
+
+  it('should validate simulated users bounds (1 to 1000)', async () => {
+    const invalidDto = plainToInstance(StartLoadTestDto, {
+      scenario: LoadTestScenario.NORMAL,
+      mode: LoadTestMode.REAL_HTTP,
+      simulatedUsers: 0,
+      gateId: '1',
+    });
+    const errors = await validate(invalidDto);
+    expect(errors.find((e) => e.property === 'simulatedUsers')).toBeDefined();
+
+    const tooHighDto = plainToInstance(StartLoadTestDto, {
+      scenario: LoadTestScenario.NORMAL,
+      mode: LoadTestMode.REAL_HTTP,
+      simulatedUsers: 1500,
+      gateId: '1',
+    });
+    const errorsHigh = await validate(tooHighDto);
+    expect(errorsHigh.find((e) => e.property === 'simulatedUsers')).toBeDefined();
+  });
+});

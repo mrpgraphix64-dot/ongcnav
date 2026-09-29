@@ -95,6 +95,7 @@ enum LoadTestScenario {
   DUPLICATE
   PEAK_BURST
   INVALID_QR
+  NOT_BOOKED
   MIXED
 }
 
