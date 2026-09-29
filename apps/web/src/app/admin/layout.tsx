@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
+  getStoredAuthUser,
   setStoredAuthUser,
   clearStoredAuth,
   subscribeToAuthSync,
@@ -58,6 +59,7 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   roles: string[];
+  section?: 'GLOBAL' | 'OPERATIONS' | 'EMPLOYEES' | 'E-PASS' | 'TEST LAB';
   isSectionHeader?: string;
 }
 
@@ -68,49 +70,56 @@ const COMMERCIAL_ADMIN_NAV_ITEMS: NavItem[] = [
     href: '/admin',
     icon: LayoutDashboard,
     roles: ['COMMERCIAL_ADMIN'],
+    section: 'GLOBAL',
   },
   {
     label: 'E-Pass Orders',
     href: '/admin/commercial/orders',
     icon: CalendarCheck,
     roles: ['COMMERCIAL_ADMIN'],
-    isSectionHeader: 'E-PASS',
+    section: 'E-PASS',
   },
   {
     label: 'Customers & Passes',
     href: '/admin/commercial/customers',
     icon: Users,
     roles: ['COMMERCIAL_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Agents',
     href: '/admin/commercial/agents',
     icon: Shield,
     roles: ['COMMERCIAL_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Inventory & Quotas',
     href: '/admin/commercial/inventory',
     icon: Layers,
     roles: ['COMMERCIAL_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Allocations',
     href: '/admin/commercial/allocations',
     icon: Ticket,
     roles: ['COMMERCIAL_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Commercial Reports',
     href: '/admin/commercial/reports',
     icon: BarChart3,
     roles: ['COMMERCIAL_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Ticket Delivery',
     href: '/admin/commercial/tickets',
     icon: ExternalLink,
     roles: ['COMMERCIAL_ADMIN'],
+    section: 'E-PASS',
   },
 ];
 
@@ -121,43 +130,49 @@ const EMPLOYEE_ADMIN_NAV_ITEMS: NavItem[] = [
     href: '/admin',
     icon: LayoutDashboard,
     roles: ['EMPLOYEE_ADMIN'],
+    section: 'GLOBAL',
   },
   {
-    label: 'Employees',
-    href: '/admin/employees',
-    icon: Users,
-    roles: ['EMPLOYEE_ADMIN'],
-    isSectionHeader: 'EMPLOYEES',
-  },
-  {
-    label: 'Employee Registrations',
+    label: 'Attendees & Passes',
     href: '/admin/attendees',
     icon: Users,
     roles: ['EMPLOYEE_ADMIN'],
-  },
-  {
-    label: 'Bulk Upload',
-    href: '/admin/bulk-upload',
-    icon: UploadCloud,
-    roles: ['EMPLOYEE_ADMIN'],
+    section: 'GLOBAL',
   },
   {
     label: 'Help Desk Overrides',
     href: '/admin/helpdesk',
     icon: LifeBuoy,
     roles: ['EMPLOYEE_ADMIN'],
+    section: 'OPERATIONS',
   },
   {
     label: 'Daily Closing',
     href: '/admin/daily-closing',
     icon: CalendarCheck,
     roles: ['EMPLOYEE_ADMIN'],
+    section: 'OPERATIONS',
   },
   {
     label: 'Reports & Export',
     href: '/admin/reports',
     icon: BarChart3,
     roles: ['EMPLOYEE_ADMIN'],
+    section: 'OPERATIONS',
+  },
+  {
+    label: 'Employees',
+    href: '/admin/employees',
+    icon: Users,
+    roles: ['EMPLOYEE_ADMIN'],
+    section: 'EMPLOYEES',
+  },
+  {
+    label: 'Bulk Upload',
+    href: '/admin/bulk-upload',
+    icon: UploadCloud,
+    roles: ['EMPLOYEE_ADMIN'],
+    section: 'EMPLOYEES',
   },
 ];
 
@@ -169,31 +184,79 @@ const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/event-control',
     icon: Gauge,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
-    isSectionHeader: 'GLOBAL',
+    section: 'GLOBAL',
   },
   {
     label: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
     roles: ['SUPER_ADMIN', 'ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
+    section: 'GLOBAL',
+  },
+  {
+    label: 'Attendees & Passes',
+    href: '/admin/attendees',
+    icon: Users,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'REGISTRATION_STAFF'],
+    section: 'GLOBAL',
   },
   {
     label: 'Gates',
     href: '/admin/gates',
     icon: DoorOpen,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
+    section: 'GLOBAL',
   },
   {
     label: 'Staff Management',
     href: '/admin/staff',
     icon: Shield,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
+    section: 'GLOBAL',
   },
   {
     label: 'Settings',
     href: '/admin/settings',
     icon: Settings,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
+    section: 'GLOBAL',
+  },
+
+  // OPERATIONS
+  {
+    label: 'Help Desk Overrides',
+    href: '/admin/helpdesk',
+    icon: LifeBuoy,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REGISTRATION_STAFF'],
+    section: 'OPERATIONS',
+  },
+  {
+    label: 'Daily Closing',
+    href: '/admin/daily-closing',
+    icon: CalendarCheck,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
+    section: 'OPERATIONS',
+  },
+  {
+    label: 'Reports & Export',
+    href: '/admin/reports',
+    icon: BarChart3,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
+    section: 'OPERATIONS',
+  },
+  {
+    label: 'Turnstile Scanner',
+    href: '/scanner',
+    icon: ScanLine,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
+    section: 'OPERATIONS',
+  },
+  {
+    label: 'Incident Response',
+    href: '/admin/incidents',
+    icon: AlertTriangle,
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
+    section: 'OPERATIONS',
   },
 
   // EMPLOYEES
@@ -202,37 +265,14 @@ const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/employees',
     icon: Users,
     roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN', 'REGISTRATION_STAFF'],
-    isSectionHeader: 'EMPLOYEES',
-  },
-  {
-    label: 'Attendees & Passes',
-    href: '/admin/attendees',
-    icon: Users,
-    roles: ['SUPER_ADMIN', 'REGISTRATION_STAFF'],
+    section: 'EMPLOYEES',
   },
   {
     label: 'Bulk Upload',
     href: '/admin/bulk-upload',
     icon: UploadCloud,
     roles: ['SUPER_ADMIN', 'REGISTRATION_STAFF'],
-  },
-  {
-    label: 'Help Desk Overrides',
-    href: '/admin/helpdesk',
-    icon: LifeBuoy,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REGISTRATION_STAFF'],
-  },
-  {
-    label: 'Daily Closing',
-    href: '/admin/daily-closing',
-    icon: CalendarCheck,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
-  },
-  {
-    label: 'Reports & Export',
-    href: '/admin/reports',
-    icon: BarChart3,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER', 'REPORT_VIEWER'],
+    section: 'EMPLOYEES',
   },
 
   // E-PASS
@@ -241,58 +281,49 @@ const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/commercial/orders',
     icon: CalendarCheck,
     roles: ['SUPER_ADMIN'],
-    isSectionHeader: 'E-PASS',
+    section: 'E-PASS',
   },
   {
     label: 'Customers & Passes',
     href: '/admin/commercial/customers',
     icon: Users,
     roles: ['SUPER_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Agents',
     href: '/admin/commercial/agents',
     icon: Shield,
     roles: ['SUPER_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Inventory & Quotas',
     href: '/admin/commercial/inventory',
     icon: Layers,
     roles: ['SUPER_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Allocations',
     href: '/admin/commercial/allocations',
     icon: Ticket,
     roles: ['SUPER_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Commercial Reports',
     href: '/admin/commercial/reports',
     icon: BarChart3,
     roles: ['SUPER_ADMIN'],
+    section: 'E-PASS',
   },
   {
     label: 'Ticket Delivery',
     href: '/admin/commercial/tickets',
     icon: ExternalLink,
     roles: ['SUPER_ADMIN'],
-  },
-
-  // OPERATIONS
-  {
-    label: 'Turnstile Scanner',
-    href: '/scanner',
-    icon: ScanLine,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
-    isSectionHeader: 'OPERATIONS',
-  },
-  {
-    label: 'Incident Response',
-    href: '/admin/incidents',
-    icon: AlertTriangle,
-    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'GATE_MANAGER'],
+    section: 'E-PASS',
   },
 
   // TEST LAB
@@ -301,13 +332,14 @@ const ALL_NAV_ITEMS: NavItem[] = [
     href: '/admin/traffic-test',
     icon: FlaskConical,
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN'],
-    isSectionHeader: 'TEST LAB',
+    section: 'TEST LAB',
   },
   {
     label: 'Testing & Preview',
     href: '/admin/testing',
     icon: Eye,
     roles: ['SUPER_ADMIN'],
+    section: 'TEST LAB',
   },
 ];
 
@@ -516,8 +548,8 @@ export default function AdminLayout({
   }
 
   // Hydrate user safely after mount to prevent React Error #418 (hydration mismatch)
-  const [user, setUser] = useState<AdminUser | null>(null);
-  const [authChecking, setAuthChecking] = useState(true);
+  const [user, setUser] = useState<AdminUser | null>(() => getStoredAuthUser() as AdminUser | null);
+  const [authChecking, setAuthChecking] = useState(() => !getStoredAuthUser());
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -789,39 +821,48 @@ export default function AdminLayout({
 
           {/* Navigation Links (Strictly Role-Filtered matching Laravel hierarchy) */}
           <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-            {visibleNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === '/admin'
-                  ? pathname === '/admin'
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            {(() => {
+              let lastSection: string | undefined = undefined;
+              return visibleNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  item.href === '/admin'
+                    ? pathname === '/admin'
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-              return (
-                <React.Fragment key={item.href}>
-                  {item.isSectionHeader && (
-                    <div className="px-3 pt-3 pb-1 text-[10px] font-extrabold tracking-wider text-ink-soft uppercase font-outfit">
-                      {item.isSectionHeader}
-                    </div>
-                  )}
-                  <Link
-                    href={item.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                      isActive
-                        ? 'bg-maroon text-white shadow-xs'
-                        : 'text-ink/80 hover:bg-cream-soft hover:text-ink'
-                    }`}
-                  >
-                    <Icon
-                      className={`w-[18px] h-[18px] shrink-0 ${
-                        isActive ? 'text-gold-light' : 'text-ink-soft'
+                const sectionToRender = item.section || item.isSectionHeader;
+                const showSectionHeader = Boolean(sectionToRender && sectionToRender !== lastSection);
+                if (sectionToRender) {
+                  lastSection = sectionToRender;
+                }
+
+                return (
+                  <React.Fragment key={item.href}>
+                    {showSectionHeader && (
+                      <div className="px-3 pt-3 pb-1 text-[10px] font-extrabold tracking-wider text-ink-soft uppercase font-outfit">
+                        {sectionToRender}
+                      </div>
+                    )}
+                    <Link
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                        isActive
+                          ? 'bg-maroon text-white shadow-xs'
+                          : 'text-ink/80 hover:bg-cream-soft hover:text-ink'
                       }`}
-                    />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                </React.Fragment>
-              );
-            })}
+                    >
+                      <Icon
+                        className={`w-[18px] h-[18px] shrink-0 ${
+                          isActive ? 'text-gold-light' : 'text-ink-soft'
+                        }`}
+                      />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  </React.Fragment>
+                );
+              });
+            })()}
 
             {/* Public Event Link Button */}
             <div className="pt-3 mt-3 border-t border-stone-100">

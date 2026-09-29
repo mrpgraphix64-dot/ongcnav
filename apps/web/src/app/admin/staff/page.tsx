@@ -58,15 +58,15 @@ interface StaffRecord {
 const ROLES_MAP: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
   EVENT_ADMIN: 'Event Admin',
+  COMMERCIAL_ADMIN: 'E-Pass Admin',
+  EMPLOYEE_ADMIN: 'Employee Admin',
   GATE_MANAGER: 'Gate Manager',
   SCANNER_STAFF: 'Scanner Staff',
   REGISTRATION_STAFF: 'Registration Staff',
   REPORT_VIEWER: 'Report Viewer',
-  COMMERCIAL_ADMIN: 'E-Pass Admin',
-  EMPLOYEE_ADMIN: 'Employee Admin',
-  COMMERCIAL_AGENT: 'E-Pass Agent',
-  COMMERCIAL_SUB_AGENT: 'E-Pass Sub-Agent',
 };
+
+const AGENT_ROLES = ['COMMERCIAL_AGENT', 'COMMERCIAL_SUB_AGENT'];
 
 export default function AdminStaffPage() {
   const [staffList, setStaffList] = useState<StaffRecord[]>([]);
@@ -240,9 +240,14 @@ export default function AdminStaffPage() {
     loadData();
   }, [loadData]);
 
+  // Internal staff list (strictly excluding agents)
+  const internalStaffList = useMemo(() => {
+    return staffList.filter((s) => !AGENT_ROLES.includes(s.role));
+  }, [staffList]);
+
   // Filtered staff list
   const filteredStaff = useMemo(() => {
-    return staffList.filter((staff) => {
+    return internalStaffList.filter((staff) => {
       // Role filter
       if (selectedRole !== 'ALL' && staff.role !== selectedRole) {
         return false;
@@ -258,17 +263,18 @@ export default function AdminStaffPage() {
         const name = (staff.name || '').toLowerCase();
         const email = (staff.email || '').toLowerCase();
         const phone = (staff.mobile || staff.phone || '').toLowerCase();
-        if (!name.includes(q) && !email.includes(q) && !phone.includes(q)) {
+        const sId = (staff.staffId || staff.staff_id || '').toLowerCase();
+        if (!name.includes(q) && !email.includes(q) && !phone.includes(q) && !sId.includes(q)) {
           return false;
         }
       }
       return true;
     });
-  }, [staffList, selectedRole, selectedStatus, searchQuery]);
+  }, [internalStaffList, selectedRole, selectedStatus, searchQuery]);
 
   const activeOperatorsCount = useMemo(() => {
-    return staffList.filter((s) => s.isActive || s.status === 'active').length;
-  }, [staffList]);
+    return internalStaffList.filter((s) => s.isActive || s.status === 'active').length;
+  }, [internalStaffList]);
 
   // Dedicated single-admin per domain references
   const ePassAdmin = useMemo(() => {
@@ -599,7 +605,7 @@ export default function AdminStaffPage() {
               Total Staff
             </div>
             <div className="font-outfit font-black text-2xl text-[#7A1113]">
-              {staffList.length}
+              {internalStaffList.length}
             </div>
           </div>
           <div className="h-8 w-px bg-stone-200 hidden sm:block"></div>
@@ -1027,7 +1033,7 @@ export default function AdminStaffPage() {
                   <td colSpan={7} className="px-5 py-12 text-center text-stone-400">
                     <Users className="w-10 h-10 text-stone-300 mx-auto mb-2" />
                     <p className="font-semibold text-stone-600">
-                      {staffList.length === 0
+                      {internalStaffList.length === 0
                         ? 'No staff members created yet.'
                         : 'No staff matching the search filters.'}
                     </p>
@@ -1044,9 +1050,13 @@ export default function AdminStaffPage() {
 
                   const roleBadgeClass =
                     staff.role === 'SUPER_ADMIN'
-                      ? 'bg-rose-100 text-rose-900 border-rose-200'
+                      ? 'bg-purple-100 text-purple-900 border-purple-200 shadow-2xs'
                       : staff.role === 'EVENT_ADMIN'
                       ? 'bg-[#7A1113]/10 text-[#7A1113] border-[#7A1113]/20'
+                      : staff.role === 'COMMERCIAL_ADMIN'
+                      ? 'bg-amber-100 text-amber-900 border-amber-200'
+                      : staff.role === 'EMPLOYEE_ADMIN'
+                      ? 'bg-sky-100 text-sky-900 border-sky-200'
                       : staff.role === 'GATE_MANAGER'
                       ? 'bg-amber-100 text-amber-900 border-amber-200'
                       : staff.role === 'SCANNER_STAFF'
@@ -1090,6 +1100,11 @@ export default function AdminStaffPage() {
                             <div className="font-bold text-sm text-stone-900 truncate">
                               {staff.name}
                             </div>
+                            {(staff.staffId || staff.staff_id) && (
+                              <div className="text-[10px] font-mono font-bold text-stone-500">
+                                ID: {staff.staffId || staff.staff_id}
+                              </div>
+                            )}
                             <div className="text-[11px] text-stone-500 truncate">
                               {staff.email}
                             </div>

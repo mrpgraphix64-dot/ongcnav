@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StaffService } from './staff.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@ongc/shared-types';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('StaffService Parity & Functional Tests', () => {
@@ -47,6 +47,15 @@ describe('StaffService Parity & Functional Tests', () => {
               name: 'New Operator',
               email: 'newop@ongc.co.in',
               staffId: 'STF-006',
+            });
+          }
+          if (where.id === BigInt(7)) {
+            return Promise.resolve({
+              ...mockUser,
+              id: BigInt(7),
+              role: UserRole.COMMERCIAL_AGENT,
+              name: 'Agent User',
+              email: 'agent@ongc.co.in',
             });
           }
           if (where.id === BigInt(999)) return Promise.resolve(null);
@@ -132,6 +141,40 @@ describe('StaffService Parity & Functional Tests', () => {
       expect(user.gates[0].name).toBe('North Gate');
       expect(user.last_activity_at).toBeDefined();
     });
+
+    it('filters out AGENT_ROLES by default with notIn', async () => {
+      await service.findAll();
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            role: { notIn: [UserRole.COMMERCIAL_AGENT, UserRole.COMMERCIAL_SUB_AGENT] },
+          }),
+        }),
+      );
+    });
+
+    it('returns empty array filter { in: [] } when an agent role is requested', async () => {
+      await service.findAll(UserRole.COMMERCIAL_AGENT);
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            role: { in: [] },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('findOne', () => {
+    it('returns staff user when user is an internal staff member', async () => {
+      const user = await service.findOne(BigInt(1));
+      expect(user.id).toBe('1');
+      expect(user.name).toBe('Rahul Sharma');
+    });
+
+    it('rejects agent user with NotFoundException', async () => {
+      await expect(service.findOne(BigInt(7))).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('create', () => {
@@ -161,6 +204,16 @@ describe('StaffService Parity & Functional Tests', () => {
         }),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('rejects creating agent role via StaffService with BadRequestException', async () => {
+      await expect(
+        service.create({
+          name: 'Agent Acc',
+          email: 'newagent@ongc.co.in',
+          role: UserRole.COMMERCIAL_AGENT,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('update', () => {
@@ -181,6 +234,18 @@ describe('StaffService Parity & Functional Tests', () => {
         data: [{ userId: BigInt(1), gateId: BigInt(2) }],
       });
     });
+
+    it('rejects updating an agent user with NotFoundException', async () => {
+      await expect(
+        service.update(BigInt(7), { name: 'Updated Agent' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejects changing a staff member role to agent role with BadRequestException', async () => {
+      await expect(
+        service.update(BigInt(1), { role: UserRole.COMMERCIAL_AGENT }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('toggleStatus', () => {
@@ -190,6 +255,10 @@ describe('StaffService Parity & Functional Tests', () => {
         where: { id: BigInt(1) },
         data: { isActive: false },
       });
+    });
+
+    it('rejects toggling an agent user with NotFoundException', async () => {
+      await expect(service.toggleStatus(BigInt(7))).rejects.toThrow(NotFoundException);
     });
   });
 

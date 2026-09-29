@@ -20,6 +20,11 @@ import {
 } from '../common/security/user-permissions.util';
 import * as bcrypt from 'bcrypt';
 
+const AGENT_ROLES: UserRole[] = [
+  UserRole.COMMERCIAL_AGENT,
+  UserRole.COMMERCIAL_SUB_AGENT,
+];
+
 @Injectable()
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
@@ -30,7 +35,13 @@ export class StaffService {
     };
 
     if (role && role !== 'ALL') {
-      where.role = role as any;
+      if (AGENT_ROLES.includes(role as UserRole)) {
+        where.role = { in: [] };
+      } else {
+        where.role = role as any;
+      }
+    } else {
+      where.role = { notIn: AGENT_ROLES };
     }
 
     if (status && status !== 'ALL') {
@@ -43,6 +54,7 @@ export class StaffService {
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
         { phone: { contains: q, mode: 'insensitive' } },
+        { staffId: { contains: q, mode: 'insensitive' } },
       ];
     }
 
@@ -85,7 +97,7 @@ export class StaffService {
       },
     });
 
-    if (!user) {
+    if (!user || AGENT_ROLES.includes(user.role as UserRole)) {
       throw new NotFoundException(`Staff user with ID ${id} not found`);
     }
 
@@ -99,6 +111,10 @@ export class StaffService {
   }
 
   async create(dto: CreateStaffDto, currentUser?: { id: bigint | string; role: string }) {
+    if (AGENT_ROLES.includes(dto.role as UserRole)) {
+      throw new BadRequestException('Agents cannot be managed via Staff Management. Please use the Dedicated Agents section.');
+    }
+
     if (
       (dto.role === UserRole.COMMERCIAL_ADMIN || dto.role === UserRole.EMPLOYEE_ADMIN || dto.role === UserRole.SUPER_ADMIN) &&
       currentUser &&
@@ -228,8 +244,12 @@ export class StaffService {
     const existing = await this.prisma.user.findUnique({
       where: { id },
     });
-    if (!existing) {
+    if (!existing || AGENT_ROLES.includes(existing.role as UserRole)) {
       throw new NotFoundException(`Staff user with ID ${id} not found`);
+    }
+
+    if (dto.role !== undefined && AGENT_ROLES.includes(dto.role as UserRole)) {
+      throw new BadRequestException('Agents cannot be managed via Staff Management. Please use the Dedicated Agents section.');
     }
 
     const targetRole = dto.role !== undefined ? (dto.role as UserRole) : (existing.role as UserRole);
@@ -408,7 +428,7 @@ export class StaffService {
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
-    if (!user) {
+    if (!user || AGENT_ROLES.includes(user.role as UserRole)) {
       throw new NotFoundException(`Staff user with ID ${id} not found`);
     }
 
@@ -574,6 +594,7 @@ export class StaffService {
   }
 
   async unassignGate(userId: bigint, gateId: bigint) {
+    await this.findOne(userId);
     await this.prisma.gateUser.deleteMany({
       where: { userId, gateId },
     });
@@ -892,6 +913,16 @@ export class StaffService {
           name: user.name,
           email: user.email,
           reason: 'SUPER_ADMIN cannot be deleted.',
+        });
+        continue;
+      }
+
+      if (AGENT_ROLES.includes(user.role as UserRole)) {
+        protectedStaff.push({
+          id: user.id.toString(),
+          name: user.name,
+          email: user.email,
+          reason: 'E-Pass Agents cannot be managed or deleted via Staff Management.',
         });
         continue;
       }
