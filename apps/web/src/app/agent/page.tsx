@@ -46,36 +46,11 @@ const EVENT_DATES = [
   '2026-10-19',
 ];
 
-const PASS_TYPES = [
-  {
-    code: 'COMMERCIAL_DAILY',
-    name: 'Daily Pass',
-    priceInr: 499,
-    description: 'Single day entry for one person',
-    isSeason: false,
-  },
-  {
-    code: 'COMMERCIAL_SEASON',
-    name: 'Season Pass',
-    priceInr: 2999,
-    description: 'All 9 nights entry for one person',
-    isSeason: true,
-  },
-  {
-    code: 'COMMERCIAL_MANDLI',
-    name: 'Mandli Pass',
-    priceInr: 3999,
-    description: 'Group entry pass for Garba groups',
-    isSeason: false,
-  },
-  {
-    code: 'COMMERCIAL_ANY_DAY',
-    name: 'Any Day Pass',
-    priceInr: 599,
-    description: 'Flexible single day entry',
-    isSeason: false,
-  },
-];
+import {
+  AgentPassType,
+  CANONICAL_AGENT_PASS_TYPES,
+  PASS_TYPES,
+} from './agent-pricing.constants';
 
 export default function CommercialAgentPortal() {
   const router = useRouter();
@@ -90,6 +65,9 @@ export default function CommercialAgentPortal() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Dynamic Canonical Pass Types & Pricing
+  const [passTypes, setPassTypes] = useState<AgentPassType[]>(CANONICAL_AGENT_PASS_TYPES);
 
   // Booking Flow State
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -168,13 +146,34 @@ export default function CommercialAgentPortal() {
   const loadAgentData = useCallback(async () => {
     try {
       setErrorMsg(null);
-      const [profileData, allocData] = await Promise.all([
+      const [profileData, allocData, configRes] = await Promise.all([
         fetchApi('/agent/profile'),
         fetchApi('/agent/allocations'),
+        fetchApi('/commercial/config').catch(() => null),
       ]);
       setAgentProfile(profileData);
       setAllocations(allocData.allocations || []);
       setSummary(allocData.summary || null);
+
+      if (configRes && Array.isArray(configRes.ticketTypes)) {
+        setPassTypes(
+          CANONICAL_AGENT_PASS_TYPES.map((defaultPt) => {
+            const serverType = configRes.ticketTypes.find(
+              (st: any) => st.code === defaultPt.code,
+            );
+            if (serverType && typeof serverType.priceInr === 'number') {
+              return {
+                ...defaultPt,
+                name: serverType.name || defaultPt.name,
+                priceInr: serverType.priceInr,
+                description: serverType.description || defaultPt.description,
+                isSeason: Boolean(serverType.isSeasonPass ?? defaultPt.isSeason),
+              };
+            }
+            return defaultPt;
+          }),
+        );
+      }
     } catch (err: any) {
       if (err?.message?.includes('Authentication required') || err?.status === 401 || err?.status === 403) {
         clearStoredAuth();
@@ -242,8 +241,8 @@ export default function CommercialAgentPortal() {
   }, [allocations, selectedPassType]);
 
   const currentPassConfig = useMemo(() => {
-    return PASS_TYPES.find((p) => p.code === selectedPassType) || PASS_TYPES[0];
-  }, [selectedPassType]);
+    return passTypes.find((p) => p.code === selectedPassType) || passTypes[0];
+  }, [passTypes, selectedPassType]);
 
   const totalBookingPrice = useMemo(() => {
     return currentPassConfig.priceInr * quantity;
@@ -698,7 +697,7 @@ export default function CommercialAgentPortal() {
                     </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {PASS_TYPES.map((pt) => {
+                      {passTypes.map((pt) => {
                         const alloc = allocations.find((a) => a.passType === pt.code);
                         const avail = alloc?.availableQuantity || 0;
                         const isSelected = selectedPassType === pt.code;
@@ -1470,7 +1469,7 @@ export default function CommercialAgentPortal() {
                   onChange={(e) => setAllocPassType(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon"
                 >
-                  {PASS_TYPES.map((p) => {
+                  {passTypes.map((p) => {
                     const alloc = allocations.find((a) => a.passType === p.code);
                     const avail = alloc?.availableQuantity || 0;
                     return (
@@ -1609,7 +1608,7 @@ export default function CommercialAgentPortal() {
                   onChange={(e) => setReclaimPassType(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-stone-300 focus:outline-hidden focus:border-maroon"
                 >
-                  {PASS_TYPES.map((pt) => {
+                  {passTypes.map((pt) => {
                     const alloc = selectedSubAgentForReclaim.allocations?.find((a: any) => a.passType === pt.code);
                     const avail = alloc?.availableQuantity || 0;
                     return (

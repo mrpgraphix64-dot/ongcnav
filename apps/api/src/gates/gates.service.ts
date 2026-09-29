@@ -8,15 +8,7 @@ import { CreateGateDto } from './dto/create-gate.dto';
 import { UpdateGateDto } from './dto/update-gate.dto';
 import { GateStatus, GateType } from '@prisma/client';
 import { UserRole } from '@ongc/shared-types';
-
-function getTodayIST(): string {
-  const now = new Date();
-  const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const yyyy = istDate.getFullYear();
-  const mm = String(istDate.getMonth() + 1).padStart(2, '0');
-  const dd = String(istDate.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
+import { getTodayIST, resolveActiveEventDate } from '../common/utils/event-date.util';
 
 function getISTDayRange(dateStr: string) {
   const [yyyy, mm, dd] = dateStr.split('-').map(Number);
@@ -124,7 +116,7 @@ export class GatesService {
   }
 
   async findAll(activeDate?: string) {
-    const today = activeDate || getTodayIST();
+    const today = activeDate || (await resolveActiveEventDate(this.prisma));
 
     const [gates, counts] = await Promise.all([
       this.prisma.gate.findMany({
@@ -197,7 +189,7 @@ export class GatesService {
   }
 
   async findOne(id: bigint, activeDate?: string) {
-    const today = activeDate || getTodayIST();
+    const today = activeDate || (await resolveActiveEventDate(this.prisma));
     const { start: startOfDay, end: endOfDay } = getISTDayRange(today);
 
     const gate = await this.prisma.gate.findUnique({

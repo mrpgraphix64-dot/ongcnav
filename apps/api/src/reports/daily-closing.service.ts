@@ -2,6 +2,7 @@ import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckinStatus, IncidentStatus, UserRole, RegistrationType } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
+import { resolveActiveEventDate, getTodayIST } from '../common/utils/event-date.util';
 
 export function sanitizeCsvValue(value: any): string {
   if (value === null || value === undefined) return '';
@@ -18,18 +19,11 @@ export class DailyClosingService {
   constructor(private readonly prisma: PrismaService) {}
 
   private getTodayIst(): string {
-    return new Date().toLocaleDateString('en-CA', {
-      timeZone: 'Asia/Kolkata',
-    });
+    return getTodayIST();
   }
 
   private async getActiveEventDate(): Promise<string> {
-    const setting = await this.prisma.setting.findFirst({
-      where: {
-        OR: [{ key: 'active_event_date' }, { key: 'event_control.active_event_date' }],
-      },
-    });
-    return setting?.value || this.getTodayIst();
+    return resolveActiveEventDate(this.prisma);
   }
 
   async generateDailyClosingReport(date?: string, userRole?: string) {
@@ -243,7 +237,7 @@ export class DailyClosingService {
             gte: new Date(`${selectedDate}T00:00:00.000Z`),
             lte: new Date(`${selectedDate}T23:59:59.999Z`),
           },
-          result: 'duplicate',
+          result: { in: ['duplicate', 'ALREADY_CHECKED_IN'] },
           isLoadTest: false,
         },
       }),
@@ -253,7 +247,7 @@ export class DailyClosingService {
             gte: new Date(`${selectedDate}T00:00:00.000Z`),
             lte: new Date(`${selectedDate}T23:59:59.999Z`),
           },
-          result: 'not_booked',
+          result: { in: ['not_booked', 'NOT_BOOKED_TODAY'] },
           isLoadTest: false,
         },
       }),
@@ -263,7 +257,7 @@ export class DailyClosingService {
             gte: new Date(`${selectedDate}T00:00:00.000Z`),
             lte: new Date(`${selectedDate}T23:59:59.999Z`),
           },
-          result: 'unauthorized_gate',
+          result: { in: ['unauthorized_gate', 'UNAUTHORIZED_GATE'] },
           isLoadTest: false,
         },
       }),
@@ -273,7 +267,7 @@ export class DailyClosingService {
             gte: new Date(`${selectedDate}T00:00:00.000Z`),
             lte: new Date(`${selectedDate}T23:59:59.999Z`),
           },
-          result: 'invalid',
+          result: { in: ['invalid', 'INVALID_QR'] },
           isLoadTest: false,
         },
       }),
@@ -283,7 +277,7 @@ export class DailyClosingService {
             gte: new Date(`${selectedDate}T00:00:00.000Z`),
             lte: new Date(`${selectedDate}T23:59:59.999Z`),
           },
-          result: 'gate_closed',
+          result: { in: ['gate_closed', 'GATE_CLOSED'] },
           isLoadTest: false,
         },
       }),
@@ -293,7 +287,7 @@ export class DailyClosingService {
             gte: new Date(`${selectedDate}T00:00:00.000Z`),
             lte: new Date(`${selectedDate}T23:59:59.999Z`),
           },
-          result: 'capacity_reached',
+          result: { in: ['capacity_reached', 'GATE_FULL'] },
           isLoadTest: false,
         },
       }),

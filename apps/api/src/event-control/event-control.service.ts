@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
+import { resolveActiveEventDate } from '../common/utils/event-date.util';
 
 @Injectable()
 export class EventControlService {
@@ -13,15 +14,7 @@ export class EventControlService {
    * Determine active operational date in India Standard Time (Asia/Kolkata).
    */
   async getActiveEventDate(): Promise<string> {
-    const override = await this.getSetting('event_control.active_event_date');
-    if (override && override.trim() !== '') {
-      return override.trim();
-    }
-
-    // Evaluate current date in Asia/Kolkata (UTC+05:30)
-    const now = new Date();
-    const istTimeStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // Format: YYYY-MM-DD
-    return istTimeStr;
+    return resolveActiveEventDate(this.prisma);
   }
 
   async getSetting(key: string, defaultValue = ''): Promise<string> {

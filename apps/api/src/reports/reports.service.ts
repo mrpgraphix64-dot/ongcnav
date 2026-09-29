@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckinStatus, UserRole, RegistrationType } from '@ongc/shared-types';
 import { sanitizeCsvValue } from './daily-closing.service';
+import { resolveActiveEventDate, getTodayIST } from '../common/utils/event-date.util';
 
 export interface ReportFilters {
   gate?: string;
@@ -19,9 +20,7 @@ export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private getTodayIst(): string {
-    return new Date().toLocaleDateString('en-CA', {
-      timeZone: 'Asia/Kolkata',
-    });
+    return getTodayIST();
   }
 
   async buildReport(filters?: ReportFilters, userRole?: string) {
@@ -51,7 +50,20 @@ export class ReportsService {
     }
 
     if (filters?.result && filters.result !== 'all') {
-      scanLogWhere.result = filters.result;
+      const res = filters.result;
+      if (res === 'approved' || res === 'SUCCESS') {
+        scanLogWhere.result = { in: ['approved', 'SUCCESS'] };
+      } else if (res === 'duplicate' || res === 'ALREADY_CHECKED_IN') {
+        scanLogWhere.result = { in: ['duplicate', 'ALREADY_CHECKED_IN'] };
+      } else if (res === 'invalid' || res === 'INVALID_QR') {
+        scanLogWhere.result = { in: ['invalid', 'INVALID_QR'] };
+      } else if (res === 'not_booked' || res === 'NOT_BOOKED_TODAY') {
+        scanLogWhere.result = { in: ['not_booked', 'NOT_BOOKED_TODAY'] };
+      } else if (res === 'unauthorized_gate' || res === 'UNAUTHORIZED_GATE') {
+        scanLogWhere.result = { in: ['unauthorized_gate', 'UNAUTHORIZED_GATE'] };
+      } else {
+        scanLogWhere.result = res;
+      }
     }
 
     if (filters?.event_date) {
@@ -98,12 +110,16 @@ export class ReportsService {
     // 1. Fetch filtered attendees
     const attendees = await this.prisma.attendee.findMany({
       where: attendeeWhere,
-      include: {
-        employee: true,
-        familyMember: true,
+      select: {
+        id: true,
+        category: true,
+        createdAt: true,
         dailyCheckins: {
           where: { status: CheckinStatus.SUCCESS as any, isLoadTest: false },
-          include: { gate: true },
+          select: {
+            eventDate: true,
+            checkinTime: true,
+          },
         },
       },
     });
@@ -163,8 +179,8 @@ export class ReportsService {
 
         const totalEntries = logs.length;
         const approved = logs.filter((l) => l.result === 'approved' || l.result === 'SUCCESS').length;
-        const duplicates = logs.filter((l) => l.result === 'duplicate').length;
-        const invalid = logs.filter((l) => l.result === 'invalid').length;
+        const duplicates = logs.filter((l) => l.result === 'duplicate' || l.result === 'ALREADY_CHECKED_IN').length;
+        const invalid = logs.filter((l) => l.result === 'invalid' || l.result === 'INVALID_QR').length;
 
         let lastActivity = 'No activity yet';
         if (logs.length > 0) {
@@ -255,10 +271,18 @@ export class ReportsService {
       this.prisma.scanLog.count({
         where: { ...scanLogWhere, result: { in: ['approved', 'SUCCESS'] } },
       }),
-      this.prisma.scanLog.count({ where: { ...scanLogWhere, result: 'invalid' } }),
-      this.prisma.scanLog.count({ where: { ...scanLogWhere, result: 'duplicate' } }),
-      this.prisma.scanLog.count({ where: { ...scanLogWhere, result: 'not_booked' } }),
-      this.prisma.scanLog.count({ where: { ...scanLogWhere, result: 'unauthorized_gate' } }),
+      this.prisma.scanLog.count({
+        where: { ...scanLogWhere, result: { in: ['invalid', 'INVALID_QR'] } },
+      }),
+      this.prisma.scanLog.count({
+        where: { ...scanLogWhere, result: { in: ['duplicate', 'ALREADY_CHECKED_IN'] } },
+      }),
+      this.prisma.scanLog.count({
+        where: { ...scanLogWhere, result: { in: ['not_booked', 'NOT_BOOKED_TODAY'] } },
+      }),
+      this.prisma.scanLog.count({
+        where: { ...scanLogWhere, result: { in: ['unauthorized_gate', 'UNAUTHORIZED_GATE'] } },
+      }),
     ]);
 
     const qrSummary = {
@@ -368,7 +392,6 @@ export class ReportsService {
         take: 2000,
         orderBy: { id: 'asc' },
         include: {
-          employee: true,
           dailyCheckins: {
             where: { status: CheckinStatus.SUCCESS as any },
             include: { gate: true },
@@ -467,7 +490,7 @@ export class ReportsService {
   async getSummary(date?: string, userRole?: string) {
     const res = await this.getReportsPageData({ event_date: date }, userRole);
     return {
-      targetDate: date || this.getTodayIst(),
+      targetDate: date || (await resolveActiveEventDate(this.prisma)),
       totalRegisteredPasses: res.totalAttendees,
       todayTotalCheckins: res.checkedInCount,
       peakHour: res.attendanceByDay[0]?.label || 'N/A',

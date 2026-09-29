@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateIncidentDto, UpdateIncidentDto, ResolveIncidentDto } from './dto/create-incident.dto';
 import { IncidentCategory, IncidentSeverity, IncidentStatus } from '@ongc/shared-types';
+import { resolveActiveEventDate, getTodayIST } from '../common/utils/event-date.util';
 
 export const INCIDENT_CATEGORIES_MAP: Record<string, string> = {
   TICKET_ISSUE: 'Ticket / QR Issue',
@@ -18,9 +19,7 @@ export class IncidentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private getTodayIst(): string {
-    return new Date().toLocaleDateString('en-CA', {
-      timeZone: 'Asia/Kolkata',
-    });
+    return getTodayIST();
   }
 
   private getTimeIst(): string {
@@ -31,12 +30,7 @@ export class IncidentsService {
   }
 
   private async getActiveEventDate(): Promise<string> {
-    const setting = await this.prisma.setting.findFirst({
-      where: {
-        OR: [{ key: 'active_event_date' }, { key: 'event_control.active_event_date' }],
-      },
-    });
-    return setting?.value || this.getTodayIst();
+    return resolveActiveEventDate(this.prisma);
   }
 
   /**
