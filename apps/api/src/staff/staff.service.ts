@@ -329,9 +329,20 @@ export class StaffService {
         }
         throw new ForbiddenException('The SUPER_ADMIN account cannot be deactivated.');
       }
+      if (!currentUser || currentUser.role !== UserRole.SUPER_ADMIN) {
+        if (dto.password && dto.password.trim() !== '') {
+          throw new ForbiddenException('Only SUPER_ADMIN can change the password of a SUPER_ADMIN account.');
+        }
+        if (dto.email !== undefined && dto.email.trim().toLowerCase() !== existing.email.toLowerCase()) {
+          throw new ForbiddenException('Only SUPER_ADMIN can change the email of a SUPER_ADMIN account.');
+        }
+      }
     }
 
     if (dto.role === UserRole.SUPER_ADMIN && existing.role !== UserRole.SUPER_ADMIN) {
+      if (!currentUser || currentUser.role !== UserRole.SUPER_ADMIN) {
+        throw new ForbiddenException('Only SUPER_ADMIN can grant the SUPER_ADMIN role.');
+      }
       const existingSuper = await this.prisma.user.findFirst({
         where: { role: UserRole.SUPER_ADMIN },
       });

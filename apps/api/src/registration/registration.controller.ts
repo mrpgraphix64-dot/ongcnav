@@ -5,9 +5,12 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseInterceptors,
   UploadedFiles,
+  UseGuards,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
@@ -16,7 +19,6 @@ import * as fs from 'fs';
 import { RegistrationService } from './registration.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
 import { PublicMaintenanceGuard } from '../common/guards/public-maintenance.guard';
-import { UseGuards } from '@nestjs/common';
 
 // Same private, non-web-served storage model as before — just two
 // directories now (employee vs. family) so filenames can never collide
@@ -137,9 +139,14 @@ export class RegistrationController {
   // active commercial attendee/QR without payment verification.
 
   @Get('ticket/:token')
-  @ApiOperation({ summary: 'Lookup ticket/pass by QR token or ticket number' })
-  async getTicket(@Param('token') token: string) {
-    return this.registrationService.findTicketByToken(token);
+  @ApiOperation({ summary: 'Lookup ticket/pass by secure QR token' })
+  async getTicket(@Param('token') token: string, @Req() req?: Request) {
+    const ip = req
+      ? ((req.headers?.['x-forwarded-for'] as string) || req.socket?.remoteAddress || '127.0.0.1')
+      : undefined;
+    return ip !== undefined
+      ? this.registrationService.findTicketByToken(token, ip)
+      : this.registrationService.findTicketByToken(token);
   }
 
   @Get('my-registration/:cpf')

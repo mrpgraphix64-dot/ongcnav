@@ -3,8 +3,12 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  HttpException,
+  HttpStatus,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
 import {
   AttendeeStatus,
@@ -18,7 +22,10 @@ import * as QRCode from 'qrcode';
 
 @Injectable()
 export class RegistrationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly redis?: RedisService,
+  ) {}
 
   async getMaintenanceStatus() {
     try {
@@ -183,10 +190,25 @@ export class RegistrationService {
     };
   }
 
-  async findTicketByToken(token: string) {
+  async findTicketByToken(token: string, ip?: string) {
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      throw new NotFoundException('Ticket not found');
+    }
+    const cleanToken = token.trim();
+
+    // Rate limiting: max 60 public ticket lookups per minute per IP
+    if (ip && this.redis) {
+      const rateLimitKey = `rl:public_ticket:${ip}`;
+      const requestCount = await this.redis.incrementCounter(rateLimitKey, 60);
+      if (requestCount !== null && requestCount > 60) {
+        throw new HttpException('Too many ticket requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
+      }
+    }
+
+    // Security fix: lookup strictly by qrCodeToken. Never match by sequential ticketNumber.
     const attendee = await this.prisma.attendee.findFirst({
       where: {
-        OR: [{ qrCodeToken: token }, { ticketNumber: token }],
+        qrCodeToken: cleanToken,
       },
       include: {
         employee: true,
@@ -194,19 +216,6 @@ export class RegistrationService {
         order: {
           select: {
             metadata: true,
-          },
-        },
-        dailyCheckins: {
-          where: { isLoadTest: false },
-          orderBy: { checkinTime: 'desc' },
-          include: {
-            gate: {
-              select: {
-                id: true,
-                name: true,
-                gateNumber: true,
-              },
-            },
           },
         },
       },
@@ -245,27 +254,14 @@ export class RegistrationService {
       relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Commercial Pass'),
       attendeeName,
       hasPhoto,
-      // This person's own dates, not the employee's — falls back to the
-      // employee's legacy value for attendees created before this change.
       bookingDays: resolveBookingDays(attendee),
       employee: attendee.employee
         ? {
-            id: attendee.employee.id.toString(),
-            cpf: attendee.employee.cpf,
             name: attendee.employee.name,
-            designation: attendee.employee.designation,
-            department: attendee.employee.department,
             employeeCategory: attendee.employee.employeeCategory,
             hasPhoto: !!attendee.employee.photoPath,
           }
         : null,
-      checkins: attendee.dailyCheckins.map((c) => ({
-        id: c.id.toString(),
-        eventDate: c.eventDate,
-        checkinTime: c.checkinTime,
-        status: c.status,
-        gateName: c.gate?.name || 'Main Gate',
-      })),
     };
   }
 

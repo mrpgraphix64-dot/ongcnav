@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StaffService } from './staff.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@ongc/shared-types';
-import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConflictException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('StaffService Parity & Functional Tests', () => {
@@ -24,22 +24,33 @@ describe('StaffService Parity & Functional Tests', () => {
       {
         id: BigInt(10),
         gate: {
-          id: BigInt(2),
-          name: 'North Gate',
-          gateNumber: 'G-02',
-          gateType: 'REGULAR',
-          isOpen: true,
-        },
+            id: BigInt(2),
+            name: 'North Gate',
+            gateNumber: 'G-02',
+            gateType: 'REGULAR',
+            isOpen: true,
+          },
       },
     ],
   };
 
+  const mockSuperAdmin = {
+    ...mockUser,
+    id: BigInt(99),
+    name: 'Super Admin',
+    email: 'superadmin@ongc.co.in',
+    role: UserRole.SUPER_ADMIN,
+    staffId: 'SUPER-001',
+  };
+
   beforeEach(async () => {
     prisma = {
+      $transaction: jest.fn().mockImplementation(async (cb) => cb(prisma)),
       user: {
         findMany: jest.fn().mockResolvedValue([mockUser]),
         findUnique: jest.fn().mockImplementation(({ where }) => {
           if (where.id === BigInt(1)) return Promise.resolve(mockUser);
+          if (where.id === BigInt(99)) return Promise.resolve(mockSuperAdmin);
           if (where.id === BigInt(6)) {
             return Promise.resolve({
               ...mockUser,
@@ -114,7 +125,6 @@ describe('StaffService Parity & Functional Tests', () => {
           },
         ]),
       },
-      $transaction: jest.fn().mockImplementation(async (cb) => cb(prisma)),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -245,6 +255,55 @@ describe('StaffService Parity & Functional Tests', () => {
       await expect(
         service.update(BigInt(1), { role: UserRole.COMMERCIAL_AGENT }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('1. EVENT_ADMIN cannot change SUPER_ADMIN password', async () => {
+      await expect(
+        service.update(
+          BigInt(99),
+          { password: 'NewPassword123!' },
+          { id: BigInt(5), role: UserRole.EVENT_ADMIN },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('2. EVENT_ADMIN cannot change SUPER_ADMIN email', async () => {
+      await expect(
+        service.update(
+          BigInt(99),
+          { email: 'takeover@ongc.co.in' },
+          { id: BigInt(5), role: UserRole.EVENT_ADMIN },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('3. EVENT_ADMIN cannot change SUPER_ADMIN role', async () => {
+      await expect(
+        service.update(
+          BigInt(99),
+          { role: UserRole.EVENT_ADMIN },
+          { id: BigInt(5), role: UserRole.EVENT_ADMIN },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('4. EVENT_ADMIN cannot deactivate SUPER_ADMIN', async () => {
+      await expect(
+        service.update(
+          BigInt(99),
+          { isActive: false },
+          { id: BigInt(5), role: UserRole.EVENT_ADMIN },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('5. SUPER_ADMIN can update their own account credentials', async () => {
+      await service.update(
+        BigInt(99),
+        { name: 'Super Admin Updated' },
+        { id: BigInt(99), role: UserRole.SUPER_ADMIN },
+      );
+      expect(prisma.user.update).toHaveBeenCalled();
     });
   });
 

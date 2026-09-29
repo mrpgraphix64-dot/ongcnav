@@ -253,6 +253,50 @@ describe('RegistrationService', () => {
       prisma.attendee.findFirst = jest.fn().mockResolvedValue(null);
       await expect(service.findTicketByToken('missing')).rejects.toThrow(NotFoundException);
     });
+
+    it('queries attendee strictly by qrCodeToken and never by ticketNumber', async () => {
+      prisma.attendee.findFirst = jest.fn().mockResolvedValue(null);
+      await expect(service.findTicketByToken('NR2026-000001')).rejects.toThrow(NotFoundException);
+      expect(prisma.attendee.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { qrCodeToken: 'NR2026-000001' },
+        }),
+      );
+    });
+
+    it('does not expose employee CPF, internal employee ID, or check-in audit history on public lookup', async () => {
+      prisma.attendee.findFirst = jest.fn().mockResolvedValue({
+        id: BigInt(1),
+        ticketNumber: 'TK-1',
+        qrCodeToken: 'tok-1',
+        status: AttendeeStatus.ACTIVE,
+        familyMemberId: null,
+        bookingDays: ['2026-10-11'],
+        employee: {
+          id: BigInt(999),
+          cpf: 'SECRET_CPF_123',
+          name: 'Amit',
+          designation: 'ONGC Employee',
+          department: 'EWC',
+          employeeCategory: EmployeeCategory.REGULAR,
+          bookingDays: ['2026-10-11'],
+          photoPath: null,
+        },
+        familyMember: null,
+      });
+
+      const result = await service.findTicketByToken('tok-1');
+      expect((result.employee as any).cpf).toBeUndefined();
+      expect((result.employee as any).id).toBeUndefined();
+      expect((result as any).checkins).toBeUndefined();
+      expect(result.attendeeName).toBe('Amit');
+      expect(result.ticketNumber).toBe('TK-1');
+    });
+
+    it('rejects empty or whitespace token with NotFoundException', async () => {
+      await expect(service.findTicketByToken('')).rejects.toThrow(NotFoundException);
+      await expect(service.findTicketByToken('   ')).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('findByCpf', () => {

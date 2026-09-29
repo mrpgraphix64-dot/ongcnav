@@ -222,8 +222,10 @@ export class AttendeesController {
   async update(
     @Param('id') id: string,
     @Body() body: { name?: string; mobile?: string; email?: string; category?: string; status?: string },
+    @Req() req?: Request,
   ) {
-    return this.attendeesService.update(BigInt(id), body);
+    const userRole = (req as any)?.user?.role;
+    return this.attendeesService.update(BigInt(id), body, userRole);
   }
 
   @Patch(':id/status')
@@ -231,20 +233,24 @@ export class AttendeesController {
   async updateStatus(
     @Param('id') id: string,
     @Body('status') status: AttendeeStatus,
+    @Req() req?: Request,
   ) {
-    return this.attendeesService.updateStatus(BigInt(id), status);
+    const userRole = (req as any)?.user?.role;
+    return this.attendeesService.updateStatus(BigInt(id), status, userRole);
   }
 
   @Post(':id/regenerate-qr')
   @ApiOperation({ summary: 'Regenerate QR token for single attendee' })
-  async regenerateQr(@Param('id') id: string) {
-    return this.attendeesService.regenerateQr(BigInt(id));
+  async regenerateQr(@Param('id') id: string, @Req() req?: Request) {
+    const userRole = (req as any)?.user?.role;
+    return this.attendeesService.regenerateQr(BigInt(id), userRole);
   }
 
   @Get(':id/qr-download')
   @ApiOperation({ summary: 'Download high-resolution QR PNG for attendee' })
-  async downloadQr(@Param('id') id: string, @Res() res: Response) {
-    const { buffer, filename } = await this.attendeesService.getQrImageBuffer(BigInt(id));
+  async downloadQr(@Param('id') id: string, @Res() res: Response, @Req() req?: Request) {
+    const userRole = (req as any)?.user?.role;
+    const { buffer, filename } = await this.attendeesService.getQrImageBuffer(BigInt(id), userRole);
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { CheckinService } from './checkin.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
+import { RedisService, LockStatus } from '../redis/redis.service';
 import {
   CheckinResult,
   CheckinStatus,
@@ -703,7 +703,7 @@ describe('CheckinService Concurrency & Security Tests', () => {
       expect(res.success).toBe(true);
       expect(res.result).toBe(CheckinResult.SUCCESS);
       expect(res.data?.attendeeName).toBe('Aarav Patel');
-      expect(redis.acquireLock).toHaveBeenCalledWith('lock:checkin:501', 5000);
+      expect(redis.acquireLock).toHaveBeenCalledWith('lock:checkin:501', 5);
     });
 
     it('22. Any Day Pass second scan on the same day is rejected as already used', async () => {
@@ -817,6 +817,131 @@ describe('CheckinService Concurrency & Security Tests', () => {
       expect(res.success).toBe(false);
       expect(res.result).toBe(CheckinResult.NOT_BOOKED_TODAY);
       expect(res.message).toContain('11 Oct – 19 Oct 2026');
+    });
+  });
+
+  describe('Batch 1 — Scanner Security, Manual Lookup, and Redis Fail-Open Resilience', () => {
+    it('allows authorized manual entry of ticketNumber by assigned gate operator', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(301),
+        ticketNumber: 'NR2026-000301',
+        qrCodeToken: 'token-301-hex',
+        status: AttendeeStatus.ACTIVE,
+        bookingDays: ['2026-09-23'],
+        employee: { id: BigInt(50), name: 'Sunil Kumar', cpf: 'CPF301' },
+        familyMember: null,
+      });
+
+      const res = await service.processCheckin(
+        { token: 'NR2026-000301', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+      expect(res.data?.ticketNumber).toBe('NR2026-000301');
+    });
+
+    it('rejects invalid ticket number with INVALID_QR', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce(null);
+
+      const res = await service.processCheckin(
+        { token: 'NR2026-INVALID-999999', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.INVALID_QR);
+    });
+
+    it('rejects manual checkin if operator is not assigned to the gate', async () => {
+      prisma.gateUser.findFirst.mockResolvedValueOnce(null);
+
+      const res = await service.processCheckin(
+        { token: 'NR2026-000301', gateId: '1' },
+        { id: '99', role: UserRole.SCANNER_STAFF },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.UNAUTHORIZED_GATE);
+    });
+
+    it('fails open when Redis lock is UNAVAILABLE, successfully processing check-in via PostgreSQL transaction', async () => {
+      // Simulate Redis being completely down / returning UNAVAILABLE
+      redis.acquireLock = jest.fn().mockResolvedValue(null);
+      (redis as any).acquireLockDetailed = jest.fn().mockResolvedValue({
+        status: LockStatus.UNAVAILABLE,
+        token: null,
+      });
+
+      prisma.dailyCheckin.findFirst.mockResolvedValueOnce(null); // not yet checked in
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      // Must NOT fail with ALREADY_CHECKED_IN
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('safely handles DB unique constraint violation (P2002) as ALREADY_CHECKED_IN when Redis is down during concurrency', async () => {
+      (redis as any).acquireLockDetailed = jest.fn().mockResolvedValue({
+        status: LockStatus.UNAVAILABLE,
+        token: null,
+      });
+
+      // Simulate Postgres unique constraint collision
+      prisma.$transaction.mockRejectedValueOnce({
+        code: 'P2002',
+        message: 'Unique constraint failed on the fields: (attendeeId, eventDate)',
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.ALREADY_CHECKED_IN);
+    });
+
+    it('distinguishes HELD from UNAVAILABLE: rejects immediately with 409 when lock is genuinely HELD', async () => {
+      (redis as any).acquireLockDetailed = jest.fn().mockResolvedValue({
+        status: LockStatus.HELD,
+        token: null,
+      });
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.ALREADY_CHECKED_IN);
+      expect(res.statusCode).toBe(409);
+      expect(res.message).toContain('Concurrent scan detected');
+      // DB transaction should not be attempted when lock is actively held
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('releases lock passing the ownership token on scan completion', async () => {
+      (redis as any).acquireLockDetailed = jest.fn().mockResolvedValue({
+        status: LockStatus.ACQUIRED,
+        token: 'scanner-token-abc-123',
+      });
+
+      await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(redis.releaseLock).toHaveBeenCalledWith(
+        expect.stringContaining('lock:checkin:'),
+        'scanner-token-abc-123',
+      );
     });
   });
 });

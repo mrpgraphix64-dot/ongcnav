@@ -404,7 +404,7 @@ describe('SUPER_ADMIN Scanner Test Date Control Specification', () => {
       // Redis lock was scoped to the test event date
       expect(redis.acquireLock).toHaveBeenCalledWith(
         'lock:checkin:201:2026-10-11',
-        5000,
+        5,
       );
 
       // AuditLog recorded

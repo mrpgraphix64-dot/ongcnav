@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { RedisService } from '../redis/redis.service';
+import { RedisService, LockStatus, LockAcquisitionResult } from '../redis/redis.service';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import { ProcessCheckinDto, ScannerHeartbeatDto } from './dto/checkin.dto';
 import {
@@ -19,6 +19,7 @@ import {
   OFFICIAL_EVENT_DATES,
 } from '@ongc/shared-types';
 
+export const CHECKIN_LOCK_TTL_SECONDS = 5;
 const DEFAULT_SCANNER_RATE_LIMIT_PER_MINUTE = 120; // 2/sec sustained, well above the 1/sec/gate baseline, with burst headroom
 
 @Injectable()
@@ -465,9 +466,24 @@ export class CheckinService {
     const lockKey = isAnyDayPass
       ? `lock:checkin:${attendee.id.toString()}`
       : `lock:checkin:${attendee.id.toString()}:${activeDate}`;
-    const lockAcquired = await this.redis.acquireLock(lockKey, 5000);
 
-    if (!lockAcquired) {
+    let lockResult: LockAcquisitionResult;
+    if (typeof (this.redis as any).acquireLockDetailed === 'function') {
+      lockResult = await this.redis.acquireLockDetailed(lockKey, CHECKIN_LOCK_TTL_SECONDS);
+    } else {
+      const raw = await this.redis.acquireLock(lockKey, CHECKIN_LOCK_TTL_SECONDS);
+      if (typeof raw === 'string') {
+        lockResult = { status: LockStatus.ACQUIRED, token: raw };
+      } else if (raw === true) {
+        lockResult = { status: LockStatus.ACQUIRED, token: 'mock-token' };
+      } else if (raw === false || raw === null) {
+        lockResult = { status: LockStatus.HELD, token: null };
+      } else {
+        lockResult = { status: LockStatus.UNAVAILABLE, token: null };
+      }
+    }
+
+    if (lockResult.status === LockStatus.HELD) {
       // Another concurrent scan for the exact same attendee is in progress right now
       return {
         success: false,
@@ -679,7 +695,9 @@ export class CheckinService {
 
       throw err;
     } finally {
-      await this.redis.releaseLock(lockKey);
+      if (lockResult && lockResult.status === LockStatus.ACQUIRED && lockResult.token) {
+        await this.redis.releaseLock(lockKey, lockResult.token);
+      }
     }
   }
 
