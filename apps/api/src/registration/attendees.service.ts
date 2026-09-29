@@ -88,7 +88,13 @@ export class AttendeesService {
           ])
         : await Promise.all([
             this.prisma.employee.count(),
-            this.prisma.commercialOrder.count(),
+            this.prisma.commercialOrder.count({
+              where: {
+                orderStatus: OrderStatus.PAID,
+                source: { not: 'DEVELOPER_TEST' },
+                paymentMode: { not: 'DEVELOPER_TEST' },
+              },
+            }),
             this.prisma.attendee.count({ where: { employeeId: null, orderId: null } }),
             this.prisma.attendee.count(),
             this.prisma.attendee.count({ where: { category: 'ONGC STAFF' } }),
@@ -844,8 +850,12 @@ export class AttendeesService {
     };
   }
 
-  async update(id: bigint, data: { name?: string; mobile?: string; email?: string; category?: string; status?: string }) {
-    await this.findOne(id);
+  async update(
+    id: bigint,
+    data: { name?: string; mobile?: string; email?: string; category?: string; status?: string },
+    userRole?: string,
+  ) {
+    await this.findOne(id, userRole);
 
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name.trim();
@@ -880,11 +890,11 @@ export class AttendeesService {
       data: updateData,
     });
 
-    return this.findOne(updated.id);
+    return this.findOne(updated.id, userRole);
   }
 
-  async updateStatus(id: bigint, status: AttendeeStatus) {
-    await this.findOne(id);
+  async updateStatus(id: bigint, status: AttendeeStatus, userRole?: string) {
+    await this.findOne(id, userRole);
     const updated = await this.prisma.attendee.update({
       where: { id },
       data: { status: status as any },
@@ -896,8 +906,8 @@ export class AttendeesService {
     };
   }
 
-  async regenerateQr(id: bigint) {
-    const attendee = await this.findOne(id);
+  async regenerateQr(id: bigint, userRole?: string) {
+    const attendee = await this.findOne(id, userRole);
     const newToken = crypto.randomBytes(32).toString('hex');
     await this.prisma.attendee.update({
       where: { id },
@@ -1542,8 +1552,8 @@ export class AttendeesService {
     return this.getAttendeeProtectionReasonFromRecord(att);
   }
 
-  async getQrImageBuffer(id: bigint): Promise<{ buffer: Buffer; filename: string }> {
-    const attendee = await this.findOne(id);
+  async getQrImageBuffer(id: bigint, userRole?: string): Promise<{ buffer: Buffer; filename: string }> {
+    const attendee = await this.findOne(id, userRole);
     const payload = attendee.qrCodeToken || attendee.ticketNumber;
     const buffer = await QRCode.toBuffer(payload, {
       type: 'png',

@@ -214,6 +214,66 @@ describe('AttendeesService Parity & Functional Tests', () => {
         'EVENT_ADMIN is not permitted to access attendee or employee personal information.',
       );
     });
+
+    it('queries commercialOrder.count with canonical filter (PAID status and excluding DEVELOPER_TEST)', async () => {
+      await service.index({ page: 1, limit: 10 });
+      expect(prisma.commercialOrder.count).toHaveBeenCalledWith({
+        where: {
+          orderStatus: OrderStatus.PAID,
+          source: { not: 'DEVELOPER_TEST' },
+          paymentMode: { not: 'DEVELOPER_TEST' },
+        },
+      });
+    });
+
+    it('does not count pending or abandoned checkouts in total_registrations (e.g. 0 people, 0 employees)', async () => {
+      // Simulate staging scenario: 0 employees, 0 standalone attendees, 1 pending order in DB
+      prisma.employee.count = jest.fn().mockResolvedValue(0);
+      prisma.attendee.count = jest.fn().mockResolvedValue(0);
+      // Mock commercialOrder.count to simulate DB filter behavior:
+      // An abandoned checkout with orderStatus: PENDING will match 0 records when filtered by OrderStatus.PAID
+      prisma.commercialOrder.count = jest.fn().mockImplementation(({ where }: any = {}) => {
+        if (where?.orderStatus === OrderStatus.PAID) {
+          return Promise.resolve(0); // PENDING order is filtered out
+        }
+        return Promise.resolve(1); // Unfiltered would return 1
+      });
+
+      const res = await service.index({ page: 1, limit: 10 });
+      expect(res.metrics.total_registrations).toBe(0);
+      expect(res.metrics.total_people).toBe(0);
+      expect(res.metrics.total_commercial_orders).toBe(0);
+    });
+
+    it('counts confirmed PAID commercial orders in total_registrations', async () => {
+      prisma.employee.count = jest.fn().mockResolvedValue(0);
+      prisma.attendee.count = jest.fn().mockImplementation(({ where }: any = {}) => {
+        if (where?.employeeId === null && where?.orderId === null) return Promise.resolve(0);
+        return Promise.resolve(1);
+      });
+      prisma.commercialOrder.count = jest.fn().mockImplementation(({ where }: any = {}) => {
+        if (where?.orderStatus === OrderStatus.PAID) {
+          return Promise.resolve(1);
+        }
+        return Promise.resolve(0);
+      });
+
+      const res = await service.index({ page: 1, limit: 10 });
+      expect(res.metrics.total_registrations).toBe(1);
+      expect(res.metrics.total_commercial_orders).toBe(1);
+    });
+
+    it('excludes DEVELOPER_TEST orders from commercial order count in total_registrations', async () => {
+      prisma.employee.count = jest.fn().mockResolvedValue(5);
+      prisma.commercialOrder.count = jest.fn().mockImplementation(({ where }: any = {}) => {
+        expect(where?.source).toEqual({ not: 'DEVELOPER_TEST' });
+        expect(where?.paymentMode).toEqual({ not: 'DEVELOPER_TEST' });
+        return Promise.resolve(0);
+      });
+
+      const res = await service.index({ page: 1, limit: 10 });
+      expect(res.metrics.total_commercial_orders).toBe(0);
+    });
   });
 
   describe('createQuickAttendee', () => {
