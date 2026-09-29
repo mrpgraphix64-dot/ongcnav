@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
+import { trackPurchaseOnce } from '@/lib/meta-pixel';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
 import TicketGuidelines from '@/components/TicketGuidelines';
@@ -504,6 +505,14 @@ export default function BookPassPage() {
       });
 
       if (res.success && res.passes) {
+        // Backend has independently verified the Razorpay signature and
+        // committed the order as PAID — this is the one true
+        // payment-confirmed moment. res.amountInr is the server-computed
+        // amount actually charged (never a frontend price lookup), and the
+        // orderNumber-keyed guard in trackPurchaseOnce prevents a duplicate
+        // browser Purchase event if this branch is ever re-entered.
+        trackPurchaseOnce(res.orderNumber, res.amountInr, 'INR');
+
         setConfirmedOrderNumber(res.orderNumber);
         setConfirmedPasses(res.passes);
         setConfirmedOrderSummary({
