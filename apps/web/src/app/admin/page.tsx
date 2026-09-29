@@ -208,7 +208,7 @@ export default function OperationsDashboardPage() {
               ONGC Navratri <span className="text-maroon">Entry Control</span>
             </h1>
             <p className="text-xs sm:text-sm text-ink-soft">
-              Live check-in monitoring, QR verification analytics, and gate operations for the ONGC Ground Event.
+              Live check-in monitoring, QR verification analytics, and gate operations for the Malaviya Cricket Ground ONGC Event.
             </p>
           </div>
 

@@ -8,7 +8,7 @@ import { MapPin, Navigation, Headphones, ShieldCheck, Clock, CheckCircle } from 
 
 export const metadata: Metadata = {
   title: 'Get in Touch & Venue | ONGC Navratri 2026',
-  description: 'Contact the ONGC Navratri 2026 organizing team. Venue details, support desk hours, and event assistance at ONGC Ground, Ahmedabad.',
+  description: 'Contact the ONGC Navratri 2026 organizing team. Venue details, support desk hours, and event assistance at Malaviya Cricket Ground ONGC, Ahmedabad.',
 };
 
 export default function ContactPage() {
@@ -40,14 +40,14 @@ export default function ContactPage() {
                   </div>
                   <h3 className="font-cinzel font-bold text-xl text-maroon">Celebration Venue</h3>
                   <div className="text-xs sm:text-sm text-ink/80 space-y-1 leading-relaxed">
-                    <p className="font-semibold text-ink">ONGC Ground</p>
-                    <p>Chandkheda, Opposite Sabarmati Jail Area,</p>
-                    <p>Ahmedabad, Gujarat 380005</p>
+                    <p className="font-semibold text-ink">Malaviya Cricket Ground ONGC</p>
+                    <p>4H3Q+7F8, Mahavirnagar, ONGC Colony,</p>
+                    <p>Chandkheda, Ahmedabad, Gujarat 382424</p>
                   </div>
                 </div>
                 <div className="pt-4 border-t border-stone-100 text-xs text-gold-dark font-medium flex items-center gap-1.5">
                   <Navigation className="w-3.5 h-3.5 text-gold" />
-                  <span>Central Ahmedabad Location</span>
+                  <span>ONGC Colony, Chandkheda, Ahmedabad</span>
                 </div>
               </div>
 
@@ -58,9 +58,18 @@ export default function ContactPage() {
                     <Headphones className="w-7 h-7" />
                   </div>
                   <h3 className="font-cinzel font-bold text-xl text-maroon">Organizing Help Desk</h3>
-                  <div className="text-xs sm:text-sm text-ink/80 space-y-1 leading-relaxed">
+                  <div className="text-xs sm:text-sm text-ink/80 space-y-2 leading-relaxed">
+                    <div>
+                      <span className="font-semibold text-ink block sm:inline">Contact Numbers: </span>
+                      <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-semibold text-maroon">
+                        <a href="tel:9898085701" className="hover:underline">9898085701</a>
+                        <span className="text-stone-300">|</span>
+                        <a href="tel:8000088813" className="hover:underline">8000088813</a>
+                        <span className="text-stone-300">|</span>
+                        <a href="tel:8980004518" className="hover:underline">8980004518</a>
+                      </span>
+                    </div>
                     <p><strong className="text-ink">Email:</strong> <a href="mailto:ongcnavratri@gmail.com" className="text-maroon font-semibold hover:underline">ongcnavratri@gmail.com</a></p>
-                    <p><strong className="text-ink">Committee:</strong> EWC Ahmedabad Support Desk</p>
                     <p><strong className="text-ink">On-Ground:</strong> Help booths at Main Gate &amp; Stage Side</p>
                   </div>
                 </div>
@@ -93,22 +102,33 @@ export default function ContactPage() {
 
             {/* VENUE DIRECTIONS & MAP PLACEHOLDER */}
             <div className="bg-white rounded-3xl p-8 sm:p-10 border border-stone-200/90 shadow-sm space-y-8">
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-gold-muted uppercase tracking-widest">Venue Directions</span>
-                <h3 className="font-cinzel font-bold text-2xl text-maroon">Reaching ONGC Ground, Ahmedabad</h3>
-                <p className="text-xs sm:text-sm text-ink/75 leading-relaxed max-w-2xl">
-                  The venue is conveniently accessible via major arterial roads in Ahmedabad. Follow the official ONGC Navratri directional boards positioned at key junctions near Chandkheda and Visat Circle.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-gold-muted uppercase tracking-widest">Venue Directions</span>
+                  <h3 className="font-cinzel font-bold text-2xl text-maroon">Reaching Malaviya Cricket Ground ONGC</h3>
+                  <p className="text-xs sm:text-sm text-ink/75 leading-relaxed max-w-2xl">
+                    The venue is situated at 4H3Q+7F8, Mahavirnagar, ONGC Colony, Chandkheda, Ahmedabad, Gujarat 382424. Follow the official ONGC Navratri directional boards positioned at key junctions and approach roads.
+                  </p>
+                </div>
+                <a
+                  href="https://www.google.com/maps/search/?api=1&query=4H3Q%2B7F8+Mahavirnagar+ONGC+Colony+Chandkheda+Ahmedabad+Gujarat+382424"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-maroon text-white hover:bg-maroon-dark transition-all shadow-xs shrink-0 self-start sm:self-auto"
+                >
+                  <Navigation className="w-4 h-4 text-gold" />
+                  <span>View on Google Maps</span>
+                </a>
               </div>
 
               {/* Google Maps Direction Embed Frame */}
               <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-xs aspect-21/9 min-h-[300px] bg-stone-100 flex items-center justify-center relative">
                 <iframe
-                  title="ONGC Ground Ahmedabad Map"
+                  title="Malaviya Cricket Ground ONGC Map"
                   className="w-full h-full border-0 min-h-[350px]"
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d14678.966956277685!2d72.58550186977539!3d23.106584200000003!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x395e83c27e80adcf%3A0xe44726bf60196884!2sONGC%20Colony%2C%20Chandkheda%2C%20Ahmedabad%2C%20Gujarat!5e0!3m2!1sen!2sin!4v1695000000000!5m2!1sen!2sin"
+                  src="https://maps.google.com/maps?q=4H3Q%2B7F8,+Mahavirnagar,+ONGC+Colony,+Chandkheda,+Ahmedabad,+Gujarat+382424&t=&z=16&ie=UTF8&iwloc=&output=embed"
                 />
               </div>
             </div>

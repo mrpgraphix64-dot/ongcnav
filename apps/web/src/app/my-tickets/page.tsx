@@ -573,7 +573,7 @@ function CommercialTicketsContent() {
                                         Venue
                                       </span>
                                       <span className="font-semibold text-white">
-                                        ONGC Ground
+                                        Malaviya Cricket Ground ONGC
                                       </span>
                                     </div>
                                     <div>

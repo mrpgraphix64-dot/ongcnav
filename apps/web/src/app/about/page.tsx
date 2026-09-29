@@ -8,7 +8,7 @@ import { Sparkles, ArrowRight, Users, Flame, Music, ShieldCheck, HeartHandshake,
 
 export const metadata: Metadata = {
   title: 'About ONGC Navratri 2026 | Ahmedabad',
-  description: 'Learn about ONGC Navratri 2026 — a grand celebration of culture, music, devotion, and community at ONGC Ground, Ahmedabad.',
+  description: 'Learn about ONGC Navratri 2026 — a grand celebration of culture, music, devotion, and community at Malaviya Cricket Ground ONGC, Ahmedabad.',
 };
 
 export default function AboutPage() {
@@ -42,11 +42,11 @@ export default function AboutPage() {
                 </h2>
 
                 <p className="text-sm sm:text-base text-ink/80 leading-relaxed">
-                  ONGC Navratri is celebrated as one of Ahmedabad’s most distinguished and culturally authentic festive gatherings. Organized under the stewardship of the ONGC Employee Welfare Committee (EWC), the event provides an immaculate, secure, and vibrant environment where traditions are preserved with reverence and celebrated with uninhibited joy.
+                  ONGC Navratri is celebrated as one of Gujarat’s most distinguished and culturally authentic festive gatherings. Organized under the stewardship of the ONGC Employee Welfare Committee (EWC), the event provides an immaculate, secure, and vibrant environment where traditions are preserved with reverence and celebrated with uninhibited joy.
                 </p>
 
                 <p className="text-sm sm:text-base text-ink/80 leading-relaxed">
-                  Across nine auspicious nights, the expansive ONGC Ground transforms into an ocean of swirling festive colors, rhythmic clapping, and devotion. From traditional Gujarati folk tunes to the divine evening Aarti, every moment echoes the spirit of cultural pride and unity.
+                  Across nine auspicious nights, the expansive Malaviya Cricket Ground ONGC transforms into an ocean of swirling festive colors, rhythmic clapping, and devotion. From traditional Gujarati folk tunes to the divine evening Aarti, every moment echoes the spirit of cultural pride and unity.
                 </p>
 
                 <div className="pt-2 flex flex-wrap gap-4">

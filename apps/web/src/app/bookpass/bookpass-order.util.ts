@@ -280,6 +280,6 @@ export function generateDownloadablePassSvg(options: GeneratePassSvgOptions): st
   <text x="50" y="572" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="13" font-weight="700" fill="#781014">${escapedTicketNumber}</text>
   <text x="240" y="550" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700" fill="#71717A" letter-spacing="1">EVENT DATE</text>
   <text x="240" y="572" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#18181B">${escapedDates}</text>
-  <text x="220" y="605" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="600" fill="#71717A" text-anchor="middle">Venue: ONGC Navratri Grounds, Ahmedabad &#8226; Valid with Govt ID</text>
+  <text x="220" y="605" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="600" fill="#71717A" text-anchor="middle">Venue: Malaviya Cricket Ground ONGC, Ahmedabad &#8226; Valid with Govt ID</text>
 </svg>`;
 }

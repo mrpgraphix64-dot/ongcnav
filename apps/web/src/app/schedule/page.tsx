@@ -8,7 +8,7 @@ import { Clock, Calendar, Search } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Event Schedule & Timings | ONGC Navratri 2026',
-  description: 'Official event schedule and daily programme timings for ONGC Navratri 2026 at ONGC Ground, Ahmedabad.',
+  description: 'Official event schedule and daily programme timings for ONGC Navratri 2026 at Malaviya Cricket Ground ONGC, Ahmedabad.',
 };
 
 const dailySchedule = [
@@ -143,7 +143,7 @@ export default function SchedulePage() {
                     </div>
 
                     <div className="pt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-ink-soft">
-                      <span>ONGC Ground &bull; 7:00 PM</span>
+                      <span>Malaviya Cricket Ground ONGC &bull; 7:00 PM</span>
                       <span className="text-emerald-700 font-semibold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Confirmed
                       </span>

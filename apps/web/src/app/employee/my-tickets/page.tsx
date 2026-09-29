@@ -199,7 +199,7 @@ function EmployeeTicketsContent() {
               </div>
 
               <p className="text-xs text-ink-soft">
-                Present individual QR code passes at the ONGC Ground entry gate for admission.
+                Present individual QR code passes at the Malaviya Cricket Ground ONGC entry gate for admission.
               </p>
             </div>
 
@@ -367,7 +367,7 @@ function EmployeeTicketsContent() {
                                 Venue
                               </span>
                               <span className="font-semibold text-white">
-                                ONGC Ground, Chandkheda
+                                Malaviya Cricket Ground ONGC
                               </span>
                             </div>
                             <div>

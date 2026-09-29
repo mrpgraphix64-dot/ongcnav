@@ -58,7 +58,7 @@ const categorizedFaqs: Record<string, FaqItem[]> = {
   'VENUE & FACILITIES': [
     {
       question: 'Where is the event venue located?',
-      answer: 'The celebration is held at the ONGC Ground, Chandkheda, Ahmedabad, Gujarat. Clear directional signboards and designated parking areas will guide vehicles upon arrival.',
+      answer: 'The celebration is held at Malaviya Cricket Ground ONGC, 4H3Q+7F8, Mahavirnagar, ONGC Colony, Chandkheda, Ahmedabad, Gujarat 382424. Clear directional signboards and designated parking areas will guide vehicles upon arrival.',
     },
     {
       question: 'Are parking facilities available?',
@@ -76,7 +76,7 @@ const categorizedFaqs: Record<string, FaqItem[]> = {
     },
     {
       question: 'How can I contact the organizing committee?',
-      answer: 'Visit our Contact page or reach out to the event support desk at ongcnavratri@gmail.com or visit the on-ground help desks at the main entrance.',
+      answer: 'Visit our Contact page or reach out to the event support desk via helpline at 9898085701 | 8000088813 | 8980004518, email at ongcnavratri@gmail.com, or visit the on-ground help desks at the main entrance.',
     },
   ],
 };

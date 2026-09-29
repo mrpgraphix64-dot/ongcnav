@@ -121,7 +121,7 @@ export default function TicketPassPage() {
   })();
 
   const waMessage = encodeURIComponent(
-    `Hi ${attendeeName},\nHere is your official ONGC Navratri 2026 E-Pass!\n\nTicket Number: ${ticketId}\nPass Type: ${passTypeLabel}\nVenue: ONGC Ground, Chandkheda, Ahmedabad\nDate: ${eventDateLabel}\nEntry Timing: 7:00 PM onwards\n\nPlease show this QR ticket at the entry gate.`
+    `Hi ${attendeeName},\nHere is your official ONGC Navratri 2026 E-Pass!\n\nTicket Number: ${ticketId}\nPass Type: ${passTypeLabel}\nVenue: Malaviya Cricket Ground ONGC, Ahmedabad\nDate: ${eventDateLabel}\nEntry Timing: 7:00 PM onwards\n\nPlease show this QR ticket at the entry gate.`
   );
 
   return (

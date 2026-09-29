@@ -140,7 +140,7 @@ export default function TicketPassCard({
                 Venue
               </div>
               <div className="font-semibold text-ink text-xs mt-0.5">
-                ONGC Ground
+                Malaviya Cricket Ground ONGC
               </div>
             </div>
             <div>

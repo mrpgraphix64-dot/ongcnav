@@ -203,7 +203,7 @@ export default function EventPage() {
                 <span className="text-xs font-bold text-gold uppercase tracking-widest">Entry Guidelines</span>
                 <h3 className="font-cinzel font-bold text-2xl sm:text-3xl text-gold-light">Ready to join the Garba circles?</h3>
                 <p className="text-xs sm:text-sm text-cream/80 leading-relaxed">
-                  Entry to the ONGC Ground is strictly governed by authorized digital passes. Check your ticket status or review entry guidelines before you arrive.
+                  Entry to Malaviya Cricket Ground ONGC is strictly governed by authorized digital passes. Check your ticket status or review entry guidelines before you arrive.
                 </p>
               </div>
               <div className="shrink-0 flex flex-col sm:flex-row gap-3.5">

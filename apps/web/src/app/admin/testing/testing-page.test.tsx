@@ -172,7 +172,7 @@ describe('SuperAdminTestingPage UI Tests', () => {
     expect(html).toContain('Shri Ramesh Kumar');
     expect(html).toContain('NR26-1001-A');
     expect(html).toContain('Daily Pass');
-    expect(html).toContain('ONGC Ground');
+    expect(html).toContain('Malaviya Cricket Ground ONGC');
     expect(html).toContain('test-qr');
     expect(html).toContain('Scan for Gate Verification');
   });

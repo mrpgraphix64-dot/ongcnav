@@ -500,7 +500,7 @@ export class MailService {
                     <table width="100%" cellpadding="4" cellspacing="0" border="0" style="font-size: 13px;">
                       <tr>
                         <td style="color: #7A6557; width: 42%;">Venue:</td>
-                        <td style="font-weight: bold; color: #2A1810;">ONGC Ground, Chandkheda, Ahmedabad</td>
+                        <td style="font-weight: bold; color: #2A1810;">Malaviya Cricket Ground ONGC, Ahmedabad</td>
                       </tr>
                       <tr>
                         <td style="color: #7A6557;">Event:</td>
@@ -698,7 +698,7 @@ Amount Paid: ₹${data.amountInr.toLocaleString('en-IN')}
 Booking Status: CONFIRMED
 
 EVENT INFORMATION:
-Venue: ONGC Ground, Chandkheda, Ahmedabad
+Venue: Malaviya Cricket Ground ONGC, Ahmedabad
 Event: ONGC Navratri 2026
 Event Dates: 11–19 October 2026
 Gates Open: From 7:00 PM

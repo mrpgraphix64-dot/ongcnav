@@ -29,7 +29,7 @@ export default function PublicFooter() {
               </span>
             </Link>
             <p className="text-xs text-cream/70 leading-relaxed max-w-sm">
-              The official grand Navratri celebration by ONGC. Nine nights of authentic Garba, vibrant music, cultural devotion, and community spirit at ONGC Ground, Ahmedabad.
+              The official grand Navratri celebration by ONGC. Nine nights of authentic Garba, vibrant music, cultural devotion, and community spirit at Malaviya Cricket Ground ONGC, Ahmedabad.
             </p>
             <div className="pt-2">
               <Link
@@ -74,7 +74,7 @@ export default function PublicFooter() {
               </li>
               <li className="flex items-start gap-2.5">
                 <MapPin className="w-3.5 h-3.5 text-gold shrink-0 mt-0.5" />
-                <span>ONGC Ground, Chandkheda,<br />Ahmedabad, Gujarat</span>
+                <span>Malaviya Cricket Ground ONGC,<br />ONGC Colony, Chandkheda,<br />Ahmedabad, Gujarat</span>
               </li>
             </ul>
           </div>
@@ -99,6 +99,18 @@ export default function PublicFooter() {
                 <Link href="/contact" className="hover:text-gold transition-colors flex items-center gap-1.5">
                   <Mail className="w-3.5 h-3.5 text-gold" /> Event Support Desk
                 </Link>
+              </li>
+              <li className="pt-2 border-t border-cream/10">
+                <span className="text-[11px] text-gold uppercase tracking-wider block font-semibold mb-1">
+                  Helpline Numbers
+                </span>
+                <div className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-semibold text-cream">
+                  <a href="tel:9898085701" className="hover:text-gold transition-colors">9898085701</a>
+                  <span className="text-cream/30">|</span>
+                  <a href="tel:8000088813" className="hover:text-gold transition-colors">8000088813</a>
+                  <span className="text-cream/30">|</span>
+                  <a href="tel:8980004518" className="hover:text-gold transition-colors">8980004518</a>
+                </div>
               </li>
               <li className="pt-2">
                 <Link

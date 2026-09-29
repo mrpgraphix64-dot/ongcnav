@@ -22,7 +22,7 @@ const cinzel = Cinzel({
 
 export const metadata: Metadata = {
   title: 'ONGC Navratri 2026 | Ahmedabad — Official Event Website',
-  description: 'Celebrate Navratri 2026 with ONGC at ONGC Ground, Ahmedabad. 9 nights of authentic Garba, live folk music, culture, and community spirit.',
+  description: 'Celebrate Navratri 2026 with ONGC at Malaviya Cricket Ground ONGC, Ahmedabad. 9 nights of authentic Garba, live folk music, culture, and community spirit.',
   icons: {
     icon: [
       { url: '/ongcnav.jpg' },

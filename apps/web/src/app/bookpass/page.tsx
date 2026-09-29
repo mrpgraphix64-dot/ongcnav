@@ -799,7 +799,7 @@ export default function BookPassPage() {
                     Venue
                   </span>
                   <span className="font-bold text-ink">
-                    ONGC Ground, Chandkheda, Ahmedabad
+                    Malaviya Cricket Ground ONGC, Ahmedabad
                   </span>
                 </div>
                 <div>
