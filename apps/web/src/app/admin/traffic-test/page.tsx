@@ -24,6 +24,13 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { LoadTestMode, LoadTestScenario, LoadTestStatus } from '@ongc/shared-types';
+import {
+  MIN_SIMULATED_USERS,
+  MAX_SIMULATED_USERS,
+  USER_SCALE_MARKS,
+  calculateSliderPosition,
+  buildInitialRunTelemetry,
+} from './traffic-test.constants';
 
 export default function AdminTrafficTestPage() {
   const [runs, setRuns] = useState<any[]>([]);
@@ -151,6 +158,30 @@ export default function AdminTrafficTestPage() {
           gateId,
         }),
       });
+
+      const newRunId = res.runId?.toString();
+      if (newRunId) {
+        // Immediately switch Active Run Telemetry to the newly started run
+        const initialTelemetry = buildInitialRunTelemetry(newRunId, {
+          status: res.status || LoadTestStatus.RUNNING,
+          scenario: res.scenario || scenario,
+          mode: res.mode || mode,
+          simulatedUsers: Number(simulatedUsers),
+        });
+        setSelectedRun(initialTelemetry);
+        selectedRunRef.current = initialTelemetry;
+
+        // Try to fetch live status immediately
+        try {
+          const liveStatus = await fetchApi(`/admin/traffic-test/runs/${newRunId}/status`);
+          if (liveStatus) {
+            setSelectedRun(liveStatus);
+            selectedRunRef.current = liveStatus;
+          }
+        } catch {
+          // initialTelemetry remains displayed
+        }
+      }
 
       setMsg({
         text: `Traffic test initiated (Run #${res.runId}). Mode: ${mode}, Scenario: ${scenario}`,
@@ -402,20 +433,30 @@ export default function AdminTrafficTestPage() {
               <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                 Simulated Users ({simulatedUsers})
               </label>
-              <input
-                type="range"
-                min={10}
-                max={500}
-                step={10}
-                value={simulatedUsers}
-                onChange={(e) => setSimulatedUsers(Number(e.target.value))}
-                className="w-full accent-red-600 mt-2"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                <span>10</span>
-                <span>100</span>
-                <span>250</span>
-                <span>500</span>
+              <div className="relative w-full">
+                <input
+                  type="range"
+                  min={MIN_SIMULATED_USERS}
+                  max={MAX_SIMULATED_USERS}
+                  step={10}
+                  value={simulatedUsers}
+                  onChange={(e) => setSimulatedUsers(Number(e.target.value))}
+                  className="w-full accent-red-600 mt-2 block cursor-pointer"
+                />
+                <div className="relative w-full h-4 mt-1 select-none pointer-events-none">
+                  {USER_SCALE_MARKS.map((mark) => {
+                    const pct = calculateSliderPosition(mark);
+                    return (
+                      <span
+                        key={`user-mark-${mark}`}
+                        style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
+                        className="absolute text-[10px] text-slate-500 font-mono -translate-x-1/2"
+                      >
+                        {mark}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
