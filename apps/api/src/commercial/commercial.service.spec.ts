@@ -49,13 +49,13 @@ describe('CommercialService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
       },
-      auditLog: {
-        create: jest.fn().mockResolvedValue({ id: BigInt(1) }),
-      },
       paymentWebhookEvent: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: BigInt(1) }),
         update: jest.fn().mockResolvedValue({ id: BigInt(1) }),
+      },
+      auditLog: {
+        create: jest.fn().mockResolvedValue({ id: BigInt(1) }),
       },
       $transaction: jest.fn().mockImplementation(async (cb: any) => cb(prisma)),
     };
@@ -461,6 +461,71 @@ describe('CommercialService', () => {
       expect(prisma.commercialOrder.update).not.toHaveBeenCalled();
       expect(prisma.attendee.create).not.toHaveBeenCalled();
     });
+
+    it('prevents double-issue race when concurrent verifyPayment requests execute simultaneously', async () => {
+      let callCount = 0;
+      const unconfirmedOrder = {
+        ...mockOrder,
+        orderStatus: OrderStatus.PENDING,
+        paymentStatus: PaymentStatus.CREATED,
+        attendees: [],
+      };
+      const issuedPasses = [
+        {
+          id: BigInt(101),
+          ticketNumber: 'TK-COMM-RACE-1',
+          qrCodeToken: 'tok-race-1',
+          name: 'Kishore Joshi',
+          mobile: '9876543210',
+          status: AttendeeStatus.ACTIVE,
+          bookingDays: ['2026-10-11'],
+        },
+        {
+          id: BigInt(102),
+          ticketNumber: 'TK-COMM-RACE-2',
+          qrCodeToken: 'tok-race-2',
+          name: 'Kishore Joshi',
+          mobile: '9876543210',
+          status: AttendeeStatus.ACTIVE,
+          bookingDays: ['2026-10-11'],
+        },
+      ];
+
+      prisma.commercialOrder.findUnique.mockImplementation(async () => {
+        callCount++;
+        if (callCount <= 2) {
+          // Initial lookup outside tx for both requests
+          return unconfirmedOrder;
+        } else if (callCount === 3) {
+          // Inside tx for request 1 (winner)
+          return unconfirmedOrder;
+        } else {
+          // Inside tx for request 2: order already marked PAID with passes issued
+          return {
+            ...unconfirmedOrder,
+            orderStatus: OrderStatus.PAID,
+            paymentStatus: PaymentStatus.CAPTURED,
+            attendees: issuedPasses,
+          };
+        }
+      });
+
+      prisma.attendee.create
+        .mockResolvedValueOnce(issuedPasses[0])
+        .mockResolvedValueOnce(issuedPasses[1]);
+
+      const [res1, res2] = await Promise.all([
+        service.verifyPayment(verifyDto),
+        service.verifyPayment(verifyDto),
+      ]);
+
+      expect(res1.success).toBe(true);
+      expect(res2.success).toBe(true);
+      expect(res1.passes).toHaveLength(2);
+      expect(res2.passes).toHaveLength(2);
+      // Attendee create was called only for request 1 (2 passes), NOT duplicated for request 2
+      expect(prisma.attendee.create).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('handleWebhook', () => {
@@ -527,6 +592,58 @@ describe('CommercialService', () => {
       expect(res.status).toBe('already_processed');
       // No order update
       expect(prisma.commercialOrder.update).not.toHaveBeenCalled();
+    });
+
+    it('retries processing successfully if a previous attempt was recorded but failed (processed: false)', async () => {
+      // Previous attempt created webhook event with processed: false
+      prisma.paymentWebhookEvent.findUnique.mockResolvedValueOnce({
+        id: BigInt(7),
+        eventId: 'evt_webhook_retry_1',
+        processed: false,
+      });
+
+      prisma.commercialOrder.findUnique.mockResolvedValue({
+        id: BigInt(10),
+        orderNumber: 'ORD-COMM-RETRY-1',
+        orderStatus: OrderStatus.PENDING,
+        quantity: 1,
+        selectedDates: ['2026-10-11'],
+        customerName: 'Retry Customer',
+        customerMobile: '9876543210',
+        customerEmail: 'retry@example.com',
+        attendees: [],
+      });
+
+      const retryPayload = JSON.stringify({
+        event: 'payment.captured',
+        id: 'evt_webhook_retry_1',
+        payload: {
+          payment: {
+            entity: {
+              id: 'pay_rzp_retry_999',
+              order_id: 'order_rzp_ABC123',
+              amount: 50000,
+              status: 'captured',
+            },
+          },
+        },
+      });
+
+      const res = await service.handleWebhook(retryPayload, 'valid_signature');
+
+      expect(res.success).toBe(true);
+      // It does NOT re-create the webhook event row (which would fail with unique constraint)
+      expect(prisma.paymentWebhookEvent.create).not.toHaveBeenCalled();
+      // It confirms the order and creates the pass
+      expect(prisma.commercialOrder.update).toHaveBeenCalled();
+      expect(prisma.attendee.create).toHaveBeenCalledTimes(1);
+      // It marks processed: true in tx
+      expect(prisma.paymentWebhookEvent.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { eventId: 'evt_webhook_retry_1' },
+          data: { processed: true },
+        }),
+      );
     });
 
     it('marks the order as failed on payment.failed and does not create passes', async () => {
@@ -1040,6 +1157,7 @@ describe('CommercialService', () => {
       expect(config.paymentEnabled).toBe(false);
     });
   });
+
   describe('Developer Test Purchase', () => {
     const originalEnv = process.env.ALLOW_DEVELOPER_TEST_PURCHASE;
     const originalNodeEnv = process.env.NODE_ENV;

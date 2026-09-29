@@ -61,6 +61,13 @@ describe('CheckinService Concurrency & Security Tests', () => {
       dailyCheckin: {
         count: jest.fn().mockResolvedValue(0),
         findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockImplementation(({ where, data }) =>
+          Promise.resolve({
+            id: where.id,
+            ...data,
+            checkinTime: new Date(),
+          }),
+        ),
         create: jest.fn().mockImplementation(({ data }) =>
           Promise.resolve({
             id: BigInt(999),
@@ -942,6 +949,67 @@ describe('CheckinService Concurrency & Security Tests', () => {
         expect.stringContaining('lock:checkin:'),
         'scanner-token-abc-123',
       );
+    });
+  });
+
+  describe('Batch 2 — Voided Check-in / Rescan Behavior', () => {
+    it('successfully rescans attendee after check-in was voided by updating existing record to SUCCESS', async () => {
+      const existingVoided = {
+        id: BigInt(555),
+        attendeeId: mockAttendee.id,
+        eventDate: '2026-09-23',
+        status: CheckinStatus.VOIDED,
+      };
+
+      // In processCheckin tx:
+      // 1. findFirst for SUCCESS returns null (not currently checked in)
+      // 2. findFirst for existing record today returns the voided record
+      prisma.dailyCheckin.findFirst
+        .mockResolvedValueOnce(null) // no SUCCESS checkin
+        .mockResolvedValueOnce(existingVoided); // voided record exists
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+      expect(prisma.dailyCheckin.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(555) },
+          data: expect.objectContaining({
+            status: CheckinStatus.SUCCESS,
+            voidedAt: null,
+            voidReason: null,
+          }),
+        }),
+      );
+      expect(prisma.dailyCheckin.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate check-in when attendee already has an active SUCCESS check-in', async () => {
+      const activeCheckin = {
+        id: BigInt(777),
+        attendeeId: mockAttendee.id,
+        eventDate: '2026-09-23',
+        status: CheckinStatus.SUCCESS,
+        checkinTime: new Date('2026-09-23T18:30:00Z'),
+        gate: { name: 'Gate 1 (Main Entrance)' },
+      };
+
+      prisma.dailyCheckin.findFirst.mockResolvedValueOnce(activeCheckin);
+
+      const res = await service.processCheckin(
+        { token: 'test-token-valid-123', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.ALREADY_CHECKED_IN);
+      expect(res.statusCode).toBe(409);
+      expect(prisma.dailyCheckin.create).not.toHaveBeenCalled();
+      expect(prisma.dailyCheckin.update).not.toHaveBeenCalled();
     });
   });
 });

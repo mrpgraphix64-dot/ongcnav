@@ -284,18 +284,40 @@ export class HelpDeskService {
 
     // 7. Atomic Execution with Audit Trail
     const checkin = await this.prisma.$transaction(async (tx) => {
-      const record = await tx.dailyCheckin.create({
-        data: {
+      const existingRecord = await tx.dailyCheckin.findFirst({
+        where: {
           attendeeId: attendee.id,
-          gateId: gate.id,
-          scannedById: userId,
           eventDate: activeDate,
-          checkinTime: new Date(),
-          status: CheckinStatus.SUCCESS as any,
-          isManual: true,
-          manualReason: reason,
         },
       });
+
+      const record = existingRecord
+        ? await tx.dailyCheckin.update({
+            where: { id: existingRecord.id },
+            data: {
+              gateId: gate.id,
+              scannedById: userId,
+              checkinTime: new Date(),
+              status: CheckinStatus.SUCCESS as any,
+              isManual: true,
+              manualReason: reason,
+              voidedAt: null,
+              voidedById: null,
+              voidReason: null,
+            },
+          })
+        : await tx.dailyCheckin.create({
+            data: {
+              attendeeId: attendee.id,
+              gateId: gate.id,
+              scannedById: userId,
+              eventDate: activeDate,
+              checkinTime: new Date(),
+              status: CheckinStatus.SUCCESS as any,
+              isManual: true,
+              manualReason: reason,
+            },
+          });
 
       await tx.auditLog.create({
         data: {
@@ -401,10 +423,16 @@ export class HelpDeskService {
       });
 
       if (!remainingToday) {
-        await tx.attendee.update({
-          where: { id: attendee.id },
-          data: { status: AttendeeStatus.ACTIVE as any },
-        });
+        // Do NOT resurrect a SUSPENDED or REVOKED attendee back to ACTIVE
+        if (
+          attendee.status !== AttendeeStatus.SUSPENDED &&
+          attendee.status !== AttendeeStatus.REVOKED
+        ) {
+          await tx.attendee.update({
+            where: { id: attendee.id },
+            data: { status: AttendeeStatus.ACTIVE as any },
+          });
+        }
       }
 
       // 3. Record immutable AuditLog

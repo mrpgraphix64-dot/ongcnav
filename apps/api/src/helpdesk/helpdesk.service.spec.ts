@@ -191,6 +191,63 @@ describe('HelpDeskService', () => {
         }),
       );
     });
+
+    it('updates existing voided check-in record to SUCCESS without unique constraint violation', async () => {
+      prisma.attendee.findUnique.mockResolvedValue({
+        id: BigInt(1),
+        ticketNumber: 'NR2026-000001',
+        name: 'Pooja Bhatt',
+        status: 'ACTIVE',
+        employee: null,
+        familyMember: null,
+      });
+      prisma.setting.findFirst.mockResolvedValue(null);
+      prisma.gate.findUnique.mockResolvedValue({
+        id: BigInt(1),
+        name: 'Gate 1',
+        isOpen: true,
+        status: 'ACTIVE',
+        capacityEnabled: false,
+      });
+
+      const existingVoidedRecord = {
+        id: BigInt(99),
+        attendeeId: BigInt(1),
+        eventDate: '2026-09-24',
+        status: CheckinStatus.VOIDED,
+      };
+
+      // 1. Initial check for SUCCESS checkin returns null
+      // 2. Inside tx check for existing record returns existingVoidedRecord
+      prisma.dailyCheckin.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(existingVoidedRecord);
+
+      prisma.dailyCheckin.update.mockResolvedValue({
+        id: BigInt(99),
+        checkinTime: new Date(),
+        status: CheckinStatus.SUCCESS,
+      });
+
+      const res = await service.manualCheckin(
+        { attendeeId: '1', gateId: '1', reason: 'Re-entry after accidental check-in voiding' },
+        BigInt(10),
+      );
+
+      expect(res.success).toBe(true);
+      expect(prisma.dailyCheckin.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(99) },
+          data: expect.objectContaining({
+            status: CheckinStatus.SUCCESS,
+            isManual: true,
+            voidedAt: null,
+            voidReason: null,
+          }),
+        }),
+      );
+      expect(prisma.dailyCheckin.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('voidCheckin', () => {
@@ -246,6 +303,70 @@ describe('HelpDeskService', () => {
           }),
         }),
       );
+    });
+
+    it('does NOT resurrect SUSPENDED attendee to ACTIVE when check-in is voided', async () => {
+      prisma.dailyCheckin.findUnique.mockResolvedValue({
+        id: BigInt(11),
+        status: CheckinStatus.SUCCESS,
+        eventDate: '2026-09-24',
+        attendee: {
+          id: BigInt(6),
+          ticketNumber: 'NR2026-000002',
+          name: 'Suspended Attendee',
+          status: 'SUSPENDED',
+        },
+        gate: { name: 'Gate B' },
+      });
+      prisma.dailyCheckin.findFirst.mockResolvedValue(null);
+
+      const res = await service.voidCheckin(
+        BigInt(11),
+        'Operator mistakenly scanned pass of suspended user',
+        BigInt(1),
+      );
+
+      expect(res.success).toBe(true);
+      expect(prisma.dailyCheckin.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(11) },
+          data: expect.objectContaining({ status: CheckinStatus.VOIDED }),
+        }),
+      );
+      // Attendee status must NOT be updated to ACTIVE
+      expect(prisma.attendee.update).not.toHaveBeenCalled();
+    });
+
+    it('does NOT resurrect REVOKED attendee to ACTIVE when check-in is voided', async () => {
+      prisma.dailyCheckin.findUnique.mockResolvedValue({
+        id: BigInt(12),
+        status: CheckinStatus.SUCCESS,
+        eventDate: '2026-09-24',
+        attendee: {
+          id: BigInt(7),
+          ticketNumber: 'NR2026-000003',
+          name: 'Revoked Attendee',
+          status: 'REVOKED',
+        },
+        gate: { name: 'Gate C' },
+      });
+      prisma.dailyCheckin.findFirst.mockResolvedValue(null);
+
+      const res = await service.voidCheckin(
+        BigInt(12),
+        'Pass was revoked for security reasons, erroneous scan reversed',
+        BigInt(1),
+      );
+
+      expect(res.success).toBe(true);
+      expect(prisma.dailyCheckin.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: BigInt(12) },
+          data: expect.objectContaining({ status: CheckinStatus.VOIDED }),
+        }),
+      );
+      // Attendee status must NOT be updated to ACTIVE
+      expect(prisma.attendee.update).not.toHaveBeenCalled();
     });
   });
 });

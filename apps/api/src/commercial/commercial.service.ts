@@ -749,21 +749,44 @@ export class CommercialService {
 
       // 5. Atomic transaction: confirm payment and generate secure commercial passes
       const createdPasses = await this.prisma.$transaction(async (tx) => {
-        await tx.commercialOrder.update({
+        // Fetch fresh order within transaction to prevent race conditions
+        const freshOrder = await tx.commercialOrder.findUnique({
           where: { id: order.id },
-          data: {
-            orderStatus: OrderStatus.PAID,
-            paymentStatus: PaymentStatus.CAPTURED,
-            razorpayPaymentId: dto.razorpayPaymentId,
-            razorpaySignature: dto.razorpaySignature,
-            paidAt: new Date(),
-          },
+          include: { attendees: true },
         });
 
-        const passes: any[] = [];
+        if (!freshOrder) {
+          throw new NotFoundException(`Order with reference ${dto.orderNumber} not found.`);
+        }
+
+        // Concurrency guard: If already paid and passes exist, return existing passes idempotently
+        if (
+          freshOrder.orderStatus === OrderStatus.PAID &&
+          freshOrder.attendees &&
+          freshOrder.attendees.length >= freshOrder.quantity
+        ) {
+          return freshOrder.attendees;
+        }
+
+        // Update order status if not yet marked PAID
+        if (freshOrder.orderStatus !== OrderStatus.PAID) {
+          await tx.commercialOrder.update({
+            where: { id: order.id },
+            data: {
+              orderStatus: OrderStatus.PAID,
+              paymentStatus: PaymentStatus.CAPTURED,
+              razorpayPaymentId: dto.razorpayPaymentId,
+              razorpaySignature: dto.razorpaySignature,
+              paidAt: freshOrder.paidAt || new Date(),
+            },
+          });
+        }
+
+        const passes: any[] = freshOrder.attendees ? [...freshOrder.attendees] : [];
+        const existingCount = passes.length;
         const validDates = order.selectedDates as string[];
 
-        for (let i = 0; i < order.quantity; i++) {
+        for (let i = existingCount; i < order.quantity; i++) {
           const qrToken = this.generateSecureQrToken();
           const ticketNumber = this.generateTicketNumber(order.orderNumber, i);
 
@@ -835,7 +858,7 @@ export class CommercialService {
     const existingEvent = await this.prisma.paymentWebhookEvent.findUnique({
       where: { eventId },
     });
-    if (existingEvent) {
+    if (existingEvent && existingEvent.processed) {
       this.logger.log(`Webhook event [${eventId}] already processed. Skipping duplicate.`);
       return { status: 'already_processed' };
     }
@@ -852,51 +875,59 @@ export class CommercialService {
       });
     }
 
-    // Record webhook event receipt
-    await this.prisma.paymentWebhookEvent.create({
-      data: {
-        eventId,
-        orderId: targetOrder?.id || null,
-        eventType,
-        paymentId: razorpayPaymentId || null,
-        processed: false,
-        payloadSummary: {
-          event: eventType,
-          orderId: razorpayOrderId,
-          paymentId: razorpayPaymentId,
-          amount: paymentEntity?.amount,
-          status: paymentEntity?.status,
+    // Record webhook event receipt if not already recorded from a previous attempt
+    if (!existingEvent) {
+      await this.prisma.paymentWebhookEvent.create({
+        data: {
+          eventId,
+          orderId: targetOrder?.id || null,
+          eventType,
+          paymentId: razorpayPaymentId || null,
+          processed: false,
+          payloadSummary: {
+            event: eventType,
+            orderId: razorpayOrderId,
+            paymentId: razorpayPaymentId,
+            amount: paymentEntity?.amount,
+            status: paymentEntity?.status,
+          },
         },
-      },
-    });
+      });
+    }
 
-    // 3. Process payment confirmation if captured/paid and not yet marked paid
+    // 3. Process payment confirmation if captured/paid
     if (
       (eventType === 'payment.captured' || eventType === 'order.paid') &&
-      targetOrder &&
-      targetOrder.orderStatus !== OrderStatus.PAID
+      targetOrder
     ) {
       const lockKey = `lock:verify-order:${targetOrder.orderNumber}`;
       const lockToken = await this.redis.acquireLock(lockKey, 15);
 
       try {
         await this.prisma.$transaction(async (tx) => {
-          await tx.commercialOrder.update({
+          const freshOrder = await tx.commercialOrder.findUnique({
             where: { id: targetOrder.id },
-            data: {
-              orderStatus: OrderStatus.PAID,
-              paymentStatus: PaymentStatus.CAPTURED,
-              razorpayPaymentId: razorpayPaymentId || targetOrder.razorpayPaymentId,
-              paidAt: new Date(),
-            },
+            include: { attendees: true },
           });
+
+          if (freshOrder && freshOrder.orderStatus !== OrderStatus.PAID) {
+            await tx.commercialOrder.update({
+              where: { id: targetOrder.id },
+              data: {
+                orderStatus: OrderStatus.PAID,
+                paymentStatus: PaymentStatus.CAPTURED,
+                razorpayPaymentId: razorpayPaymentId || targetOrder.razorpayPaymentId,
+                paidAt: freshOrder.paidAt || new Date(),
+              },
+            });
+          }
 
           // Check if passes already created
-          const count = await tx.attendee.count({
+          const existingPasses = freshOrder?.attendees || (await tx.attendee.findMany({
             where: { orderId: targetOrder.id },
-          });
+          }));
 
-          if (count === 0) {
+          if (existingPasses.length === 0) {
             const validDates = targetOrder.selectedDates as string[];
             for (let i = 0; i < targetOrder.quantity; i++) {
               const qrToken = this.generateSecureQrToken();
@@ -918,11 +949,11 @@ export class CommercialService {
               });
             }
           }
-        });
 
-        await this.prisma.paymentWebhookEvent.update({
-          where: { eventId },
-          data: { processed: true },
+          await tx.paymentWebhookEvent.update({
+            where: { eventId },
+            data: { processed: true },
+          });
         });
 
         this.logger.log(`Order [${targetOrder.orderNumber}] confirmed via Razorpay webhook [${eventId}].`);
@@ -938,13 +969,20 @@ export class CommercialService {
         }
       }
     } else if (eventType === 'payment.failed' && targetOrder && targetOrder.orderStatus === OrderStatus.PENDING) {
-      await this.prisma.commercialOrder.update({
-        where: { id: targetOrder.id },
-        data: {
-          failedAt: new Date(),
-          failureReason: paymentEntity?.error_description || 'Payment failed via webhook',
-        },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.commercialOrder.update({
+          where: { id: targetOrder.id },
+          data: {
+            failedAt: new Date(),
+            failureReason: paymentEntity?.error_description || 'Payment failed via webhook',
+          },
+        });
+        await tx.paymentWebhookEvent.update({
+          where: { eventId },
+          data: { processed: true },
+        });
       });
+    } else {
       await this.prisma.paymentWebhookEvent.update({
         where: { eventId },
         data: { processed: true },

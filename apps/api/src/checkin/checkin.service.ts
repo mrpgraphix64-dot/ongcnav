@@ -527,19 +527,45 @@ export class CheckinService {
             };
           }
 
-          // Create the Checkin
-          const newCheckin = await tx.dailyCheckin.create({
-            data: {
+          // Check if a voided check-in record already exists for today
+          const existingRecordToday = await tx.dailyCheckin.findFirst({
+            where: {
               attendeeId: attendee.id,
-              gateId: gate.id,
-              scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
               eventDate: activeDate,
-              checkinTime: new Date(),
-              status: CheckinStatus.SUCCESS as any,
-              isLoadTest,
-              loadTestRunId,
             },
           });
+
+          // If a voided checkin exists for today, update it to SUCCESS (rescan after void)
+          // otherwise create a new checkin record
+          const newCheckin = existingRecordToday
+            ? await tx.dailyCheckin.update({
+                where: { id: existingRecordToday.id },
+                data: {
+                  gateId: gate.id,
+                  scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+                  checkinTime: new Date(),
+                  status: CheckinStatus.SUCCESS as any,
+                  isManual: false,
+                  manualReason: null,
+                  voidedAt: null,
+                  voidedById: null,
+                  voidReason: null,
+                  isLoadTest,
+                  loadTestRunId,
+                },
+              })
+            : await tx.dailyCheckin.create({
+                data: {
+                  attendeeId: attendee.id,
+                  gateId: gate.id,
+                  scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+                  eventDate: activeDate,
+                  checkinTime: new Date(),
+                  status: CheckinStatus.SUCCESS as any,
+                  isLoadTest,
+                  loadTestRunId,
+                },
+              });
 
           return {
             isDuplicate: false,
