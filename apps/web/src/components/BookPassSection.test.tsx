@@ -53,4 +53,41 @@ describe('BookPassSection Component Tests', () => {
     expect(html).toContain('terms-checkbox');
     expect(html).toContain('I have read and agree to the ticket terms &amp; conditions.');
   });
+
+  it('hides developer test purchase section for normal users or when flag is disabled', () => {
+    // Normal user with flag enabled
+    const html1 = ReactDOMServer.renderToStaticMarkup(
+      <BookPassSection paymentEnabled={false} developerTestPurchaseEnabled={true} isSuperAdmin={false} />
+    );
+    expect(html1).not.toContain('developer-test-purchase-section');
+    expect(html1).not.toContain('DEVELOPER TESTING ONLY');
+
+    // Super Admin with flag disabled
+    const html2 = ReactDOMServer.renderToStaticMarkup(
+      <BookPassSection paymentEnabled={false} developerTestPurchaseEnabled={false} isSuperAdmin={true} />
+    );
+    expect(html2).not.toContain('developer-test-purchase-section');
+    expect(html2).not.toContain('DEVELOPER TESTING ONLY');
+  });
+
+  it('renders developer test purchase section strictly when flag is enabled AND user is Super Admin', () => {
+    const html = ReactDOMServer.renderToStaticMarkup(
+      <BookPassSection
+        paymentEnabled={false}
+        developerTestPurchaseEnabled={true}
+        isSuperAdmin={true}
+      />
+    );
+
+    // Disabled payment button remains visible
+    expect(html).toContain('ONLINE PAYMENT UNAVAILABLE');
+
+    // Developer Test Purchase section is rendered with distinctive badges
+    expect(html).toContain('developer-test-purchase-section');
+    expect(html).toContain('DEVELOPER TESTING ONLY');
+    expect(html).toContain('Super Admin Test Mode');
+    expect(html).toContain('ALLOW_DEVELOPER_TEST_PURCHASE=true');
+    expect(html).toContain('developer-test-purchase-btn');
+    expect(html).toContain('CREATE DEVELOPER TEST PURCHASE');
+  });
 });

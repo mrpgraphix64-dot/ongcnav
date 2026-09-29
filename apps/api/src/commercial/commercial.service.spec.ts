@@ -9,8 +9,9 @@ import {
   OrderStatus,
   PaymentStatus,
   RegistrationType,
+  UserRole,
 } from '@ongc/shared-types';
-import { BadRequestException, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, NotFoundException, HttpException, HttpStatus, ForbiddenException } from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
 import { COMMERCIAL_EVENT_DATES } from './commercial.constants';
 
@@ -36,6 +37,7 @@ describe('CommercialService', () => {
         update: jest.fn(),
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amountPaise: 0, quantity: 0 } }),
       },
       attendee: {
         create: jest.fn(),
@@ -46,6 +48,9 @@ describe('CommercialService', () => {
       employee: {
         create: jest.fn(),
         findUnique: jest.fn(),
+      },
+      auditLog: {
+        create: jest.fn().mockResolvedValue({ id: BigInt(1) }),
       },
       paymentWebhookEvent: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -1033,6 +1038,236 @@ describe('CommercialService', () => {
 
       const config = await service.getConfig();
       expect(config.paymentEnabled).toBe(false);
+    });
+  });
+  describe('Developer Test Purchase', () => {
+    const originalEnv = process.env.ALLOW_DEVELOPER_TEST_PURCHASE;
+    const originalNodeEnv = process.env.NODE_ENV;
+
+    beforeEach(() => {
+      process.env.NODE_ENV = 'development';
+    });
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env.ALLOW_DEVELOPER_TEST_PURCHASE;
+      } else {
+        process.env.ALLOW_DEVELOPER_TEST_PURCHASE = originalEnv;
+      }
+      if (originalNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    it('returns flag status correctly and enforces production guard in isDeveloperTestPurchaseEnabled', () => {
+      process.env.NODE_ENV = 'development';
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE = 'true';
+      expect(service.isDeveloperTestPurchaseEnabled()).toBe(true);
+
+      // PRODUCTION GUARD: must be false in production even if flag is true
+      process.env.NODE_ENV = 'production';
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE = 'true';
+      expect(service.isDeveloperTestPurchaseEnabled()).toBe(false);
+
+      process.env.NODE_ENV = 'development';
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE = 'false';
+      expect(service.isDeveloperTestPurchaseEnabled()).toBe(false);
+
+      delete process.env.ALLOW_DEVELOPER_TEST_PURCHASE;
+      expect(service.isDeveloperTestPurchaseEnabled()).toBe(false);
+    });
+
+    it('does NOT expose developerTestPurchaseEnabled in public getConfig', async () => {
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE = 'true';
+      const config = await service.getConfig();
+      expect((config as any).developerTestPurchaseEnabled).toBeUndefined();
+    });
+
+    it('rejects developer test purchase in PRODUCTION even if ALLOW_DEVELOPER_TEST_PURCHASE=true and user is SUPER_ADMIN', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE = 'true';
+
+      await expect(
+        service.createDeveloperTestPurchase(
+          {
+            ticketType: 'COMMERCIAL_DAILY',
+            quantity: 1,
+            selectedDates: ['2026-10-15'],
+          },
+          { id: '1', email: 'superadmin@ongc.com', role: UserRole.SUPER_ADMIN },
+        ),
+      ).rejects.toThrow('strictly forbidden in production');
+    });
+
+    it('rejects developer test purchase when environment flag is disabled', async () => {
+      process.env.NODE_ENV = 'development';
+      delete process.env.ALLOW_DEVELOPER_TEST_PURCHASE;
+
+      await expect(
+        service.createDeveloperTestPurchase(
+          {
+            ticketType: 'COMMERCIAL_DAILY',
+            quantity: 1,
+            selectedDates: ['2026-10-15'],
+          },
+          { id: '1', email: 'superadmin@ongc.com', role: UserRole.SUPER_ADMIN },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects developer test purchase when user is not SUPER_ADMIN', async () => {
+      process.env.NODE_ENV = 'development';
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE = 'true';
+
+      await expect(
+        service.createDeveloperTestPurchase(
+          {
+            ticketType: 'COMMERCIAL_DAILY',
+            quantity: 1,
+            selectedDates: ['2026-10-15'],
+          },
+          { id: '2', email: 'admin@ongc.com', role: UserRole.COMMERCIAL_ADMIN },
+        ),
+      ).rejects.toThrow('strictly restricted to SUPER_ADMIN');
+
+      await expect(
+        service.createDeveloperTestPurchase(
+          {
+            ticketType: 'COMMERCIAL_DAILY',
+            quantity: 1,
+            selectedDates: ['2026-10-15'],
+          },
+          null,
+        ),
+      ).rejects.toThrow('strictly restricted to SUPER_ADMIN');
+    });
+
+    it('excludes DEVELOPER_TEST orders from commercial sales revenue in listOrdersAdmin', async () => {
+      process.env.NODE_ENV = 'development';
+      prisma.commercialOrder.findMany.mockResolvedValue([]);
+      prisma.commercialOrder.count.mockResolvedValue(0);
+      prisma.commercialOrder.aggregate.mockResolvedValue({ _sum: { amountPaise: 0, quantity: 0 } });
+
+      await service.listOrdersAdmin({ page: 1, limit: 10 });
+
+      // Verify totalPaidAgg excluded DEVELOPER_TEST orders
+      expect(prisma.commercialOrder.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            registrationType: RegistrationType.COMMERCIAL,
+            orderStatus: OrderStatus.PAID,
+            source: { not: 'DEVELOPER_TEST' },
+            paymentMode: { not: 'DEVELOPER_TEST' },
+          }),
+        }),
+      );
+    });
+
+    it('successfully creates developer test purchase for SUPER_ADMIN with full audit log and safe email', async () => {
+      process.env.NODE_ENV = 'development';
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE = 'true';
+
+      const mockOrder = {
+        id: BigInt(888),
+        orderNumber: 'ONGC26-DEV-TEST-001',
+        ticketType: 'COMMERCIAL_DAILY',
+        quantity: 2,
+        amountInr: 498,
+        amountPaise: 49800,
+        currency: 'INR',
+        paymentStatus: PaymentStatus.CAPTURED,
+        orderStatus: OrderStatus.PAID,
+        source: 'DEVELOPER_TEST',
+        paymentMode: 'DEVELOPER_TEST',
+        isTestPayment: true,
+        isDeveloperTest: true,
+        testMode: 'DEVELOPER_TEST_PURCHASE',
+        razorpayOrderId: null,
+        razorpayPaymentId: null,
+        razorpaySignature: null,
+        customer: {
+          name: 'Super Admin Test',
+          email: 'superadmin@ongc.com',
+          mobile: '9876543210',
+        },
+      };
+
+      const mockPass1 = {
+        id: BigInt(1001),
+        ticketNumber: 'TKT-DEV-001',
+        qrCodeToken: 'a'.repeat(64),
+        name: 'Super Admin Test',
+        mobile: '9876543210',
+        category: 'COMMERCIAL_DAILY',
+        status: AttendeeStatus.ACTIVE,
+        bookingDays: ['2026-10-15'],
+      };
+
+      const mockPass2 = {
+        id: BigInt(1002),
+        ticketNumber: 'TKT-DEV-002',
+        qrCodeToken: 'b'.repeat(64),
+        name: 'Guest Attendee',
+        mobile: '9876543210',
+        category: 'COMMERCIAL_DAILY',
+        status: AttendeeStatus.ACTIVE,
+        bookingDays: ['2026-10-15'],
+      };
+
+      prisma.commercialOrder.create.mockResolvedValue(mockOrder);
+      prisma.attendee.create
+        .mockResolvedValueOnce(mockPass1)
+        .mockResolvedValueOnce(mockPass2);
+
+      const result = await service.createDeveloperTestPurchase(
+        {
+          ticketType: 'COMMERCIAL_DAILY',
+          quantity: 2,
+          selectedDates: ['2026-10-15'],
+          customerName: 'Super Admin Test',
+          customerEmail: 'superadmin@ongc.com',
+          attendeeNames: ['Guest Attendee'],
+        },
+        { id: '1', email: 'superadmin@ongc.com', role: UserRole.SUPER_ADMIN },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.isDeveloperTest).toBe(true);
+      expect(result.isTestPayment).toBe(true);
+      expect(result.passes).toHaveLength(2);
+      expect(result.order.razorpayOrderId).toBeNull();
+      expect(result.order.razorpayPaymentId).toBeNull();
+
+      // Check order creation payload
+      expect(prisma.commercialOrder.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            source: 'DEVELOPER_TEST',
+            paymentMode: 'DEVELOPER_TEST',
+            razorpayOrderId: null,
+            razorpayPaymentId: null,
+            razorpaySignature: null,
+            paymentStatus: PaymentStatus.CAPTURED,
+            orderStatus: OrderStatus.PAID,
+            metadata: expect.objectContaining({
+              isTestPayment: true,
+              isDeveloperTest: true,
+              testMode: 'DEVELOPER_TEST_PURCHASE',
+            }),
+          }),
+        }),
+      );
+
+      // Check audit log was created
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'DEVELOPER_TEST_PURCHASE',
+          }),
+        }),
+      );
     });
   });
 });

@@ -208,10 +208,25 @@ export class DashboardService {
 
     if (isCommercialAdmin || (!isCommercialAdmin && !isEmployeeAdmin)) {
       const [totalCommercialOrders, paidOrders, totalRevenuePaise, agentOrdersCount, availableAllocationAgg] = await Promise.all([
-        this.prisma.commercialOrder.count(),
-        this.prisma.commercialOrder.count({ where: { orderStatus: 'PAID' } }),
+        this.prisma.commercialOrder.count({
+          where: {
+            source: { not: 'DEVELOPER_TEST' },
+            paymentMode: { not: 'DEVELOPER_TEST' },
+          },
+        }),
+        this.prisma.commercialOrder.count({
+          where: {
+            orderStatus: 'PAID',
+            source: { not: 'DEVELOPER_TEST' },
+            paymentMode: { not: 'DEVELOPER_TEST' },
+          },
+        }),
         this.prisma.commercialOrder.aggregate({
-          where: { orderStatus: 'PAID' },
+          where: {
+            orderStatus: 'PAID',
+            source: { not: 'DEVELOPER_TEST' },
+            paymentMode: { not: 'DEVELOPER_TEST' },
+          },
           _sum: { amountPaise: true },
         }),
         this.prisma.commercialOrder.count({ where: { source: 'AGENT' } }),

@@ -13,6 +13,7 @@ import {
   Check,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser } from '@/lib/auth-session';
 import { resolveOrderSelectedDates } from '@/app/bookpass/bookpass-order.util';
 
 export const EVENT_DATES = [
@@ -126,6 +127,18 @@ export interface BookPassSectionProps {
     termsAccepted: boolean;
     estimatedTotal: number;
   }) => void;
+  developerTestPurchaseEnabled?: boolean;
+  isSuperAdmin?: boolean;
+  devSubmitting?: boolean;
+  onDeveloperTestPurchase?: (data: {
+    ticketType: TicketTypeCode;
+    selectedDate: string;
+    quantity: number;
+    name: string;
+    phone: string;
+    email: string;
+    attendeeNames: string[];
+  }) => void;
 }
 
 export default function BookPassSection({
@@ -134,6 +147,10 @@ export default function BookPassSection({
   submitting = false,
   errorMessage: propErrorMessage = '',
   onInitiatePayment,
+  developerTestPurchaseEnabled = false,
+  isSuperAdmin = false,
+  devSubmitting = false,
+  onDeveloperTestPurchase,
 }: BookPassSectionProps) {
   const [ticketType, setTicketType] = useState<TicketTypeCode>('COMMERCIAL_DAILY');
   const [selectedDate, setSelectedDate] = useState<string>('2026-10-11');
@@ -149,6 +166,19 @@ export default function BookPassSection({
     typeof propPaymentEnabled === 'boolean' ? propPaymentEnabled : false,
   );
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
+
+  // Sync Super Admin email/name if empty
+  useEffect(() => {
+    if (isSuperAdmin) {
+      const stored = getStoredAuthUser();
+      if (stored?.email) {
+        setEmail((prev) => (prev ? prev : stored.email));
+      }
+      if (stored?.name) {
+        setName((prev) => (prev ? prev : stored.name));
+      }
+    }
+  }, [isSuperAdmin]);
 
   // Sync prop changes
   useEffect(() => {
@@ -271,6 +301,41 @@ export default function BookPassSection({
       attendeeNames,
       termsAccepted,
       estimatedTotal,
+    });
+  };
+
+  const handleDevSubmit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setLocalError('');
+    if (!onDeveloperTestPurchase) return;
+
+    if (!termsAccepted) {
+      setLocalError('Please accept the ticket terms & conditions before generating a test purchase.');
+      return;
+    }
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    if (cleanPhone && !INDIAN_MOBILE_REGEX.test(cleanPhone)) {
+      setLocalError('Please enter a valid 10-digit Indian mobile number.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (email.trim() && !emailRegex.test(email.trim())) {
+      setLocalError('Please enter a valid email address.');
+      return;
+    }
+    if (!isSeason && !isAnyDay && !selectedDate) {
+      setLocalError('Please select an event date.');
+      return;
+    }
+
+    onDeveloperTestPurchase({
+      ticketType,
+      selectedDate,
+      quantity,
+      name: name.trim() || 'Super Admin',
+      phone: cleanPhone || '9876543210',
+      email: email.trim().toLowerCase(),
+      attendeeNames,
     });
   };
 
@@ -745,6 +810,80 @@ export default function BookPassSection({
                 <Lock className="w-5 h-5 text-stone-400" />
                 <span>ONLINE PAYMENT UNAVAILABLE</span>
               </button>
+
+              {/* DEVELOPER TEST PURCHASE (STRICTLY FOR SUPER_ADMIN WHEN FLAG IS ON) */}
+              {developerTestPurchaseEnabled && isSuperAdmin && (
+                <div
+                  data-testid="developer-test-purchase-section"
+                  className="mt-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-amber-50/90 via-purple-50/40 to-amber-50/80 border-2 border-dashed border-purple-400/80 shadow-md space-y-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-purple-200/80">
+                    <div className="flex items-center gap-2">
+                      <span
+                        data-testid="developer-test-badge"
+                        className="px-2.5 py-1 rounded-md bg-purple-700 text-white font-mono text-[10px] font-black uppercase tracking-wider shadow-xs"
+                      >
+                        DEVELOPER TESTING ONLY
+                      </span>
+                      <span className="text-xs font-bold text-purple-950 uppercase tracking-wide">
+                        Super Admin Test Mode
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-purple-800 bg-purple-100 px-2 py-0.5 rounded border border-purple-200 font-semibold">
+                      ALLOW_DEVELOPER_TEST_PURCHASE=true
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-stone-700 space-y-1.5">
+                    <p className="font-semibold text-purple-950">
+                      Online Razorpay payments are currently OFF. As an authorized Super Admin, you can run a full end-to-end test of the ticketing system without real payment.
+                    </p>
+                    <ul className="list-disc list-inside text-[11px] text-stone-600 space-y-0.5">
+                      <li>Creates real order and pass records with cryptographically random QR tokens.</li>
+                      <li>Dispatches transactional confirmation email to recipient.</li>
+                      <li>Bypasses Razorpay completely (<code className="font-mono bg-purple-100/80 px-1 rounded text-purple-900">razorpayOrderId: null</code>).</li>
+                      <li>Logged to immutable Super Admin audit trail.</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/95 border border-purple-200 text-xs text-stone-800 space-y-1">
+                    <div className="font-bold text-stone-900">Test Order Summary:</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-stone-600">
+                      <div>Pass Type: <strong className="text-stone-800">{activeOption.name}</strong></div>
+                      <div>Quantity: <strong className="text-stone-800">{quantity} {quantity === 1 ? 'pass' : 'passes'}</strong></div>
+                      <div>Date(s): <strong className="text-stone-800">{isSeason ? 'All 9 Nights' : isAnyDay ? 'Any 1 Night' : selectedDate}</strong></div>
+                      <div>Recipient: <strong className="text-stone-800">{email.trim() || '(Super Admin Email)'}</strong></div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleDevSubmit}
+                    disabled={devSubmitting || submitting}
+                    data-testid="developer-test-purchase-btn"
+                    className={`w-full py-3.5 rounded-xl font-outfit font-black text-sm sm:text-base transition-all shadow-md flex items-center justify-center gap-2 border ${
+                      devSubmitting || submitting
+                        ? 'bg-stone-200 text-stone-400 border-stone-300 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:brightness-110 text-white border-purple-900/20 hover:shadow-lg cursor-pointer'
+                    }`}
+                  >
+                    {devSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Generating Test Order &amp; Passes...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                        <span>CREATE DEVELOPER TEST PURCHASE ({quantity} {quantity === 1 ? 'PASS' : 'PASSES'})</span>
+                      </>
+                    )}
+                  </button>
+                  <p className="text-[10px] text-center text-stone-500 italic">
+                    Restricted strictly to active Super Admin sessions. Unauthenticated visitors and other roles receive HTTP 403 Forbidden.
+                  </p>
+                </div>
+              )}
             </div>
           ) : isPreview ? (
             /* PREVIEW ONLY SUBMIT BUTTON (Never triggers real payment) */

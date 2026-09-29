@@ -27,6 +27,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
+import { getStoredAuthUser } from '@/lib/auth-session';
 import { generateDownloadablePassSvg, resolveOrderSelectedDates } from './bookpass-order.util';
 import BookPassSection, {
   EVENT_DATES,
@@ -267,9 +268,32 @@ export default function BookPassPage() {
   const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
   const [confirmedPasses, setConfirmedPasses] = useState<GeneratedPass[]>([]);
   const [isTestOrder, setIsTestOrder] = useState(false);
+  const [isDeveloperTestOrder, setIsDeveloperTestOrder] = useState(false);
   const [confirmedOrderSummary, setConfirmedOrderSummary] = useState<ConfirmedOrderSummary | null>(null);
 
+  // Developer Test Purchase State (Super Admin Only)
+  const [developerTestPurchaseEnabled, setDeveloperTestPurchaseEnabled] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [devSubmitting, setDevSubmitting] = useState(false);
+
   const router = useRouter();
+
+  // Check if current user is Super Admin and fetch developer-test status from protected admin endpoint
+  useEffect(() => {
+    const user = getStoredAuthUser();
+    if (user && user.role === 'SUPER_ADMIN') {
+      setIsSuperAdmin(true);
+      fetchApi('/admin/commercial/developer-test-purchase/status')
+        .then((res) => {
+          if (res && typeof res.enabled === 'boolean') {
+            setDeveloperTestPurchaseEnabled(res.enabled);
+          }
+        })
+        .catch(() => {
+          setDeveloperTestPurchaseEnabled(false);
+        });
+    }
+  }, []);
 
   const handleViewTicket = (e: React.MouseEvent<HTMLAnchorElement>, qrCodeToken: string) => {
     // If opening in a new tab via modifier keys, allow native browser behavior
@@ -542,6 +566,69 @@ export default function BookPassPage() {
     }
   };
 
+  const handleDeveloperTestPurchase = async (data: {
+    ticketType: TicketTypeCode;
+    selectedDate: string;
+    quantity: number;
+    name: string;
+    phone: string;
+    email: string;
+    attendeeNames: string[];
+  }) => {
+    setErrorMessage('');
+    setPaymentFailed(false);
+    setDevSubmitting(true);
+
+    try {
+      const cleanPhone = data.phone.replace(/[^0-9]/g, '') || '9999999999';
+      const isSeason = data.ticketType === 'COMMERCIAL_SEASON';
+      const isAnyDay = data.ticketType === 'COMMERCIAL_ANY_DAY';
+      const effectiveDates = resolveOrderSelectedDates(data.ticketType, data.selectedDate, EVENT_DATES);
+
+      const res = await fetchApi('/admin/commercial/developer-test-purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticketType: data.ticketType,
+          quantity: data.quantity,
+          selectedDates: effectiveDates,
+          customerName: data.name.trim() || undefined,
+          customerEmail: data.email.trim().toLowerCase() || undefined,
+          customerMobile: cleanPhone || undefined,
+          attendeeNames: data.attendeeNames?.filter(Boolean) || undefined,
+          notes: 'Developer test purchase from Book Pass page',
+        }),
+      });
+
+      const orderData = res?.order;
+      if (!orderData || !orderData.orderNumber) {
+        throw new Error('Developer test purchase failed. No order returned from backend.');
+      }
+
+      setIsTestOrder(true);
+      setIsDeveloperTestOrder(true);
+      setConfirmedOrderNumber(orderData.orderNumber);
+      setConfirmedPasses(res.passes || []);
+      setConfirmedOrderSummary({
+        orderNumber: orderData.orderNumber,
+        ticketType: (orderData.ticketType as TicketTypeCode) || data.ticketType,
+        selectedDates: (orderData.selectedDates as string[]) || (isSeason ? EVENT_DATES : (isAnyDay ? [] : [data.selectedDate])),
+        quantity: orderData.quantity || data.quantity,
+        amountInr: orderData.amountInr ?? 0,
+        customerEmail: orderData.customer?.email || data.email.trim().toLowerCase(),
+        customerName: orderData.customer?.name || data.name.trim(),
+      });
+
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Developer test purchase failed. Please check backend logs.');
+    } finally {
+      setDevSubmitting(false);
+    }
+  };
+
   const resetForm = () => {
     setName('');
     setEmail('');
@@ -556,6 +643,7 @@ export default function BookPassPage() {
     setConfirmedPasses([]);
     setConfirmedOrderSummary(null);
     setIsTestOrder(false);
+    setIsDeveloperTestOrder(false);
     setTermsAccepted(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -594,21 +682,33 @@ export default function BookPassPage() {
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <span>PAYMENT / BOOKING CONFIRMED</span>
                 </span>
-                {isTestOrder && (
+                {isDeveloperTestOrder ? (
+                  <span
+                    data-testid="developer-test-order-badge"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-900 bg-purple-100 px-3 py-1 rounded-full uppercase tracking-wider border border-purple-300 shadow-xs"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span>DEVELOPER TEST PURCHASE &bull; NO REAL PAYMENT</span>
+                  </span>
+                ) : isTestOrder ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full uppercase tracking-wider border border-amber-300 shadow-xs">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                     <span>STAGING TEST PAYMENT &bull; NOT A REAL PURCHASE</span>
                   </span>
-                )}
+                ) : null}
               </div>
               <p className="text-sm font-medium text-ink-soft pt-1">
                 Your digital entry pass is ready. Show the QR code below at the gate.
               </p>
-              {isTestOrder && (
+              {isDeveloperTestOrder ? (
+                <p className="text-xs text-purple-950 bg-purple-50 p-3 rounded-xl border border-purple-200 max-w-lg mx-auto font-medium">
+                  This E-Pass was generated using Developer Test Purchase mode by an authorized Super Admin. Real passes, QR tokens, and audit logs were created without contacting Razorpay.
+                </p>
+              ) : isTestOrder ? (
                 <p className="text-xs text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200 max-w-lg mx-auto font-medium">
                   This E-Pass was generated using safe staging test mode without live Razorpay payment. Official QR codes and emails have been generated for testing.
                 </p>
-              )}
+              ) : null}
             </div>
 
             {/* 3. YOUR DIGITAL PASS — FIRST / MAIN FOCUS */}
@@ -969,6 +1069,10 @@ export default function BookPassPage() {
                 submitting={submitting}
                 errorMessage={errorMessage}
                 onInitiatePayment={handleInitiatePayment}
+                developerTestPurchaseEnabled={developerTestPurchaseEnabled}
+                isSuperAdmin={isSuperAdmin}
+                devSubmitting={devSubmitting}
+                onDeveloperTestPurchase={handleDeveloperTestPurchase}
               />
           )}
         </div>

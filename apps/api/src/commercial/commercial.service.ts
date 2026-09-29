@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
   ConflictException,
   HttpException,
   HttpStatus,
@@ -14,6 +15,7 @@ import { RedisService } from '../redis/redis.service';
 import { RazorpayService } from './razorpay.service';
 import { CreateCommercialOrderDto } from './dto/create-commercial-order.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
+import { DeveloperTestPurchaseDto } from './dto/developer-test-purchase.dto';
 import {
   COMMERCIAL_EVENT_DATES,
   COMMERCIAL_TICKET_TYPES,
@@ -24,6 +26,7 @@ import {
   isCommercialTestPaymentEnabled,
   isAdminTestDataDeleteEnabled,
   isStagingTestOrder,
+  isDeveloperTestPurchaseEnabled,
 } from './commercial-test-payment.util';
 import {
   AttendeeStatus,
@@ -66,6 +69,19 @@ export class CommercialService {
       this.configService?.get<string>('COMMERCIAL_TEST_PAYMENT') ||
       process.env.COMMERCIAL_TEST_PAYMENT;
     return isCommercialTestPaymentEnabled(nodeEnv, testPaymentEnv);
+  }
+
+  /**
+   * Controlled developer test purchase feature flag check.
+   * Default: false.
+   */
+  isDeveloperTestPurchaseEnabled(): boolean {
+    const nodeEnv =
+      this.configService?.get<string>('NODE_ENV') || process.env.NODE_ENV;
+    const devTestFlag =
+      this.configService?.get<string>('ALLOW_DEVELOPER_TEST_PURCHASE') ||
+      process.env.ALLOW_DEVELOPER_TEST_PURCHASE;
+    return isDeveloperTestPurchaseEnabled(nodeEnv, devTestFlag);
   }
 
   /**
@@ -469,6 +485,208 @@ export class CommercialService {
     } finally {
       if (mobileLockToken) {
         await this.redis.releaseLock(mobileLockKey, mobileLockToken);
+      }
+    }
+  }
+
+  /**
+   * Controlled Super Admin Developer Test Purchase.
+   * Completely bypasses Razorpay payments for testing the end-to-end commercial pass flow.
+   * STRICT SECURITY BOUNDARY:
+   * - Requires ALLOW_DEVELOPER_TEST_PURCHASE=true
+   * - Strictly restricted to SUPER_ADMIN role
+   * - Automatically sets customer email to the authenticated Super Admin's email
+   * - Marks order with isTestPayment: true, isDeveloperTest: true, paymentMode: DEVELOPER_TEST
+   * - No fake Razorpay IDs or signatures
+   * - Creates real passes, QR tokens, and dispatches real transactional ticket email
+   * - Records immutable AuditLog
+   */
+  async createDeveloperTestPurchase(dto: DeveloperTestPurchaseDto, user: any) {
+    // 1. Strict server-side production guard and feature flag check
+    const currentEnv = (process.env.NODE_ENV || 'development').toLowerCase().trim();
+    if (currentEnv === 'production') {
+      throw new ForbiddenException(
+        'Developer test purchase is strictly forbidden in production.',
+      );
+    }
+    if (!this.isDeveloperTestPurchaseEnabled()) {
+      throw new ForbiddenException(
+        'Developer test purchase is disabled on this server. Configure ALLOW_DEVELOPER_TEST_PURCHASE=true to enable.',
+      );
+    }
+
+    // 2. Strict Super Admin role verification
+    if (!user || user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Developer test purchase is strictly restricted to SUPER_ADMIN.',
+      );
+    }
+
+    // 3. Authoritative server-side price calculation and pass validation
+    const ticketTypeCode = dto.ticketType || 'COMMERCIAL_DAILY';
+    if (!COMMERCIAL_TICKET_TYPES[ticketTypeCode]) {
+      throw new BadRequestException(`Invalid commercial pass category: ${ticketTypeCode}`);
+    }
+
+    let pricing: {
+      unitPricePaise: number;
+      originalPricePaise: number;
+      totalAmountPaise: number;
+      totalOriginalAmountPaise: number;
+      validDates: string[];
+    };
+    try {
+      pricing = calculateServerPricePaise(ticketTypeCode, dto.selectedDates, dto.quantity);
+    } catch (err: any) {
+      throw new BadRequestException(err.message || 'Invalid ticket configuration.');
+    }
+
+    // 4. Generate unique internal order reference
+    const orderNumber = generateOrderNumber();
+
+    // 5. Test customer details: email defaults to authenticated Super Admin or DTO
+    const customerEmail = ((dto.customerEmail || user.email || 'developer@ongc.co.in') as string).trim().toLowerCase();
+    const customerName = (dto.customerName || `Developer Test (${user.name || 'Super Admin'})`).trim();
+    const customerMobile = (dto.customerMobile || user.phone || '9999999999').trim();
+
+    // 6. Concurrency lock to prevent duplicate order generation races
+    const lockKey = `lock:dev-test-order:${orderNumber}`;
+    const lockToken = await this.redis.acquireLock(lockKey, 15);
+
+    try {
+      // 7. Execute atomic transaction: create order, passes, and audit log
+      const { order, createdPasses } = await this.prisma.$transaction(async (tx: any) => {
+        const newOrder = await tx.commercialOrder.create({
+          data: {
+            orderNumber,
+            registrationType: RegistrationType.COMMERCIAL,
+            source: 'DEVELOPER_TEST',
+            paymentMode: 'DEVELOPER_TEST',
+            customerName,
+            customerMobile,
+            customerEmail,
+            ticketType: ticketTypeCode,
+            selectedDates: pricing.validDates,
+            quantity: dto.quantity,
+            unitPricePaise: pricing.unitPricePaise,
+            amountPaise: pricing.totalAmountPaise,
+            currency: 'INR',
+            orderStatus: OrderStatus.PAID,
+            paymentStatus: PaymentStatus.CAPTURED,
+            razorpayOrderId: null,
+            razorpayPaymentId: null,
+            razorpaySignature: null,
+            paidAt: new Date(),
+            metadata: {
+              originalUnitPricePaise: pricing.originalPricePaise,
+              totalOriginalAmountPaise: pricing.totalOriginalAmountPaise,
+              isTestPayment: true,
+              isDeveloperTest: true,
+              testMode: 'DEVELOPER_TEST_PURCHASE',
+              gateway: 'DEVELOPER_TEST_MODE',
+              developerUser: {
+                id: user.id ? user.id.toString() : null,
+                email: user.email,
+                name: user.name,
+              },
+              termsAccepted: true,
+              termsAcceptedAt: new Date().toISOString(),
+              notes: dto.notes || undefined,
+            },
+          },
+        });
+
+        const passes: any[] = [];
+        const validDates = pricing.validDates;
+
+        for (let i = 0; i < dto.quantity; i++) {
+          const qrToken = this.generateSecureQrToken();
+          const ticketNumber = this.generateTicketNumber(orderNumber, i);
+          const passHolderName =
+            i === 0
+              ? newOrder.customerName
+              : dto.attendeeNames?.[i - 1] || `${newOrder.customerName} (Guest ${i})`;
+
+          const attendee = await tx.attendee.create({
+            data: {
+              registrationType: RegistrationType.COMMERCIAL,
+              orderId: newOrder.id,
+              name: passHolderName,
+              mobile: newOrder.customerMobile,
+              email: newOrder.customerEmail,
+              category:
+                newOrder.ticketType === 'COMMERCIAL_ANY_DAY'
+                  ? 'Any Day Pass'
+                  : newOrder.ticketType === 'COMMERCIAL_SEASON'
+                  ? 'Season Pass'
+                  : newOrder.ticketType === 'COMMERCIAL_MANDLI'
+                  ? 'Mandli Pass'
+                  : 'Daily Pass',
+              ticketNumber,
+              qrCodeToken: qrToken,
+              status: AttendeeStatus.ACTIVE,
+              bookingDays: validDates,
+            },
+          });
+
+          passes.push(attendee);
+        }
+
+        // Record immutable AuditLog
+        if (user.id && tx.auditLog?.create) {
+          await tx.auditLog.create({
+            data: {
+              userId: BigInt(user.id),
+              action: 'DEVELOPER_TEST_PURCHASE',
+              details: {
+                orderNumber: newOrder.orderNumber,
+                ticketType: ticketTypeCode,
+                quantity: dto.quantity,
+                amountPaise: pricing.totalAmountPaise,
+                recipientEmail: customerEmail,
+                timestamp: new Date().toISOString(),
+              },
+            },
+          });
+        }
+
+        return { order: newOrder, createdPasses: passes };
+      });
+
+      const formattedPasses = await this.formatPasses(createdPasses);
+
+      // Send transactional ticket email asynchronously (non-blocking) to Super Admin
+      this.sendTicketEmailSafe(order, createdPasses);
+
+      return {
+        success: true,
+        isTestPayment: true,
+        isDeveloperTest: true,
+        message: 'Developer test order created and entry passes issued successfully.',
+        order: {
+          orderNumber: order.orderNumber,
+          amountInr: order.amountPaise / 100,
+          amountPaise: order.amountPaise,
+          currency: order.currency,
+          quantity: order.quantity,
+          ticketType: order.ticketType,
+          selectedDates: order.selectedDates,
+          orderStatus: order.orderStatus,
+          paymentStatus: order.paymentStatus,
+          isTestPayment: true,
+          razorpayOrderId: null,
+          razorpayPaymentId: null,
+          customer: {
+            name: order.customerName,
+            email: order.customerEmail,
+            mobile: order.customerMobile,
+          },
+        },
+        passes: formattedPasses,
+      };
+    } finally {
+      if (lockToken) {
+        await this.redis.releaseLock(lockKey, lockToken);
       }
     }
   }
@@ -1036,11 +1254,21 @@ export class CommercialService {
         _sum: { amountPaise: true, quantity: true },
       }),
       this.prisma.commercialOrder.aggregate({
-        where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
+        where: {
+          registrationType: RegistrationType.COMMERCIAL,
+          orderStatus: OrderStatus.PAID,
+          source: { not: 'DEVELOPER_TEST' },
+          paymentMode: { not: 'DEVELOPER_TEST' },
+        },
         _sum: { amountPaise: true },
       }),
       this.prisma.commercialOrder.aggregate({
-        where: { registrationType: RegistrationType.COMMERCIAL, orderStatus: OrderStatus.PAID },
+        where: {
+          registrationType: RegistrationType.COMMERCIAL,
+          orderStatus: OrderStatus.PAID,
+          source: { not: 'DEVELOPER_TEST' },
+          paymentMode: { not: 'DEVELOPER_TEST' },
+        },
         _sum: { quantity: true },
       }),
       this.prisma.attendee?.count

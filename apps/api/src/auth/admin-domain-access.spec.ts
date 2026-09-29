@@ -549,5 +549,27 @@ describe('Admin Domain Separation & Page Access Control', () => {
       expect(stats.employeeStats?.totalEmployees).toBe(25);
       expect(stats.employeeStats?.totalFamilyMembers).toBe(25);
     });
+
+    it('excludes DEVELOPER_TEST orders from commercialSalesInr and paidOrdersCount in getLiveStats', async () => {
+      await service.getLiveStats({ role: UserRole.COMMERCIAL_ADMIN });
+      expect(mockPrisma.commercialOrder.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            orderStatus: 'PAID',
+            source: { not: 'DEVELOPER_TEST' },
+            paymentMode: { not: 'DEVELOPER_TEST' },
+          }),
+        }),
+      );
+      expect(mockPrisma.commercialOrder.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            orderStatus: 'PAID',
+            source: { not: 'DEVELOPER_TEST' },
+            paymentMode: { not: 'DEVELOPER_TEST' },
+          }),
+        }),
+      );
+    });
   });
 });

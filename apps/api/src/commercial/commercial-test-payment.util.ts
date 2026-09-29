@@ -23,6 +23,29 @@ export function isCommercialTestPaymentEnabled(
 }
 
 /**
+ * Developer Test Purchase Feature Flag.
+ * Controlled development/testing bypass strictly restricted to authenticated Super Admins.
+ *
+ * STRICT PRODUCTION GUARD:
+ * - NODE_ENV=production -> ALWAYS disabled, regardless of ALLOW_DEVELOPER_TEST_PURCHASE
+ * - development/staging/test/local + ALLOW_DEVELOPER_TEST_PURCHASE=true -> available
+ * - missing or false flag -> disabled
+ */
+export function isDeveloperTestPurchaseEnabled(
+  nodeEnv?: string,
+  allowDevTestEnv?: string,
+): boolean {
+  const env = (nodeEnv !== undefined ? nodeEnv : (process.env.NODE_ENV || 'development')).toLowerCase().trim();
+  if (env === 'production') {
+    return false;
+  }
+  const rawFlag = (allowDevTestEnv !== undefined ? allowDevTestEnv : (process.env.ALLOW_DEVELOPER_TEST_PURCHASE || 'false'))
+    .toLowerCase()
+    .trim();
+  return rawFlag === 'true';
+}
+
+/**
  * Safe staging test data delete mode determination.
  * STRICT FAILSAFE: Automatically disabled and rejected if NODE_ENV=production, missing, or unknown.
  * Only allowed when NODE_ENV is explicitly one of ['staging', 'development', 'test', 'local']
@@ -111,7 +134,12 @@ export function isStagingTestOrder(order: any, agentUser?: any): boolean {
   }
 
   // 1. Definitive online test payment markers
-  if (meta.isTestPayment === true || meta.testMode === 'STAGING_TEST_PAYMENT') {
+  if (
+    meta.isTestPayment === true ||
+    meta.testMode === 'STAGING_TEST_PAYMENT' ||
+    meta.isDeveloperTest === true ||
+    meta.testMode === 'DEVELOPER_TEST_PURCHASE'
+  ) {
     return true;
   }
 

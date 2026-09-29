@@ -15,6 +15,7 @@ import { CommercialService } from './commercial.service';
 import { CreateCommercialOrderDto } from './dto/create-commercial-order.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { ResendTicketEmailDto } from './dto/resend-ticket-email.dto';
+import { DeveloperTestPurchaseDto } from './dto/developer-test-purchase.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -122,6 +123,23 @@ export class CommercialAdminController {
   async bulkDeleteOrders(@Body() body: { orderIds: string[] }, @Req() req?: Request) {
     const user = req ? (req as any).user : undefined;
     return this.commercialService.bulkDeleteOrdersAdmin(body?.orderIds || [], user);
+  }
+
+  @Get('developer-test-purchase/status')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Check if developer test purchase flow is enabled' })
+  async getDeveloperTestPurchaseStatus() {
+    return {
+      enabled: this.commercialService.isDeveloperTestPurchaseEnabled(),
+    };
+  }
+
+  @Post('developer-test-purchase')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Controlled developer test purchase for Super Admin testing when payments are offline' })
+  async developerTestPurchase(@Body() body: DeveloperTestPurchaseDto, @Req() req?: Request) {
+    const user = req ? (req as any).user : undefined;
+    return this.commercialService.createDeveloperTestPurchase(body, user);
   }
 
   @Delete('orders/:id')
