@@ -5,6 +5,8 @@ import {
   SETTING_SUPER_ADMIN_FULL_POWER,
   SETTING_MAINTENANCE_MODE,
   SETTING_PAYMENT_RAZORPAY_ENABLED,
+  SETTING_BOOK_PASS_AVAILABILITY,
+  BookPassAvailability,
   CONFIRMATION_ENABLE_FULL_POWER,
   CONFIRMATION_ENABLE_MAINTENANCE,
   AUDIT_SUPER_ADMIN_FULL_POWER_ENABLED,
@@ -13,8 +15,10 @@ import {
   AUDIT_MAINTENANCE_MODE_DISABLED,
   AUDIT_PAYMENT_GATEWAY_ENABLED,
   AUDIT_PAYMENT_GATEWAY_DISABLED,
+  AUDIT_BOOK_PASS_AVAILABILITY_UPDATED,
   isSuperAdminFullPowerActive,
   isMaintenanceModeActive,
+  isBookPassOpen,
 } from '@ongc/shared-types';
 import { isAdminTestDataDeleteEnabled } from '../commercial/commercial-test-payment.util';
 
@@ -73,6 +77,9 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
 
   // payment settings
   'payment.razorpay_enabled': '0',
+
+  // commercial / book pass availability
+  'commercial.book_pass_availability': 'OPEN',
 };
 
 export const FIELDS_BY_GROUP: Record<string, string[]> = {
@@ -503,6 +510,111 @@ export class SettingsService {
       message: enabled
         ? 'Razorpay online payments enabled. Customers can initiate pass bookings.'
         : 'Razorpay online payments disabled. New online payment initiations are blocked.',
+    };
+  }
+
+  /**
+   * Determine if Book Pass availability is OPEN for public bookings.
+   * Defaults to true (OPEN) if not explicitly set.
+   */
+  async isBookPassAvailable(): Promise<boolean> {
+    try {
+      const setting = await this.prisma.setting.findUnique({
+        where: { key: SETTING_BOOK_PASS_AVAILABILITY },
+      });
+      return isBookPassOpen(setting?.value);
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Authoritative retrieval of Book Pass availability settings.
+   * Accessible to authorized roles: SUPER_ADMIN, EVENT_ADMIN, ADMIN.
+   */
+  async getBookPassSettings(userRole?: string | null) {
+    const role = (userRole || '').toUpperCase().trim();
+    if (
+      role !== UserRole.SUPER_ADMIN &&
+      role !== UserRole.EVENT_ADMIN &&
+      role !== UserRole.ADMIN
+    ) {
+      throw new ForbiddenException('Only authorized admins can access Book Pass Settings.');
+    }
+
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_BOOK_PASS_AVAILABILITY },
+    });
+    const isOpen = isBookPassOpen(setting?.value);
+
+    return {
+      success: true,
+      enabled: isOpen,
+      availability: isOpen ? 'OPEN' : 'COMING_SOON',
+      updatedAt: setting?.updatedAt || null,
+    };
+  }
+
+  /**
+   * Updates Book Pass availability setting.
+   * Strictly writes to database Setting table and records an audit log.
+   * Accessible to authorized roles: SUPER_ADMIN, EVENT_ADMIN, ADMIN.
+   */
+  async updateBookPassSettings(
+    availabilityOrEnabled: string | boolean,
+    user?: { id?: bigint | string; role?: string; email?: string; name?: string },
+  ) {
+    const userRole = typeof user === 'string' ? user : user?.role;
+    const userId = typeof user === 'object' && user !== null ? user.id : undefined;
+    const role = (userRole || '').toUpperCase().trim();
+
+    if (
+      role !== UserRole.SUPER_ADMIN &&
+      role !== UserRole.EVENT_ADMIN &&
+      role !== UserRole.ADMIN
+    ) {
+      throw new ForbiddenException('Only authorized admins can modify Book Pass Settings.');
+    }
+
+    const isOpen = isBookPassOpen(availabilityOrEnabled);
+    const valStr = isOpen ? 'OPEN' : 'COMING_SOON';
+
+    const previousSetting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_BOOK_PASS_AVAILABILITY },
+    });
+    const previousState = isBookPassOpen(previousSetting?.value) ? 'OPEN' : 'COMING_SOON';
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.setting.upsert({
+        where: { key: SETTING_BOOK_PASS_AVAILABILITY },
+        update: { value: valStr },
+        create: { key: SETTING_BOOK_PASS_AVAILABILITY, value: valStr },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: userId ? BigInt(userId) : null,
+          action: AUDIT_BOOK_PASS_AVAILABILITY_UPDATED,
+          details: {
+            setting: SETTING_BOOK_PASS_AVAILABILITY,
+            oldState: previousState,
+            newState: valStr,
+            enabled: isOpen,
+            updatedByRole: userRole,
+            changedBy: user?.email || user?.name || (userId ? `user_${userId}` : 'unknown'),
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      enabled: isOpen,
+      availability: valStr,
+      message: isOpen
+        ? 'Book Pass availability updated to OPEN. Customers can book passes.'
+        : 'Book Pass availability updated to COMING SOON. Customers see the Coming Soon page.',
     };
   }
 }

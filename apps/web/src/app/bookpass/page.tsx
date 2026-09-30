@@ -9,6 +9,7 @@ import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
 import TicketGuidelines from '@/components/TicketGuidelines';
 import MaintenanceNotice from '@/components/MaintenanceNotice';
+import BookPassComingSoon from '@/components/BookPassComingSoon';
 import {
   Ticket,
   CheckCircle2,
@@ -255,7 +256,8 @@ export default function BookPassPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Flow & Payment State
-  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [bookPassOpen, setBookPassOpen] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -341,6 +343,13 @@ export default function BookPassPage() {
         setLoadingConfig(true);
         const res = await fetchApi('/commercial/config');
         if (res) {
+          if (typeof res.bookPassOpen === 'boolean') {
+            setBookPassOpen(res.bookPassOpen);
+          } else if (res.bookPassAvailability) {
+            setBookPassOpen(res.bookPassAvailability === 'OPEN');
+          } else {
+            setBookPassOpen(true);
+          }
           if (res.ticketTypes) {
             const map: Record<string, any> = {};
             res.ticketTypes.forEach((t: any) => {
@@ -353,7 +362,8 @@ export default function BookPassPage() {
           }
         }
       } catch {
-        // Fallback to local constants; paymentEnabled stays false
+        // Fallback to local constants; paymentEnabled stays false, bookPassOpen defaults to true
+        setBookPassOpen(true);
       } finally {
         setLoadingConfig(false);
       }
@@ -655,7 +665,20 @@ export default function BookPassPage() {
 
       <main className="flex-1">
         <MaintenanceNotice pageType="booking">
-        {confirmedPasses.length > 0 ? (
+        {loadingConfig && confirmedPasses.length === 0 ? (
+          <div
+            data-testid="bookpass-loading-state"
+            className="min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-4"
+          >
+            <Loader2 className="w-10 h-10 text-maroon animate-spin" />
+            <div className="font-outfit font-bold text-base text-maroon">
+              Checking Ticket Availability...
+            </div>
+            <p className="text-xs text-stone-500">
+              Loading ONGC Navratri 2026 pass information
+            </p>
+          </div>
+        ) : confirmedPasses.length > 0 ? (
           /* REDESIGNED DIGITAL TICKET CONFIRMATION EXPERIENCE */
           <div className="max-w-3xl mx-auto pt-6 sm:pt-10 pb-16 px-4 sm:px-6 space-y-8">
             {/* 1. ONGC NAVRATRI HEADER */}
@@ -1032,6 +1055,9 @@ export default function BookPassPage() {
               </div>
             </div>
           </div>
+        ) : !bookPassOpen ? (
+          /* BOOK PASS COMING SOON EXPERIENCE */
+          <BookPassComingSoon />
         ) : (
           /* CHECKOUT FORM EXPERIENCE */
           <div className="max-w-4xl mx-auto pt-6 sm:pt-8 pb-12 px-4 sm:px-6">

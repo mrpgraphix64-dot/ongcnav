@@ -277,6 +277,12 @@ export function isOfficialEventDate(date: string): date is OfficialEventDate {
 export const SETTING_SUPER_ADMIN_FULL_POWER = 'system.super_admin_full_power';
 export const SETTING_MAINTENANCE_MODE = 'system.maintenance_mode';
 export const SETTING_PAYMENT_RAZORPAY_ENABLED = 'payment.razorpay_enabled';
+export const SETTING_BOOK_PASS_AVAILABILITY = 'commercial.book_pass_availability';
+
+export enum BookPassAvailability {
+  OPEN = 'OPEN',
+  COMING_SOON = 'COMING_SOON',
+}
 
 export const CONFIRMATION_ENABLE_FULL_POWER = 'ENABLE FULL POWER';
 export const CONFIRMATION_ENABLE_MAINTENANCE = 'ENABLE MAINTENANCE';
@@ -288,6 +294,7 @@ export const AUDIT_MAINTENANCE_MODE_ENABLED = 'MAINTENANCE_MODE_ENABLED';
 export const AUDIT_MAINTENANCE_MODE_DISABLED = 'MAINTENANCE_MODE_DISABLED';
 export const AUDIT_PAYMENT_GATEWAY_ENABLED = 'PAYMENT_GATEWAY_ENABLED';
 export const AUDIT_PAYMENT_GATEWAY_DISABLED = 'PAYMENT_GATEWAY_DISABLED';
+export const AUDIT_BOOK_PASS_AVAILABILITY_UPDATED = 'BOOK_PASS_AVAILABILITY_UPDATED';
 export const AUDIT_FULL_POWER_ATTENDEE_DELETED = 'FULL_POWER_ATTENDEE_DELETED';
 export const AUDIT_FULL_POWER_ATTENDEES_BULK_DELETED = 'FULL_POWER_ATTENDEES_BULK_DELETED';
 export const AUDIT_FULL_POWER_ORDER_DELETED = 'FULL_POWER_ORDER_DELETED';
@@ -345,6 +352,24 @@ export function isMaintenanceModeActive(isSettingEnabled?: boolean | string | nu
   }
   const flag = String(isSettingEnabled || '').toLowerCase().trim();
   return flag === 'true' || flag === '1';
+}
+
+/**
+ * Checks whether Book Pass ticket sales are open for public customers.
+ * Defaults to true (OPEN) if not explicitly set or empty.
+ */
+export function isBookPassOpen(isSettingEnabled?: boolean | string | null): boolean {
+  if (isSettingEnabled === undefined || isSettingEnabled === null || isSettingEnabled === '') {
+    return true;
+  }
+  if (typeof isSettingEnabled === 'boolean') {
+    return isSettingEnabled;
+  }
+  const flag = String(isSettingEnabled).toUpperCase().trim();
+  if (flag === 'COMING_SOON' || flag === 'CLOSED' || flag === '0' || flag === 'FALSE') {
+    return false;
+  }
+  return true;
 }
 
 export * from './admin-page-access';

@@ -193,7 +193,12 @@ describe('CommercialService', () => {
     });
 
     it('rejects order creation when registration is closed in settings', async () => {
-      prisma.setting.findUnique.mockResolvedValueOnce({ key: 'registration_open', value: 'false' });
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where?.key === 'registration_open') {
+          return Promise.resolve({ key: 'registration_open', value: 'false' });
+        }
+        return Promise.resolve(null);
+      });
       await expect(service.createOrder(validDto)).rejects.toThrow(BadRequestException);
     });
 

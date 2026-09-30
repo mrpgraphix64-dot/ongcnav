@@ -17,6 +17,7 @@ import {
   ToggleFullPowerDto,
   ToggleMaintenanceModeDto,
   UpdatePaymentSettingsDto,
+  UpdateBookPassSettingsDto,
 } from './dto/update-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -76,6 +77,23 @@ export class SettingsController {
   async updatePaymentSettings(@Body() dto: UpdatePaymentSettingsDto, @Req() req: Request) {
     const user = (req as any).user;
     return this.settingsService.updatePaymentSettings(dto.enabled, user);
+  }
+
+  @Get('book-pass')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get Book Pass availability configuration' })
+  async getBookPassSettings(@Req() req: Request) {
+    const user = (req as any).user;
+    return this.settingsService.getBookPassSettings(user?.role);
+  }
+
+  @Post('book-pass')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update Book Pass availability setting (OPEN or COMING_SOON)' })
+  async updateBookPassSettings(@Body() dto: UpdateBookPassSettingsDto, @Req() req: Request) {
+    const user = (req as any).user;
+    const target = dto.enabled !== undefined ? dto.enabled : dto.availability || 'OPEN';
+    return this.settingsService.updateBookPassSettings(target, user);
   }
 
   @Post('reset-data')

@@ -47,3 +47,23 @@ export class UpdatePaymentSettingsDto {
   @IsBoolean()
   enabled!: boolean;
 }
+
+export class UpdateBookPassSettingsDto {
+  @ApiProperty({
+    description: 'Book Pass availability state (OPEN or COMING_SOON)',
+    example: 'OPEN',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  availability?: string;
+
+  @ApiProperty({
+    description: 'Whether Book Pass is enabled (true = OPEN, false = COMING_SOON)',
+    example: true,
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean;
+}

@@ -24,12 +24,13 @@ import {
   ShieldAlert,
   Wrench,
   CreditCard,
+  Ticket,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 import { subscribeToSuperAdminSync, broadcastSuperAdminSync } from '@/lib/super-admin-state';
 
-type TabType = 'general' | 'event' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger' | 'payment';
+type TabType = 'general' | 'event' | 'bookpass' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger' | 'payment';
 
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
@@ -38,6 +39,7 @@ export default function AdminSettingsPage() {
         const params = new URLSearchParams(window.location.search);
         const tabParam = params.get('tab');
         if (tabParam === 'payment') return 'payment';
+        if (tabParam === 'bookpass') return 'bookpass';
       } catch {}
     }
     return 'general';
@@ -53,6 +55,8 @@ export default function AdminSettingsPage() {
     () => getStoredAuthUser() as any,
   );
   const isSuperAdmin = (currentUser?.role || '').toUpperCase() === 'SUPER_ADMIN';
+  const isEventAdmin = (currentUser?.role || '').toUpperCase() === 'EVENT_ADMIN' || (currentUser?.role || '').toUpperCase() === 'ADMIN';
+  const canManageBookPass = isSuperAdmin || isEventAdmin;
 
   // Super Admin Control Center state
   const [superAdminData, setSuperAdminData] = useState<{
@@ -212,6 +216,127 @@ export default function AdminSettingsPage() {
     }
   };
 
+  // Book Pass Availability state
+  const [serverBookPassSettings, setServerBookPassSettings] = useState<{
+    enabled: boolean;
+    availability: string;
+    updatedAt?: string | null;
+  } | null>(null);
+  const [bookPassDraftEnabled, setBookPassDraftEnabled] = useState<boolean>(true);
+  const [loadingBookPass, setLoadingBookPass] = useState<boolean>(false);
+  const [savingBookPass, setSavingBookPass] = useState<boolean>(false);
+
+  const serverBookPassSettingsRef = useRef<{
+    enabled: boolean;
+    availability: string;
+    updatedAt?: string | null;
+  } | null>(null);
+  const bookPassDraftRef = useRef<boolean>(true);
+  const bookPassInitializedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    serverBookPassSettingsRef.current = serverBookPassSettings;
+  }, [serverBookPassSettings]);
+
+  useEffect(() => {
+    bookPassDraftRef.current = bookPassDraftEnabled;
+  }, [bookPassDraftEnabled]);
+
+  const loadBookPassSettings = async (forceDraftSync = false) => {
+    try {
+      setLoadingBookPass(true);
+      const res = await fetchApi<any>('/admin/settings/book-pass');
+      if (res) {
+        const isEn = typeof res.enabled === 'boolean' ? res.enabled : res.availability === 'OPEN';
+        const newServerSettings = {
+          enabled: isEn,
+          availability: isEn ? 'OPEN' : 'COMING_SOON',
+          updatedAt: res.updatedAt || null,
+        };
+
+        const wasUninitialized = !bookPassInitializedRef.current;
+        const isDraftClean =
+          serverBookPassSettingsRef.current === null ||
+          bookPassDraftRef.current === serverBookPassSettingsRef.current.enabled;
+
+        setServerBookPassSettings(newServerSettings);
+        serverBookPassSettingsRef.current = newServerSettings;
+
+        if (forceDraftSync || wasUninitialized || isDraftClean) {
+          setBookPassDraftEnabled(isEn);
+          bookPassDraftRef.current = isEn;
+        }
+        bookPassInitializedRef.current = true;
+      }
+    } catch {
+      setServerBookPassSettings(null);
+      serverBookPassSettingsRef.current = null;
+    } finally {
+      setLoadingBookPass(false);
+    }
+  };
+
+  const handleResetBookPassDraft = () => {
+    if (serverBookPassSettingsRef.current) {
+      const resetVal = serverBookPassSettingsRef.current.enabled;
+      setBookPassDraftEnabled(resetVal);
+      bookPassDraftRef.current = resetVal;
+    }
+  };
+
+  const handleSaveBookPassSettings = async () => {
+    if (savingBookPass) return;
+    try {
+      setSavingBookPass(true);
+      setMsg(null);
+      const targetEnabled = bookPassDraftRef.current;
+      const res = await fetchApi<any>('/admin/settings/book-pass', {
+        method: 'POST',
+        body: JSON.stringify({
+          enabled: targetEnabled,
+          availability: targetEnabled ? 'OPEN' : 'COMING_SOON',
+        }),
+      });
+
+      const finalEnabled = typeof res?.enabled === 'boolean' ? res.enabled : targetEnabled;
+      const finalAvailability = finalEnabled ? 'OPEN' : 'COMING_SOON';
+
+      setServerBookPassSettings({
+        enabled: finalEnabled,
+        availability: finalAvailability,
+        updatedAt: res?.updatedAt || new Date().toISOString(),
+      });
+      serverBookPassSettingsRef.current = {
+        enabled: finalEnabled,
+        availability: finalAvailability,
+        updatedAt: res?.updatedAt || new Date().toISOString(),
+      };
+      setBookPassDraftEnabled(finalEnabled);
+      bookPassDraftRef.current = finalEnabled;
+
+      setMsg({
+        text:
+          res?.message ||
+          (finalEnabled
+            ? 'Book Pass availability updated to OPEN. Customers can book passes.'
+            : 'Book Pass availability updated to COMING SOON. Customers see the Coming Soon page.'),
+        type: 'success',
+      });
+    } catch (err: any) {
+      if (serverBookPassSettingsRef.current) {
+        const revertVal = serverBookPassSettingsRef.current.enabled;
+        setBookPassDraftEnabled(revertVal);
+        bookPassDraftRef.current = revertVal;
+      }
+      setMsg({
+        text: err?.message || 'Failed to save Book Pass availability.',
+        type: 'error',
+      });
+    } finally {
+      setSavingBookPass(false);
+    }
+  };
+
   const loadSuperAdminSettings = async () => {
     try {
       const res = await fetchApi<any>('/admin/settings/super-admin');
@@ -294,6 +419,11 @@ export default function AdminSettingsPage() {
           setActiveTab('payment');
           if (!paymentInitializedRef.current) {
             loadPaymentSettings(true);
+          }
+        } else if (tabParam === 'bookpass') {
+          setActiveTab('bookpass');
+          if (!bookPassInitializedRef.current) {
+            loadBookPassSettings(true);
           }
         }
       } catch {}
@@ -409,6 +539,9 @@ export default function AdminSettingsPage() {
         {[
           { id: 'general', label: 'General', icon: Building },
           { id: 'event', label: 'Event Dates', icon: Calendar },
+          ...(canManageBookPass
+            ? [{ id: 'bookpass', label: 'Book Pass Availability', icon: Ticket }]
+            : []),
           { id: 'qr', label: 'QR Pass', icon: QrCode },
           { id: 'scanner', label: 'Scanner', icon: ScanLine },
           { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -429,6 +562,8 @@ export default function AdminSettingsPage() {
                 setActiveTab(newTab);
                 if (newTab === 'payment') {
                   loadPaymentSettings(!paymentInitializedRef.current);
+                } else if (newTab === 'bookpass') {
+                  loadBookPassSettings(!bookPassInitializedRef.current);
                 }
               }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
@@ -1342,6 +1477,145 @@ export default function AdminSettingsPage() {
                 >
                   <Save className="w-4 h-4 text-gold" />
                   <span>{savingPayment ? 'Saving Settings...' : 'Save Settings'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 10. Book Pass Availability Settings */}
+        {activeTab === 'bookpass' && canManageBookPass && (
+          <div className="space-y-6 max-w-2xl">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+              <div>
+                <h3 className="font-outfit font-extrabold text-xl text-ink">BOOK PASS AVAILABILITY</h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Control whether customers can currently access the public ticket booking page.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-gold/15 text-gold-dark text-[11px] font-black uppercase tracking-wider border border-gold/30">
+                EVENT CONTROL
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-stone-200 bg-cream-soft p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-outfit font-bold text-sm text-ink uppercase tracking-wide">
+                    Book Pass Availability
+                  </h4>
+                  <div className="h-0.5 w-12 bg-maroon rounded-full mt-1.5" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-stone-400 uppercase">Live Server State:</span>
+                  <span
+                    data-testid="server-bookpass-status"
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      serverBookPassSettings?.enabled
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}
+                  >
+                    {serverBookPassSettings?.enabled ? 'Active (OPEN)' : 'Coming Soon (CLOSED)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Status Toggle OPEN / COMING_SOON */}
+              <div className="flex items-center justify-between py-3 border-b border-stone-200/80">
+                <div>
+                  <div className="text-xs font-bold text-ink">Public Booking Status</div>
+                  <div className="text-[11px] text-stone-500 mt-0.5">
+                    {bookPassDraftEnabled
+                      ? 'Customers can book passes'
+                      : "Show 'Tickets Coming Soon' page"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-stone-200/80 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    data-testid="bookpass-toggle-open"
+                    disabled={savingBookPass || loadingBookPass}
+                    onClick={() => {
+                      if (!savingBookPass && !loadingBookPass) {
+                        setBookPassDraftEnabled(true);
+                        bookPassDraftRef.current = true;
+                      }
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      bookPassDraftEnabled
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-stone-600 hover:text-ink'
+                    }`}
+                  >
+                    OPEN
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="bookpass-toggle-coming-soon"
+                    disabled={savingBookPass || loadingBookPass}
+                    onClick={() => {
+                      if (!savingBookPass && !loadingBookPass) {
+                        setBookPassDraftEnabled(false);
+                        bookPassDraftRef.current = false;
+                      }
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      !bookPassDraftEnabled
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-stone-600 hover:text-ink'
+                    }`}
+                  >
+                    COMING SOON
+                  </button>
+                </div>
+              </div>
+
+              {/* Unsaved changes banner */}
+              {serverBookPassSettings && bookPassDraftEnabled !== serverBookPassSettings.enabled && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between">
+                  <span>
+                    Unsaved change: Book Pass will be switched to{' '}
+                    <strong>{bookPassDraftEnabled ? 'OPEN' : 'COMING SOON'}</strong>. Click &ldquo;Save Settings&rdquo; to apply.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={savingBookPass || loadingBookPass}
+                    onClick={handleResetBookPassDraft}
+                    className="text-[11px] text-amber-700 underline font-bold ml-2 cursor-pointer disabled:opacity-50"
+                  >
+                    Reset
+                  </button>
+                </div>
+              )}
+
+              {/* Informational Summary Box */}
+              <div className="p-4 rounded-xl bg-white border border-stone-200/80 text-xs text-stone-600 space-y-2">
+                <div className="font-bold text-stone-800 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-maroon shrink-0" />
+                  <span>Operation Safeguards</span>
+                </div>
+                <p className="leading-relaxed">
+                  {bookPassDraftEnabled
+                    ? 'When OPEN, public customers can access /bookpass, browse passes, select festival dates, and make online payments.'
+                    : "When COMING SOON, public customers visiting /bookpass are shown the 'Tickets Coming Soon' screen. New order creation is blocked at both client and API levels."}
+                </p>
+                <p className="text-[11px] text-stone-500 italic">
+                  Note: Existing paid orders, issued E-Passes, turnstile check-ins, and agent offline bookings remain 100% operational regardless of this setting.
+                </p>
+              </div>
+
+              {/* Save Settings Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  data-testid="save-bookpass-settings"
+                  onClick={handleSaveBookPassSettings}
+                  disabled={savingBookPass || loadingBookPass || !serverBookPassSettings}
+                  className="px-6 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4 text-gold" />
+                  <span>{savingBookPass ? 'Saving Settings...' : 'Save Settings'}</span>
                 </button>
               </div>
             </div>

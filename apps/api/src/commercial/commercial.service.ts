@@ -37,7 +37,9 @@ import {
   RegistrationType,
   UserRole,
   SETTING_SUPER_ADMIN_FULL_POWER,
+  SETTING_BOOK_PASS_AVAILABILITY,
   isSuperAdminFullPowerActive,
+  isBookPassOpen,
   AUDIT_FULL_POWER_ORDER_DELETED,
   AUDIT_FULL_POWER_ORDERS_BULK_DELETED,
 } from '@ongc/shared-types';
@@ -203,13 +205,21 @@ export class CommercialService {
   }
 
   async getConfig() {
-    const regSetting = await this.prisma.setting.findUnique({
-      where: { key: 'registration_open' },
-    });
+    const [regSetting, bookPassSetting] = await Promise.all([
+      this.prisma.setting.findUnique({
+        where: { key: 'registration_open' },
+      }),
+      this.prisma.setting.findUnique({
+        where: { key: SETTING_BOOK_PASS_AVAILABILITY },
+      }),
+    ]);
     const isOpen = !regSetting || regSetting.value !== 'false';
+    const isBookPassAvailable = isBookPassOpen(bookPassSetting?.value);
 
     return {
       registrationOpen: isOpen,
+      bookPassOpen: isBookPassAvailable,
+      bookPassAvailability: isBookPassAvailable ? 'OPEN' : 'COMING_SOON',
       dates: COMMERCIAL_EVENT_DATES,
       ticketTypes: Object.values(COMMERCIAL_TICKET_TYPES).map((t) => ({
         code: t.code,
@@ -247,6 +257,20 @@ export class CommercialService {
   }
 
   async createOrder(dto: CreateCommercialOrderDto, clientIp?: string) {
+    // 0. Check Book Pass availability status
+    const bookPassSetting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_BOOK_PASS_AVAILABILITY },
+    });
+    if (!isBookPassOpen(bookPassSetting?.value)) {
+      throw new HttpException(
+        {
+          code: 'BOOK_PASS_CLOSED',
+          message: 'Book Pass tickets are currently unavailable. Please stay tuned for ticket updates.',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     // 1. Check system registration status
     const regSetting = await this.prisma.setting.findUnique({
       where: { key: 'registration_open' },

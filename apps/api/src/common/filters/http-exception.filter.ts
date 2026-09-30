@@ -37,6 +37,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message;
     }
 
+    const code =
+      typeof exceptionResponse === 'object' && exceptionResponse !== null
+        ? (exceptionResponse as any).code
+        : undefined;
+
     if (status >= 500) {
       this.logger.error(
         `[${request.method}] ${request.url} - Error: ${message}`,
@@ -47,6 +52,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(status).json({
       success: false,
       statusCode: status,
+      ...(code ? { code } : {}),
       message,
       errorReason,
       timestamp: new Date().toISOString(),
