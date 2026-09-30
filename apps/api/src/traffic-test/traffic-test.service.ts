@@ -15,8 +15,10 @@ import {
   CheckinResult,
   UserRole,
   isOfficialEventDate,
+  AttendeeStatus,
+  RegistrationType,
+  GateType,
 } from '@ongc/shared-types';
-import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -237,67 +239,42 @@ export class TrafficTestService {
       ? totalScanners * totalCycles
       : dto.simulatedUsers;
 
-    let tokens: string[] = [];
-
-    // Query active attendees and evaluate their booking dates with resolveBookingDays
-    const activeCandidates = await this.prisma.attendee.findMany({
-      where: { status: 'ACTIVE' },
-      take: Math.max(totalRequiredTokens * 2, 500),
-      select: {
-        qrCodeToken: true,
-        category: true,
-        bookingDays: true,
-        employee: {
-          select: { bookingDays: true },
-        },
-      },
-    });
-
-    if (dto.scenario === LoadTestScenario.NOT_BOOKED) {
-      // Find active attendees NOT booked for effectiveTestDate
-      const notBooked = activeCandidates.filter((a) => {
-        const cat = a.category || '';
-        const isSeason = ['Season Pass', 'Any Day Pass', 'COMMERCIAL_SEASON', 'COMMERCIAL_ANY_DAY'].includes(cat);
-        if (isSeason) return false;
-        const days = resolveBookingDays(a);
-        return days.length > 0 && !days.includes(effectiveTestDate);
+    // Inspect target gate to determine if VIP gate privileges are needed
+    let isVipGate = false;
+    try {
+      const gate = await this.prisma.gate.findUnique({
+        where: { id: BigInt(dto.gateId) },
+        select: { gateType: true },
       });
-      tokens = notBooked.map((a) => a.qrCodeToken).slice(0, totalRequiredTokens);
-
-      // Fallback: if not enough in DB, add other active attendees
-      if (tokens.length < totalRequiredTokens) {
-        for (const a of activeCandidates) {
-          if (tokens.length >= totalRequiredTokens) break;
-          if (!tokens.includes(a.qrCodeToken)) {
-            tokens.push(a.qrCodeToken);
-          }
-        }
-      }
-    } else {
-      // For NORMAL, DUPLICATE, PEAK_BURST, MIXED (valid portion):
-      // Prefer attendees valid for effectiveTestDate
-      const valid = activeCandidates.filter((a) => {
-        const cat = a.category || '';
-        const isSeason = ['Season Pass', 'Any Day Pass', 'COMMERCIAL_SEASON', 'COMMERCIAL_ANY_DAY'].includes(cat);
-        if (isSeason) return true;
-        const days = resolveBookingDays(a);
-        return days.length === 0 || days.includes(effectiveTestDate);
-      });
-      tokens = valid.map((a) => a.qrCodeToken).slice(0, totalRequiredTokens);
-
-      if (tokens.length < totalRequiredTokens) {
-        for (const a of activeCandidates) {
-          if (tokens.length >= totalRequiredTokens) break;
-          if (!tokens.includes(a.qrCodeToken)) {
-            tokens.push(a.qrCodeToken);
-          }
-        }
-      }
+      isVipGate = gate?.gateType === GateType.VIP;
+    } catch {
+      // Fallback if gateId cannot be parsed or queried
     }
 
-    // If still not enough attendees in DB, generate dummy tokens
-    while (tokens.length < totalRequiredTokens) {
-      tokens.push(crypto.randomBytes(32).toString('hex'));
+    let tokens: string[] = [];
+
+    if (dto.scenario === LoadTestScenario.INVALID_QR) {
+      // INVALID_QR scenario tests rejected requests for tokens that do not exist in the database.
+      // No synthetic attendees needed.
+      tokens = [];
+    } else if (dto.scenario === LoadTestScenario.NOT_BOOKED) {
+      // NOT_BOOKED scenario tests valid database attendees booked for an event date OTHER than effectiveTestDate
+      const unbookedDate = effectiveTestDate === '2026-10-11' ? '2026-10-12' : '2026-10-11';
+      tokens = await this.createSyntheticAttendeesForRun(
+        runId,
+        totalRequiredTokens,
+        unbookedDate,
+        isVipGate,
+      );
+    } else {
+      // NORMAL, DUPLICATE, PEAK_BURST, MIXED:
+      // Real database-backed synthetic attendees booked specifically for effectiveTestDate with 0 prior check-ins
+      tokens = await this.createSyntheticAttendeesForRun(
+        runId,
+        totalRequiredTokens,
+        effectiveTestDate,
+        isVipGate,
+      );
     }
 
     let successCount = 0;
@@ -588,6 +565,56 @@ export class TrafficTestService {
     return rows.join('\r\n');
   }
 
+  private async createSyntheticAttendeesForRun(
+    runId: bigint,
+    count: number,
+    bookingDate: string,
+    isVipGate = false,
+  ): Promise<string[]> {
+    if (count <= 0) return [];
+
+    const category = isVipGate ? 'LOAD_TEST_VIP' : 'LOAD_TEST';
+    const attendeesData: Array<{
+      ticketNumber: string;
+      qrCodeToken: string;
+      name: string;
+      mobile: string;
+      email: string;
+      category: string;
+      status: any;
+      registrationType: any;
+      bookingDays: string[];
+    }> = [];
+    const tokens: string[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const token = `LOADTEST-R${runId}-${i + 1}-${crypto.randomBytes(6).toString('hex')}`;
+      tokens.push(token);
+      attendeesData.push({
+        ticketNumber: `TK-LT-R${runId}-${i + 1}`,
+        qrCodeToken: token,
+        name: `[LOAD_TEST] Run #${runId} Attendee ${i + 1}`,
+        mobile: '9999999999',
+        email: `loadtest-r${runId}-${i + 1}@example.com`,
+        category,
+        status: AttendeeStatus.ACTIVE as any,
+        registrationType: RegistrationType.FREE as any,
+        bookingDays: [bookingDate],
+      });
+    }
+
+    const chunkSize = 250;
+    for (let i = 0; i < attendeesData.length; i += chunkSize) {
+      const chunk = attendeesData.slice(i, i + chunkSize);
+      await this.prisma.attendee.createMany({
+        data: chunk,
+      });
+    }
+
+    this.logger.log(`Created ${tokens.length} synthetic attendees in DB for Load Test Run #${runId} (${category})`);
+    return tokens;
+  }
+
   async cleanupRun(runId: bigint) {
     this.activeRuns.delete(runId.toString());
 
@@ -595,6 +622,13 @@ export class TrafficTestService {
       this.prisma.loadTestRequest.deleteMany({ where: { runId } }),
       this.prisma.scanLog.deleteMany({ where: { loadTestRunId: runId } }),
       this.prisma.dailyCheckin.deleteMany({ where: { loadTestRunId: runId } }),
+      this.prisma.attendee.deleteMany({
+        where: {
+          qrCodeToken: {
+            startsWith: `LOADTEST-R${runId}-`,
+          },
+        },
+      }),
       this.prisma.loadTestRun.delete({ where: { id: runId } }),
     ]);
 

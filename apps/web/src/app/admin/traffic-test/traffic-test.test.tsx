@@ -22,6 +22,7 @@ import {
   calculateTotalScanners,
   calculateExpectedScanRate,
   calculateEstimatedCycles,
+  calculateBaseScanActions,
   calculateEstimatedRequests,
 } from './traffic-test.constants';
 import { LoadTestMode, LoadTestScenario, LoadTestStatus } from '@ongc/shared-types';
@@ -467,7 +468,8 @@ describe('AdminTrafficTestPage', () => {
         expect(html).toContain('Total Scanners: 6');
         expect(html).toContain('Parallel Scanners: 6');
         expect(html).toContain('Expected Traffic: ~3 scans/sec');
-        expect(html).toContain('Estimated Requests: ~90');
+        expect(html).toContain('Base Scan Actions: ~90');
+        expect(html).toContain('Estimated HTTP Requests: ~90');
       });
 
       it('ensures no manual simulated-user slider or manual concurrency input is rendered', () => {
@@ -483,21 +485,25 @@ describe('AdminTrafficTestPage', () => {
       it('proves concurrency automatically equals totalScanners and sets payload correctly with scanIntervalSeconds and durationSeconds without rampUpSeconds pacing', () => {
         // Test calculation logic used when building the start-test payload
         const testCases = [
-          { gates: 1, scanners: 1, interval: 1, duration: 10, expectedTotal: 1, expectedRate: '~1 scans/sec', expectedCycles: 10, expectedReqs: 10 },
-          { gates: 3, scanners: 2, interval: 2, duration: 10, expectedTotal: 6, expectedRate: '~3 scans/sec', expectedCycles: 5, expectedReqs: 30 },
-          { gates: 3, scanners: 2, interval: 2, duration: 30, expectedTotal: 6, expectedRate: '~3 scans/sec', expectedCycles: 15, expectedReqs: 90 },
-          { gates: 3, scanners: 6, interval: 2, duration: 30, expectedTotal: 18, expectedRate: '~9 scans/sec', expectedCycles: 15, expectedReqs: 270 },
+          { scenario: 'NORMAL', gates: 1, scanners: 1, interval: 1, duration: 10, expectedTotal: 1, expectedRate: '~1 scans/sec', expectedCycles: 10, expectedBase: 10, expectedReqs: 10 },
+          { scenario: 'NORMAL', gates: 3, scanners: 2, interval: 2, duration: 10, expectedTotal: 6, expectedRate: '~3 scans/sec', expectedCycles: 5, expectedBase: 30, expectedReqs: 30 },
+          { scenario: 'NORMAL', gates: 3, scanners: 2, interval: 2, duration: 30, expectedTotal: 6, expectedRate: '~3 scans/sec', expectedCycles: 15, expectedBase: 90, expectedReqs: 90 },
+          { scenario: 'DUPLICATE', gates: 3, scanners: 2, interval: 2, duration: 30, expectedTotal: 6, expectedRate: '~3 scans/sec', expectedCycles: 15, expectedBase: 90, expectedReqs: 180 },
+          { scenario: 'MIXED', gates: 1, scanners: 2, interval: 4, duration: 50, expectedTotal: 2, expectedRate: '~0.5 scans/sec', expectedCycles: 12, expectedBase: 24, expectedReqs: 29 },
+          { scenario: 'NORMAL', gates: 3, scanners: 6, interval: 2, duration: 30, expectedTotal: 18, expectedRate: '~9 scans/sec', expectedCycles: 15, expectedBase: 270, expectedReqs: 270 },
         ];
 
         for (const tc of testCases) {
           const total = calculateTotalScanners(tc.gates, tc.scanners);
           const rate = calculateExpectedScanRate(total, tc.interval);
           const cycles = calculateEstimatedCycles(tc.duration, tc.interval);
-          const reqs = calculateEstimatedRequests(total, tc.duration, tc.interval);
+          const base = calculateBaseScanActions(total, tc.duration, tc.interval);
+          const reqs = calculateEstimatedRequests(tc.scenario, total, tc.duration, tc.interval);
 
           expect(total).toBe(tc.expectedTotal);
           expect(rate).toBe(tc.expectedRate);
           expect(cycles).toBe(tc.expectedCycles);
+          expect(base).toBe(tc.expectedBase);
           expect(reqs).toBe(tc.expectedReqs);
 
           // In payload construction:

@@ -39,6 +39,7 @@ import {
   DEFAULT_DURATION_SECONDS,
   calculateTotalScanners,
   calculateExpectedScanRate,
+  calculateBaseScanActions,
   calculateEstimatedRequests,
   buildInitialRunTelemetry,
 } from './traffic-test.constants';
@@ -64,7 +65,8 @@ export default function AdminTrafficTestPage() {
 
   const totalScanners = calculateTotalScanners(numberOfGates, scannersPerGate);
   const expectedTraffic = calculateExpectedScanRate(totalScanners, scanInterval);
-  const estimatedRequests = calculateEstimatedRequests(totalScanners, durationSeconds, scanInterval);
+  const baseScanActions = calculateBaseScanActions(totalScanners, durationSeconds, scanInterval);
+  const estimatedRequests = calculateEstimatedRequests(scenario, totalScanners, durationSeconds, scanInterval);
 
   const selectedRunRef = useRef<any | null>(selectedRun);
   useEffect(() => {
@@ -575,8 +577,12 @@ export default function AdminTrafficTestPage() {
                 <span className="text-slate-400 text-[11px] font-medium">Expected Traffic:</span>
                 <span className="text-blue-400 font-mono font-bold">{expectedTraffic}</span>
               </div>
-              <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center gap-2" aria-label={`Estimated Requests: ~${estimatedRequests}`}>
-                <span className="text-slate-400 text-[11px] font-medium">Estimated Requests:</span>
+              <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center gap-2" aria-label={`Base Scan Actions: ~${baseScanActions}`}>
+                <span className="text-slate-400 text-[11px] font-medium">Base Scan Actions:</span>
+                <span className="text-cyan-400 font-mono font-bold">~{baseScanActions}</span>
+              </div>
+              <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center gap-2" aria-label={`Estimated HTTP Requests: ~${estimatedRequests}`}>
+                <span className="text-slate-400 text-[11px] font-medium">Estimated HTTP Requests:</span>
                 <span className="text-purple-400 font-mono font-bold">~{estimatedRequests}</span>
               </div>
             </div>

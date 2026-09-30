@@ -64,6 +64,11 @@ describe('TrafficTestService', () => {
       },
       attendee: {
         findMany: jest.fn().mockResolvedValue([{ qrCodeToken: 'ATT_TOKEN_1' }]),
+        createMany: jest.fn().mockResolvedValue({ count: 30 }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 30 }),
+      },
+      gate: {
+        findUnique: jest.fn().mockResolvedValue({ id: BigInt(1), gateType: 'REGULAR', isOpen: true }),
       },
       $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
     };
@@ -302,6 +307,149 @@ describe('TrafficTestService', () => {
         expect(checkinService.processCheckin).toHaveBeenCalledTimes(12);
 
         sleepSpy.mockRestore();
+      });
+    });
+
+    describe('Synthetic Attendee Pool & Run Isolation', () => {
+      it('creates dedicated synthetic attendees in PostgreSQL for NORMAL scenario with correct run ID prefixes', async () => {
+        const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+
+        // 6 scanners, 2s interval, 10s duration = 5 cycles -> 30 tokens required
+        await service.startTest(
+          {
+            scenario: LoadTestScenario.NORMAL,
+            mode: LoadTestMode.DRY_RUN,
+            simulatedUsers: 6,
+            concurrency: 6,
+            scanIntervalSeconds: 2,
+            durationSeconds: 10,
+            testDate: '2026-10-11',
+            gateId: '1',
+          } as any,
+          BigInt(1),
+        );
+
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(prisma.attendee.createMany).toHaveBeenCalledTimes(1);
+        const createCall = prisma.attendee.createMany.mock.calls[0][0];
+        expect(createCall.data).toHaveLength(30);
+
+        const firstAttendee = createCall.data[0];
+        expect(firstAttendee.ticketNumber).toBe('TK-LT-R2-1');
+        expect(firstAttendee.qrCodeToken).toMatch(/^LOADTEST-R2-1-[a-f0-9]{12}$/);
+        expect(firstAttendee.category).toBe('LOAD_TEST');
+        expect(firstAttendee.status).toBe('ACTIVE');
+        expect(firstAttendee.registrationType).toBe('FREE');
+        expect(firstAttendee.bookingDays).toEqual(['2026-10-11']);
+
+        // Check that check-in calls received the generated tokens
+        expect(checkinService.processCheckin).toHaveBeenCalledTimes(30);
+        const firstCheckinCall = checkinService.processCheckin.mock.calls[0][0];
+        expect(firstCheckinCall.token).toBe(firstAttendee.qrCodeToken);
+        expect(firstCheckinCall.isLoadTest).toBe(true);
+        expect(firstCheckinCall.loadTestRunId).toBe('2');
+
+        sleepSpy.mockRestore();
+      });
+
+      it('creates synthetic attendees booked for a different event date for NOT_BOOKED scenario', async () => {
+        const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+
+        await service.startTest(
+          {
+            scenario: LoadTestScenario.NOT_BOOKED,
+            mode: LoadTestMode.DRY_RUN,
+            simulatedUsers: 2,
+            concurrency: 2,
+            scanIntervalSeconds: 2,
+            durationSeconds: 6,
+            testDate: '2026-10-11',
+            gateId: '1',
+          } as any,
+          BigInt(1),
+        );
+
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(prisma.attendee.createMany).toHaveBeenCalledTimes(1);
+        const createCall = prisma.attendee.createMany.mock.calls[0][0];
+        // 2 scanners × 3 cycles = 6 attendees
+        expect(createCall.data).toHaveLength(6);
+        // Booking days must not include the tested date (2026-10-11)
+        expect(createCall.data[0].bookingDays).not.toContain('2026-10-11');
+        expect(createCall.data[0].bookingDays).toEqual(['2026-10-12']);
+
+        sleepSpy.mockRestore();
+      });
+
+      it('skips attendee creation entirely for INVALID_QR scenario', async () => {
+        const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+
+        await service.startTest(
+          {
+            scenario: LoadTestScenario.INVALID_QR,
+            mode: LoadTestMode.DRY_RUN,
+            simulatedUsers: 2,
+            concurrency: 2,
+            scanIntervalSeconds: 2,
+            durationSeconds: 6,
+            testDate: '2026-10-11',
+            gateId: '1',
+          } as any,
+          BigInt(1),
+        );
+
+        await new Promise((resolve) => setImmediate(resolve));
+
+        // No DB attendees should be created for INVALID_QR
+        expect(prisma.attendee.createMany).not.toHaveBeenCalled();
+
+        // 2 scanners × 3 cycles = 6 scans
+        expect(checkinService.processCheckin).toHaveBeenCalledTimes(6);
+        const checkinCall = checkinService.processCheckin.mock.calls[0][0];
+        expect(checkinCall.token).toMatch(/^INVALID_TOKEN_/);
+
+        sleepSpy.mockRestore();
+      });
+
+      it('never deletes historical daily check-ins or real attendees during test execution', async () => {
+        const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+
+        await service.startTest(
+          {
+            scenario: LoadTestScenario.NORMAL,
+            mode: LoadTestMode.DRY_RUN,
+            simulatedUsers: 2,
+            concurrency: 2,
+            scanIntervalSeconds: 2,
+            durationSeconds: 6,
+            testDate: '2026-10-11',
+            gateId: '1',
+          } as any,
+          BigInt(1),
+        );
+
+        await new Promise((resolve) => setImmediate(resolve));
+
+        // DailyCheckin records and Attendee records must not be deleted at start
+        expect(prisma.dailyCheckin.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.attendee.deleteMany).not.toHaveBeenCalled();
+
+        sleepSpy.mockRestore();
+      });
+
+      it('purges run-specific synthetic attendees when cleanupRun is called', async () => {
+        const result = await service.cleanupRun(BigInt(99));
+        expect(result.success).toBe(true);
+
+        expect(prisma.attendee.deleteMany).toHaveBeenCalledWith({
+          where: {
+            qrCodeToken: {
+              startsWith: 'LOADTEST-R99-',
+            },
+          },
+        });
       });
     });
   });

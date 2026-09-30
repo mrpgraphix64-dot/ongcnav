@@ -28,9 +28,44 @@ export function calculateEstimatedCycles(durationSeconds: number, scanIntervalSe
   return Math.floor(safeDuration / safeInterval);
 }
 
-export function calculateEstimatedRequests(totalScanners: number, durationSeconds: number, scanIntervalSeconds: number): number {
+export function calculateBaseScanActions(totalScanners: number, durationSeconds: number, scanIntervalSeconds: number): number {
   const cycles = calculateEstimatedCycles(durationSeconds, scanIntervalSeconds);
   return totalScanners * cycles;
+}
+
+export function calculateEstimatedRequests(
+  arg1: string | number,
+  arg2: number,
+  arg3: number,
+  arg4?: number,
+): number {
+  let scenario = 'NORMAL';
+  let totalScanners: number;
+  let durationSeconds: number;
+  let scanIntervalSeconds: number;
+
+  if (typeof arg1 === 'string') {
+    scenario = arg1;
+    totalScanners = arg2;
+    durationSeconds = arg3;
+    scanIntervalSeconds = arg4 ?? DEFAULT_SCAN_INTERVAL;
+  } else {
+    totalScanners = arg1;
+    durationSeconds = arg2;
+    scanIntervalSeconds = arg3;
+  }
+
+  const baseActions = calculateBaseScanActions(totalScanners, durationSeconds, scanIntervalSeconds);
+
+  if (scenario === 'DUPLICATE') {
+    return baseActions * 2;
+  }
+  if (scenario === 'MIXED') {
+    // 70% normal (1 req), 20% duplicate (2 reqs), 10% invalid (1 req) -> 0.7*1 + 0.2*2 + 0.1*1 = 1.2 reqs/action
+    return Math.round(baseActions * 1.2);
+  }
+
+  return baseActions;
 }
 
 export function calculateTotalScanners(numberOfGates: number, scannersPerGate: number): number {
