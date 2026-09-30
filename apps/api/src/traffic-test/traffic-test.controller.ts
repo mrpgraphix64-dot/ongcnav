@@ -58,6 +58,15 @@ export class TrafficTestController {
     return this.trafficTestService.getRunStatus(BigInt(id));
   }
 
+  @Get('vps-status')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get live VPS system resources and service statuses' })
+  async getVpsStatus() {
+    return this.trafficTestService.getVpsStatus();
+  }
+
   @Post('start')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)

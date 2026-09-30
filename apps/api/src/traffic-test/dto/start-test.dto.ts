@@ -11,10 +11,10 @@ export class StartLoadTestDto {
   @IsEnum(LoadTestMode)
   mode: LoadTestMode;
 
-  @ApiProperty({ example: 100, description: 'Number of simulated users (1 - 1000)' })
+  @ApiProperty({ example: 100, description: 'Number of simulated users (1 - 500)' })
   @IsInt()
   @Min(1)
-  @Max(1000)
+  @Max(500)
   simulatedUsers: number;
 
   @ApiPropertyOptional({ example: 10, description: 'Ramp-up duration in seconds' })

@@ -18,6 +18,7 @@ describe('TrafficTestController', () => {
       stopRun: jest.fn().mockResolvedValue({ success: true, message: 'Load test run 1 stopped.' }),
       exportCsv: jest.fn().mockResolvedValue('Run ID,Timestamp,Token,Gate ID,Result,Response Time (ms)\r\n"1","2026-09-24T00:00:00.000Z","TOKEN","1","SUCCESS","10"'),
       cleanupRun: jest.fn().mockResolvedValue({ success: true, message: 'Load test run 1 and all associated data purged' }),
+      getVpsStatus: jest.fn().mockResolvedValue({ cpu: { usagePercent: 15, cores: 4 } }),
     };
 
     checkinService = {
@@ -89,6 +90,13 @@ describe('TrafficTestController', () => {
     const result = await controller.cleanupRun('1');
     expect(result.success).toBe(true);
     expect(service.cleanupRun).toHaveBeenCalledWith(BigInt(1));
+  });
+
+  it('should return vps status', async () => {
+    const status = await controller.getVpsStatus();
+    expect(status).toBeDefined();
+    expect(status.cpu.usagePercent).toBe(15);
+    expect(service.getVpsStatus).toHaveBeenCalled();
   });
 
   describe('executeCheckin internal auth', () => {

@@ -69,7 +69,7 @@ describe('StartLoadTestDto', () => {
     expect(modeError?.constraints?.isEnum).toContain('DRY_RUN, REAL_HTTP');
   });
 
-  it('should validate simulated users bounds (1 to 1000)', async () => {
+  it('should validate simulated users bounds (1 to 500)', async () => {
     const invalidDto = plainToInstance(StartLoadTestDto, {
       scenario: LoadTestScenario.NORMAL,
       mode: LoadTestMode.REAL_HTTP,
@@ -79,10 +79,19 @@ describe('StartLoadTestDto', () => {
     const errors = await validate(invalidDto);
     expect(errors.find((e) => e.property === 'simulatedUsers')).toBeDefined();
 
+    const maxValidDto = plainToInstance(StartLoadTestDto, {
+      scenario: LoadTestScenario.NORMAL,
+      mode: LoadTestMode.REAL_HTTP,
+      simulatedUsers: 500,
+      gateId: '1',
+    });
+    const errorsMax = await validate(maxValidDto);
+    expect(errorsMax.find((e) => e.property === 'simulatedUsers')).toBeUndefined();
+
     const tooHighDto = plainToInstance(StartLoadTestDto, {
       scenario: LoadTestScenario.NORMAL,
       mode: LoadTestMode.REAL_HTTP,
-      simulatedUsers: 1500,
+      simulatedUsers: 501,
       gateId: '1',
     });
     const errorsHigh = await validate(tooHighDto);

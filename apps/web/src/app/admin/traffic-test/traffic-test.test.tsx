@@ -19,6 +19,11 @@ import {
   MIN_DURATION_SECONDS,
   MAX_DURATION_SECONDS,
   DEFAULT_DURATION_SECONDS,
+  BURST_LEVELS,
+  DEFAULT_BURST_LEVEL,
+  SCENARIO_DETAILS,
+  getLoadWarning,
+  MAX_SAFE_CONCURRENCY,
   calculateTotalScanners,
   calculateExpectedScanRate,
   calculateEstimatedCycles,
@@ -170,12 +175,12 @@ describe('AdminTrafficTestPage', () => {
     expect(html).toContain(`value="${LoadTestScenario.MIXED}"`);
 
     // Verify friendly labels
-    expect(html).toContain('NORMAL (1 User → 1 Check-in)');
-    expect(html).toContain('DUPLICATE (1 User → 2 Requests)');
-    expect(html).toContain('INVALID QR (Malformed / Unauthorized)');
-    expect(html).toContain('NOT BOOKED (Valid Pass, Wrong Date)');
-    expect(html).toContain('PEAK BURST (Concurrency Spike)');
-    expect(html).toContain('MIXED (70% Norm, 20% Dup, 10% Inv)');
+    expect(html).toContain('NORMAL — 100% Success');
+    expect(html).toContain('DUPLICATE — Success + Duplicate');
+    expect(html).toContain('INVALID QR — 100% Invalid');
+    expect(html).toContain('NOT BOOKED — 100% Not Booked');
+    expect(html).toContain('PEAK BURST — Maximum Concurrent Load');
+    expect(html).toContain('MIXED — 70% Normal / 20% Duplicate / 10% Invalid');
 
     // Canonical modes must be present as option values
     expect(html).toContain(`value="${LoadTestMode.REAL_HTTP}"`);
@@ -409,10 +414,11 @@ describe('AdminTrafficTestPage', () => {
       });
 
       it('enforces input validation and clamping to prevent 0 or invalid values', () => {
-        // Gates clamped to [MIN_GATES, MAX_GATES] (1 to 3)
+        // Gates clamped to [MIN_GATES, MAX_GATES] (1 to 20)
         expect(calculateTotalScanners(0, 2)).toBe(1 * 2); // 0 clamped to 1
         expect(calculateTotalScanners(-5, 2)).toBe(1 * 2); // negative clamped to 1
-        expect(calculateTotalScanners(10, 2)).toBe(3 * 2); // > 3 clamped to 3
+        expect(calculateTotalScanners(10, 2)).toBe(10 * 2); // 10 is within 1..20
+        expect(calculateTotalScanners(25, 2)).toBe(20 * 2); // > 20 clamped to 20
 
         // Scanners per gate clamped to [MIN_SCANNERS_PER_GATE, MAX_SCANNERS_PER_GATE] (1 to 10)
         expect(calculateTotalScanners(3, 0)).toBe(3 * 1); // 0 clamped to 1
@@ -438,7 +444,7 @@ describe('AdminTrafficTestPage', () => {
         expect(html).toContain(`min="${MIN_GATES}"`);
         expect(html).toContain(`max="${MAX_GATES}"`);
         expect(html).toContain(`value="${DEFAULT_GATES}"`);
-        expect(html).toContain('Active entrance gates (1–3)');
+        expect(html).toContain('Number of entrance gates to simulate.');
 
         // Scanners per Gate input
         expect(html).toContain('Scanners per Gate');
@@ -521,6 +527,50 @@ describe('AdminTrafficTestPage', () => {
           expect(payload.durationSeconds).toBe(tc.duration);
           expect(payload.rampUpSeconds).toBe(0);
         }
+      });
+    });
+
+    describe('Live VPS Status & Peak Burst Improvements', () => {
+      it('renders dedicated Live VPS Status card with metrics and services', () => {
+        const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
+
+        expect(html).toContain('LIVE VPS STATUS');
+        expect(html).toContain('Real-time node telemetry &amp; platform health diagnostics');
+        expect(html).toContain('CPU Usage');
+        expect(html).toContain('Memory Usage');
+        expect(html).toContain('Disk Usage');
+        expect(html).toContain('Network Traffic');
+        expect(html).toContain('Services:');
+        expect(html).toContain('API:');
+        expect(html).toContain('Database:');
+        expect(html).toContain('Redis:');
+        expect(html).toContain('Nginx:');
+      });
+
+      it('validates BURST_LEVELS and getLoadWarning tier logic', () => {
+        expect(BURST_LEVELS).toHaveLength(4);
+        expect(BURST_LEVELS[0].concurrency).toBe(50);
+        expect(BURST_LEVELS[1].concurrency).toBe(100);
+        expect(BURST_LEVELS[2].concurrency).toBe(250);
+        expect(BURST_LEVELS[3].concurrency).toBe(500);
+        expect(DEFAULT_BURST_LEVEL).toBe(100);
+
+        expect(getLoadWarning(30)).toBeNull();
+        expect(getLoadWarning(50)?.level).toBe('info');
+        expect(getLoadWarning(100)?.level).toBe('warning');
+        expect(getLoadWarning(250)?.level).toBe('danger');
+        expect(getLoadWarning(500)?.level).toBe('critical');
+      });
+
+      it('enforces MAX_SAFE_CONCURRENCY limit of 500', () => {
+        expect(MAX_SAFE_CONCURRENCY).toBe(500);
+        expect(MAX_GATES).toBe(20);
+        expect(MIN_GATES).toBe(1);
+
+        // 20 gates * 10 scanners = 200 (well within safe limit)
+        const maxPhysical = calculateTotalScanners(20, 10);
+        expect(maxPhysical).toBe(200);
+        expect(maxPhysical).toBeLessThanOrEqual(MAX_SAFE_CONCURRENCY);
       });
     });
   });

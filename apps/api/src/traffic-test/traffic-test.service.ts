@@ -4,9 +4,11 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckinService } from '../checkin/checkin.service';
+import { RedisService } from '../redis/redis.service';
 import { StartLoadTestDto } from './dto/start-test.dto';
 import {
   LoadTestStatus,
@@ -20,15 +22,20 @@ import {
   GateType,
 } from '@ongc/shared-types';
 import * as crypto from 'crypto';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as net from 'net';
 
 @Injectable()
 export class TrafficTestService {
   private readonly logger = new Logger(TrafficTestService.name);
   private readonly activeRuns = new Set<string>();
+  private lastCpuSample: { total: number; idle: number; timestamp: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly checkinService: CheckinService,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
 
   async sleep(ms: number): Promise<void> {
@@ -169,6 +176,14 @@ export class TrafficTestService {
           'LOAD_TEST_TARGET_URL environment variable is required for REAL_HTTP load testing. Please configure LOAD_TEST_TARGET_URL before running REAL_HTTP tests.',
         );
       }
+    }
+
+    const MAX_SAFE_CONCURRENCY = 500;
+    const requestedWorkers = dto.concurrency || dto.simulatedUsers;
+    if (requestedWorkers > MAX_SAFE_CONCURRENCY || dto.simulatedUsers > MAX_SAFE_CONCURRENCY) {
+      throw new BadRequestException(
+        `Requested scanners/concurrency (${requestedWorkers}) exceeds the maximum safe server limit (${MAX_SAFE_CONCURRENCY}).`,
+      );
     }
 
     const run = await this.prisma.loadTestRun.create({
@@ -633,5 +648,218 @@ export class TrafficTestService {
     ]);
 
     return { success: true, message: `Load test run ${runId} and all associated data purged` };
+  }
+
+  getCpuUsage(): { usagePercent: number; cores: number; loadAvg: number[] } {
+    const cpus = os.cpus();
+    const cores = Math.max(cpus.length, 1);
+    let total = 0;
+    let idle = 0;
+
+    for (const cpu of cpus) {
+      total += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.irq + cpu.times.idle;
+      idle += cpu.times.idle;
+    }
+
+    const now = Date.now();
+    let usagePercent = 0;
+
+    if (this.lastCpuSample && now - this.lastCpuSample.timestamp >= 500) {
+      const deltaTotal = total - this.lastCpuSample.total;
+      const deltaIdle = idle - this.lastCpuSample.idle;
+      if (deltaTotal > 0) {
+        usagePercent = Math.max(0, Math.min(100, Math.round(((deltaTotal - deltaIdle) / deltaTotal) * 100)));
+      }
+    } else {
+      const load = os.loadavg()[0];
+      if (load !== undefined && !isNaN(load)) {
+        usagePercent = Math.max(0, Math.min(100, Math.round((load / cores) * 100)));
+      }
+    }
+
+    this.lastCpuSample = { total, idle, timestamp: now };
+    const loadAvg = typeof os.loadavg === 'function' ? os.loadavg() : [0, 0, 0];
+    return { usagePercent, cores, loadAvg };
+  }
+
+  async getVpsStatus(): Promise<any> {
+    try {
+      const cpu = this.getCpuUsage();
+
+      // Memory metrics
+      let totalBytes = os.totalmem();
+      let freeBytes = os.freemem();
+      if (process.platform === 'linux') {
+        try {
+          const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+          const totalMatch = meminfo.match(/MemTotal:\s+(\d+)\s+kB/);
+          const availMatch = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
+          if (totalMatch && availMatch) {
+            totalBytes = parseInt(totalMatch[1], 10) * 1024;
+            freeBytes = parseInt(availMatch[1], 10) * 1024;
+          }
+        } catch {
+          // Fallback to os.freemem()
+        }
+      }
+      const usedBytes = Math.max(0, totalBytes - freeBytes);
+      const memPercent = Math.max(0, Math.min(100, Math.round((usedBytes / totalBytes) * 100)));
+      const usedMb = Math.round(usedBytes / (1024 * 1024));
+      const totalMb = Math.round(totalBytes / (1024 * 1024));
+      const usedMemGb = (usedBytes / (1024 * 1024 * 1024)).toFixed(1);
+      const totalMemGb = (totalBytes / (1024 * 1024 * 1024)).toFixed(1);
+      const formattedMem = totalBytes >= 1024 * 1024 * 1024
+        ? `${usedMemGb} / ${totalMemGb} GB`
+        : `${usedMb} / ${totalMb} MB`;
+
+      // Disk metrics
+      let disk = {
+        usedPercent: 0,
+        usedGb: 0,
+        totalGb: 0,
+        formatted: 'N/A',
+      };
+      try {
+        const statPath = process.platform === 'win32' ? process.cwd() : '/';
+        const stats = fs.statfsSync(statPath);
+        const totalB = stats.blocks * stats.bsize;
+        const freeB = stats.bavail * stats.bsize;
+        const usedB = Math.max(0, totalB - freeB);
+        const totalG = totalB / (1024 * 1024 * 1024);
+        const usedG = usedB / (1024 * 1024 * 1024);
+        const pct = Math.max(0, Math.min(100, Math.round((usedB / totalB) * 100)));
+        disk = {
+          usedPercent: pct,
+          usedGb: parseFloat(usedG.toFixed(1)),
+          totalGb: parseFloat(totalG.toFixed(1)),
+          formatted: `${usedG.toFixed(1)} / ${totalG.toFixed(1)} GB`,
+        };
+      } catch {
+        // Disk fallback
+      }
+
+      // Network metrics (Linux /proc/net/dev or fallback)
+      let rxBytesTotal = 0;
+      let txBytesTotal = 0;
+      let primaryIf = 'all';
+
+      if (process.platform === 'linux') {
+        try {
+          const netDev = fs.readFileSync('/proc/net/dev', 'utf8');
+          const lines = netDev.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.includes('|') || !trimmed.includes(':')) continue;
+            const [ifName, statsStr] = trimmed.split(':');
+            const cleanIf = ifName.trim();
+            if (cleanIf === 'lo' || cleanIf.startsWith('docker') || cleanIf.startsWith('br-') || cleanIf.startsWith('veth')) {
+              continue;
+            }
+            const parts = statsStr.trim().split(/\s+/);
+            const rx = parseInt(parts[0], 10) || 0;
+            const tx = parseInt(parts[8], 10) || 0;
+            rxBytesTotal += rx;
+            txBytesTotal += tx;
+            if (primaryIf === 'all') primaryIf = cleanIf;
+          }
+        } catch {
+          // Fallback
+        }
+      }
+
+      const formatNetBytes = (bytes: number): string => {
+        if (bytes <= 0) return '0 MB';
+        const mb = bytes / (1024 * 1024);
+        if (mb < 1024) return `${mb.toFixed(1)} MB`;
+        const gb = mb / 1024;
+        return `${gb.toFixed(2)} GB`;
+      };
+
+      const network = {
+        rxMb: parseFloat((rxBytesTotal / (1024 * 1024)).toFixed(1)),
+        txMb: parseFloat((txBytesTotal / (1024 * 1024)).toFixed(1)),
+        formattedRx: formatNetBytes(rxBytesTotal),
+        formattedTx: formatNetBytes(txBytesTotal),
+        interface: primaryIf,
+      };
+
+      // Service statuses
+      let dbStatus: 'Connected' | 'Disconnected' = 'Disconnected';
+      try {
+        await this.prisma.$queryRaw`SELECT 1`;
+        dbStatus = 'Connected';
+      } catch {
+        dbStatus = 'Disconnected';
+      }
+
+      let redisStatus: 'Connected' | 'Disconnected' | 'Fallback' = 'Fallback';
+      try {
+        if (this.redisService) {
+          const isPong = await this.redisService.ping();
+          redisStatus = isPong ? 'Connected' : 'Disconnected';
+        } else {
+          redisStatus = 'Fallback';
+        }
+      } catch {
+        redisStatus = 'Disconnected';
+      }
+
+      let nginxStatus: 'Running' | 'Stopped' | 'Unknown' = 'Unknown';
+      if (process.platform === 'linux') {
+        const pidExists = fs.existsSync('/run/nginx.pid') || fs.existsSync('/var/run/nginx.pid');
+        if (pidExists) {
+          nginxStatus = 'Running';
+        } else {
+          const portOpen = await this.checkPortOpen('127.0.0.1', 80, 400);
+          nginxStatus = portOpen ? 'Running' : 'Stopped';
+        }
+      } else {
+        nginxStatus = 'Unknown';
+      }
+
+      return {
+        status: 'ok',
+        cpu,
+        memory: {
+          usedPercent: memPercent,
+          usedMb,
+          totalMb,
+          formatted: formattedMem,
+        },
+        disk,
+        network,
+        services: {
+          api: 'Healthy',
+          database: dbStatus,
+          redis: redisStatus,
+          nginx: nginxStatus,
+        },
+        timestamp: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      this.logger.error('Failed to collect VPS system metrics:', err);
+      return {
+        status: 'error',
+        message: 'VPS metrics temporarily unavailable',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  private checkPortOpen(host: string, port: number, timeoutMs = 400): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = net.createConnection({ host, port, timeout: timeoutMs }, () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.on('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve(false);
+      });
+    });
   }
 }

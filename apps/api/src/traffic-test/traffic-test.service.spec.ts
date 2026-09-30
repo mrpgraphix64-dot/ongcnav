@@ -1,7 +1,9 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TrafficTestService } from './traffic-test.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckinService } from '../checkin/checkin.service';
+import { RedisService } from '../redis/redis.service';
 import { LoadTestMode, LoadTestScenario, LoadTestStatus, CheckinResult } from '@ongc/shared-types';
 
 describe('TrafficTestService', () => {
@@ -71,6 +73,7 @@ describe('TrafficTestService', () => {
         findUnique: jest.fn().mockResolvedValue({ id: BigInt(1), gateType: 'REGULAR', isOpen: true }),
       },
       $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+      $queryRaw: jest.fn().mockResolvedValue([{ 1: 1 }]),
     };
 
     checkinService = {
@@ -81,11 +84,16 @@ describe('TrafficTestService', () => {
       }),
     };
 
+    const redisService = {
+      ping: jest.fn().mockResolvedValue(true),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TrafficTestService,
         { provide: PrismaService, useValue: prisma },
         { provide: CheckinService, useValue: checkinService },
+        { provide: RedisService, useValue: redisService },
       ],
     }).compile();
 
@@ -450,6 +458,72 @@ describe('TrafficTestService', () => {
             },
           },
         });
+      });
+
+      it('rejects startTest if simulatedUsers or concurrency exceeds 500 with BadRequestException', async () => {
+        await expect(
+          service.startTest(
+            {
+              scenario: LoadTestScenario.NORMAL,
+              mode: LoadTestMode.DRY_RUN,
+              simulatedUsers: 501,
+              concurrency: 50,
+              testDate: '2026-10-11',
+              gateId: '1',
+            } as any,
+            BigInt(1),
+          ),
+        ).rejects.toThrow(BadRequestException);
+
+        await expect(
+          service.startTest(
+            {
+              scenario: LoadTestScenario.NORMAL,
+              mode: LoadTestMode.DRY_RUN,
+              simulatedUsers: 50,
+              concurrency: 501,
+              testDate: '2026-10-11',
+              gateId: '1',
+            } as any,
+            BigInt(1),
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('getVpsStatus', () => {
+      it('returns system resource metrics and service statuses', async () => {
+        const status = await service.getVpsStatus();
+        expect(status).toBeDefined();
+        expect(status.timestamp).toBeDefined();
+        expect(status.cpu).toBeDefined();
+        expect(typeof status.cpu.usagePercent).toBe('number');
+        expect(typeof status.cpu.cores).toBe('number');
+        expect(Array.isArray(status.cpu.loadAvg)).toBe(true);
+
+        expect(status.memory).toBeDefined();
+        expect(status.memory.totalMb).toBeGreaterThan(0);
+        expect(status.memory.usedMb).toBeGreaterThanOrEqual(0);
+        expect(status.memory.usedPercent).toBeGreaterThanOrEqual(0);
+
+        expect(status.disk).toBeDefined();
+        expect(status.disk.totalGb).toBeGreaterThanOrEqual(0);
+        expect(status.disk.usedPercent).toBeGreaterThanOrEqual(0);
+
+        expect(status.network).toBeDefined();
+        expect(typeof status.network.rxMb).toBe('number');
+        expect(typeof status.network.txMb).toBe('number');
+
+        expect(status.services).toBeDefined();
+        expect(status.services.api.toLowerCase()).toBe('healthy');
+        expect(status.services.database.toLowerCase()).toBe('connected');
+        expect(status.services.redis.toLowerCase()).toBe('connected');
+      });
+
+      it('gracefully marks database as disconnected if db query fails', async () => {
+        prisma.$queryRaw = jest.fn().mockRejectedValue(new Error('DB connection lost'));
+        const status = await service.getVpsStatus();
+        expect(status.services.database.toLowerCase()).toBe('disconnected');
       });
     });
   });

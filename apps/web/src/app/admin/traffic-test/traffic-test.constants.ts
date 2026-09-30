@@ -7,8 +7,86 @@ export function calculateSliderPosition(value: number): number {
 }
 
 export const MIN_GATES = 1;
-export const MAX_GATES = 3;
+export const MAX_GATES = 20;
 export const DEFAULT_GATES = 3;
+
+export const MAX_SAFE_CONCURRENCY = 500;
+
+export const BURST_LEVELS = [
+  { key: 'LIGHT', label: 'LIGHT', concurrency: 50, description: '50 concurrent requests' },
+  { key: 'MEDIUM', label: 'MEDIUM', concurrency: 100, description: '100 concurrent requests' },
+  { key: 'HIGH', label: 'HIGH', concurrency: 250, description: '250 concurrent requests' },
+  { key: 'EXTREME', label: 'EXTREME', concurrency: 500, description: '500 concurrent requests' },
+] as const;
+
+export const DEFAULT_BURST_LEVEL = 100;
+
+export const SCENARIO_DETAILS: Record<
+  string,
+  { label: string; subLabel: string; description: string }
+> = {
+  NORMAL: {
+    label: 'NORMAL — 100% Success',
+    subLabel: '100% Success — valid unused QR',
+    description: 'Clean success test: dedicated synthetic attendees booked for the simulation date, verifying end-to-end checkin and DB writes.',
+  },
+  DUPLICATE: {
+    label: 'DUPLICATE — Success + Duplicate',
+    subLabel: 'Success + Duplicate — same QR scanned twice',
+    description: 'Each scanner sends 2 requests per cycle with the same token: 1st returns SUCCESS, 2nd returns ALREADY_CHECKED_IN.',
+  },
+  INVALID_QR: {
+    label: 'INVALID QR — 100% Invalid',
+    subLabel: '100% Invalid — invalid QR/token',
+    description: 'Sends randomized non-existent tokens to test 400 rejection and gate rejection telemetry.',
+  },
+  NOT_BOOKED: {
+    label: 'NOT BOOKED — 100% Not Booked',
+    subLabel: '100% Not Booked — valid QR, wrong event date',
+    description: 'Sends valid active attendees booked for an event date other than today to test date-gating enforcement.',
+  },
+  PEAK_BURST: {
+    label: 'PEAK BURST — Maximum Concurrent Load',
+    subLabel: 'Maximum Concurrent Load — immediate burst',
+    description: 'Peak Burst sends the selected number of requests as quickly as possible to test sudden traffic spikes.',
+  },
+  MIXED: {
+    label: 'MIXED — 70% Normal / 20% Duplicate / 10% Invalid',
+    subLabel: '70% Normal / 20% Duplicate / 10% Invalid',
+    description: 'Authentic distribution modeling peak entrance behavior with ~70% first-time valid entries, 20% duplicate attempts, and 10% invalid scans.',
+  },
+};
+
+export function getLoadWarning(totalWorkers: number): {
+  level: 'normal' | 'info' | 'warning' | 'danger' | 'critical';
+  message: string;
+} | null {
+  if (totalWorkers >= 500) {
+    return {
+      level: 'critical',
+      message: 'Extreme load test. This may significantly impact the staging server.',
+    };
+  }
+  if (totalWorkers >= 250) {
+    return {
+      level: 'danger',
+      message: 'Very high load test. Run only with explicit approval.',
+    };
+  }
+  if (totalWorkers >= 100) {
+    return {
+      level: 'warning',
+      message: 'Heavy load test. Verify staging capacity before running.',
+    };
+  }
+  if (totalWorkers >= 50) {
+    return {
+      level: 'info',
+      message: 'High load test. Monitor VPS resources.',
+    };
+  }
+  return null;
+}
 
 export const MIN_SCANNERS_PER_GATE = 1;
 export const MAX_SCANNERS_PER_GATE = 10;
