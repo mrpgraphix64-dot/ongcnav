@@ -29,6 +29,10 @@ export class TrafficTestService {
     private readonly checkinService: CheckinService,
   ) {}
 
+  async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   private isEnabled(): boolean {
     return process.env.LOAD_TESTING_ENABLED === 'true' || process.env.NODE_ENV !== 'production';
   }
@@ -220,12 +224,25 @@ export class TrafficTestService {
         ? dto.testDate.trim()
         : '2026-10-11';
 
+    const isPhysicalScannerModel =
+      (dto.scanIntervalSeconds !== undefined || dto.durationSeconds !== undefined) &&
+      dto.scenario !== LoadTestScenario.PEAK_BURST;
+
+    const scanIntervalSeconds = Math.max(1, Math.min(60, Math.floor(dto.scanIntervalSeconds || 2)));
+    const durationSeconds = Math.max(5, Math.min(300, Math.floor(dto.durationSeconds || 30)));
+    const totalCycles = Math.max(1, Math.floor(durationSeconds / scanIntervalSeconds));
+    const totalScanners = Math.max(1, Math.min(500, dto.simulatedUsers || dto.concurrency || 6));
+
+    const totalRequiredTokens = isPhysicalScannerModel
+      ? totalScanners * totalCycles
+      : dto.simulatedUsers;
+
     let tokens: string[] = [];
 
     // Query active attendees and evaluate their booking dates with resolveBookingDays
     const activeCandidates = await this.prisma.attendee.findMany({
       where: { status: 'ACTIVE' },
-      take: Math.max(dto.simulatedUsers * 2, 500),
+      take: Math.max(totalRequiredTokens * 2, 500),
       select: {
         qrCodeToken: true,
         category: true,
@@ -245,12 +262,12 @@ export class TrafficTestService {
         const days = resolveBookingDays(a);
         return days.length > 0 && !days.includes(effectiveTestDate);
       });
-      tokens = notBooked.map((a) => a.qrCodeToken).slice(0, dto.simulatedUsers);
+      tokens = notBooked.map((a) => a.qrCodeToken).slice(0, totalRequiredTokens);
 
       // Fallback: if not enough in DB, add other active attendees
-      if (tokens.length < dto.simulatedUsers) {
+      if (tokens.length < totalRequiredTokens) {
         for (const a of activeCandidates) {
-          if (tokens.length >= dto.simulatedUsers) break;
+          if (tokens.length >= totalRequiredTokens) break;
           if (!tokens.includes(a.qrCodeToken)) {
             tokens.push(a.qrCodeToken);
           }
@@ -266,11 +283,11 @@ export class TrafficTestService {
         const days = resolveBookingDays(a);
         return days.length === 0 || days.includes(effectiveTestDate);
       });
-      tokens = valid.map((a) => a.qrCodeToken).slice(0, dto.simulatedUsers);
+      tokens = valid.map((a) => a.qrCodeToken).slice(0, totalRequiredTokens);
 
-      if (tokens.length < dto.simulatedUsers) {
+      if (tokens.length < totalRequiredTokens) {
         for (const a of activeCandidates) {
-          if (tokens.length >= dto.simulatedUsers) break;
+          if (tokens.length >= totalRequiredTokens) break;
           if (!tokens.includes(a.qrCodeToken)) {
             tokens.push(a.qrCodeToken);
           }
@@ -279,7 +296,7 @@ export class TrafficTestService {
     }
 
     // If still not enough attendees in DB, generate dummy tokens
-    while (tokens.length < dto.simulatedUsers) {
+    while (tokens.length < totalRequiredTokens) {
       tokens.push(crypto.randomBytes(32).toString('hex'));
     }
 
@@ -376,71 +393,121 @@ export class TrafficTestService {
       });
     };
 
-    // Build execution tasks according to scenario
-    const tasks: Array<() => Promise<void>> = [];
+    if (isPhysicalScannerModel) {
+      // Physical Turnstile & Scanner Model:
+      // Each cycle fires all totalScanners in parallel, followed by scanIntervalSeconds pause.
+      // Pacing is strictly controlled by scanIntervalSeconds (rampUpSeconds is NOT used).
+      for (let c = 0; c < totalCycles; c++) {
+        if (!this.activeRuns.has(runId.toString())) {
+          break; // Cancelled
+        }
 
-    if (dto.scenario === LoadTestScenario.NORMAL) {
-      for (let i = 0; i < dto.simulatedUsers; i++) {
-        tasks.push(() => executeOne(tokens[i % tokens.length]));
-      }
-    } else if (dto.scenario === LoadTestScenario.DUPLICATE) {
-      for (let i = 0; i < dto.simulatedUsers; i++) {
-        const t = tokens[i % tokens.length];
-        tasks.push(async () => {
-          await executeOne(t);
-          await executeOne(t);
-        });
-      }
-    } else if (dto.scenario === LoadTestScenario.INVALID_QR) {
-      for (let i = 0; i < dto.simulatedUsers; i++) {
-        tasks.push(() => executeOne('INVALID_TOKEN_' + crypto.randomBytes(8).toString('hex')));
-      }
-    } else if (dto.scenario === LoadTestScenario.NOT_BOOKED) {
-      for (let i = 0; i < dto.simulatedUsers; i++) {
-        tasks.push(() => executeOne(tokens[i % tokens.length]));
-      }
-    } else if (dto.scenario === LoadTestScenario.PEAK_BURST) {
-      // PEAK_BURST: maximum gate surge, all simulated users attempt check-in concurrently
-      for (let i = 0; i < dto.simulatedUsers; i++) {
-        tasks.push(() => executeOne(tokens[i % tokens.length]));
+        const cycleTasks: Array<() => Promise<void>> = [];
+
+        for (let s = 0; s < totalScanners; s++) {
+          const token = tokens[(c * totalScanners + s) % tokens.length];
+
+          if (dto.scenario === LoadTestScenario.NORMAL) {
+            cycleTasks.push(() => executeOne(token));
+          } else if (dto.scenario === LoadTestScenario.DUPLICATE) {
+            cycleTasks.push(async () => {
+              await executeOne(token);
+              await executeOne(token);
+            });
+          } else if (dto.scenario === LoadTestScenario.INVALID_QR) {
+            cycleTasks.push(() => executeOne('INVALID_TOKEN_' + crypto.randomBytes(8).toString('hex')));
+          } else if (dto.scenario === LoadTestScenario.NOT_BOOKED) {
+            cycleTasks.push(() => executeOne(token));
+          } else if (dto.scenario === LoadTestScenario.MIXED) {
+            const rand = Math.random();
+            if (rand < 0.7) {
+              cycleTasks.push(() => executeOne(token));
+            } else if (rand < 0.9) {
+              cycleTasks.push(async () => {
+                await executeOne(token);
+                await executeOne(token);
+              });
+            } else {
+              cycleTasks.push(() => executeOne('INVALID_TOKEN_' + crypto.randomBytes(8).toString('hex')));
+            }
+          }
+        }
+
+        // Send all totalScanners requests in parallel for this cycle
+        await Promise.all(cycleTasks.map((fn) => fn()));
+
+        // Do not add interval after the final cycle to avoid unnecessarily extending test duration (Requirement 10)
+        if (c < totalCycles - 1 && this.activeRuns.has(runId.toString())) {
+          await this.sleep(scanIntervalSeconds * 1000);
+        }
       }
     } else {
-      // MIXED: 70% normal, 20% duplicate (2 requests), 10% invalid
-      for (let i = 0; i < dto.simulatedUsers; i++) {
-        const rand = Math.random();
-        if (rand < 0.7) {
+      // Legacy / PEAK_BURST execution path
+      const tasks: Array<() => Promise<void>> = [];
+
+      if (dto.scenario === LoadTestScenario.NORMAL) {
+        for (let i = 0; i < dto.simulatedUsers; i++) {
           tasks.push(() => executeOne(tokens[i % tokens.length]));
-        } else if (rand < 0.9) {
+        }
+      } else if (dto.scenario === LoadTestScenario.DUPLICATE) {
+        for (let i = 0; i < dto.simulatedUsers; i++) {
           const t = tokens[i % tokens.length];
           tasks.push(async () => {
             await executeOne(t);
             await executeOne(t);
           });
-        } else {
+        }
+      } else if (dto.scenario === LoadTestScenario.INVALID_QR) {
+        for (let i = 0; i < dto.simulatedUsers; i++) {
           tasks.push(() => executeOne('INVALID_TOKEN_' + crypto.randomBytes(8).toString('hex')));
         }
+      } else if (dto.scenario === LoadTestScenario.NOT_BOOKED) {
+        for (let i = 0; i < dto.simulatedUsers; i++) {
+          tasks.push(() => executeOne(tokens[i % tokens.length]));
+        }
+      } else if (dto.scenario === LoadTestScenario.PEAK_BURST) {
+        // PEAK_BURST: maximum gate surge, all simulated users attempt check-in concurrently
+        for (let i = 0; i < dto.simulatedUsers; i++) {
+          tasks.push(() => executeOne(tokens[i % tokens.length]));
+        }
+      } else {
+        // MIXED: 70% normal, 20% duplicate (2 requests), 10% invalid
+        for (let i = 0; i < dto.simulatedUsers; i++) {
+          const rand = Math.random();
+          if (rand < 0.7) {
+            tasks.push(() => executeOne(tokens[i % tokens.length]));
+          } else if (rand < 0.9) {
+            const t = tokens[i % tokens.length];
+            tasks.push(async () => {
+              await executeOne(t);
+              await executeOne(t);
+            });
+          } else {
+            tasks.push(() => executeOne('INVALID_TOKEN_' + crypto.randomBytes(8).toString('hex')));
+          }
+        }
       }
-    }
 
-    // Controlled concurrency pool & pacing
-    const concurrency = Math.max(1, Math.min(dto.concurrency || 25, 500));
-    // For PEAK_BURST, disable ramp-up delay to execute as a true burst surge
-    const rampUpSeconds = dto.scenario === LoadTestScenario.PEAK_BURST ? 0 : (dto.rampUpSeconds || 0);
+      // Controlled concurrency pool & pacing
+      const concurrency = Math.max(1, Math.min(dto.concurrency || 25, 500));
+      // For PEAK_BURST, disable ramp-up delay to execute as a true burst surge
+      const rampUpSeconds = dto.scenario === LoadTestScenario.PEAK_BURST ? 0 : (dto.rampUpSeconds || 0);
 
-    const totalChunks = Math.ceil(tasks.length / concurrency);
-    const chunkDelayMs = totalChunks > 1 && rampUpSeconds > 0
-      ? Math.floor((rampUpSeconds * 1000) / (totalChunks - 1))
-      : 0;
+      const totalChunks = Math.ceil(tasks.length / concurrency);
+      const chunkDelayMs = totalChunks > 1 && rampUpSeconds > 0
+        ? Math.floor((rampUpSeconds * 1000) / (totalChunks - 1))
+        : 0;
 
-    for (let i = 0; i < tasks.length; i += concurrency) {
-      if (!this.activeRuns.has(runId.toString())) {
-        break; // Cancelled
-      }
-      const chunk = tasks.slice(i, i + concurrency);
-      await Promise.all(chunk.map((fn) => fn()));
+      for (let i = 0; i < tasks.length; i += concurrency) {
+        if (!this.activeRuns.has(runId.toString())) {
+          break; // Cancelled
+        }
+        const chunk = tasks.slice(i, i + concurrency);
+        await Promise.all(chunk.map((fn) => fn()));
 
-      if (chunkDelayMs > 0 && i + concurrency < tasks.length) {
-        await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
+        if (chunkDelayMs > 0 && i + concurrency < tasks.length) {
+          await this.sleep(chunkDelayMs);
+        }
       }
     }
 

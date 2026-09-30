@@ -31,6 +31,20 @@ export class StartLoadTestDto {
   @Max(500)
   concurrency?: number;
 
+  @ApiPropertyOptional({ example: 2, description: 'Scan interval in seconds per scanner (1 - 60)' })
+  @IsInt()
+  @IsOptional()
+  @Min(1)
+  @Max(60)
+  scanIntervalSeconds?: number;
+
+  @ApiPropertyOptional({ example: 30, description: 'Test duration in seconds (5 - 300)' })
+  @IsInt()
+  @IsOptional()
+  @Min(5)
+  @Max(300)
+  durationSeconds?: number;
+
   @ApiPropertyOptional({ example: '2026-10-11', description: 'Simulated event date for load test (YYYY-MM-DD)' })
   @IsString()
   @IsOptional()

@@ -88,4 +88,44 @@ describe('StartLoadTestDto', () => {
     const errorsHigh = await validate(tooHighDto);
     expect(errorsHigh.find((e) => e.property === 'simulatedUsers')).toBeDefined();
   });
+
+  it('should validate scanIntervalSeconds bounds (1 to 60) and durationSeconds bounds (5 to 300)', async () => {
+    // Valid values
+    const validDto = plainToInstance(StartLoadTestDto, {
+      scenario: LoadTestScenario.NORMAL,
+      mode: LoadTestMode.REAL_HTTP,
+      simulatedUsers: 6,
+      scanIntervalSeconds: 2,
+      durationSeconds: 30,
+      gateId: '1',
+    });
+    const validErrors = await validate(validDto);
+    expect(validErrors).toHaveLength(0);
+
+    // Below minimums
+    const belowMinDto = plainToInstance(StartLoadTestDto, {
+      scenario: LoadTestScenario.NORMAL,
+      mode: LoadTestMode.REAL_HTTP,
+      simulatedUsers: 6,
+      scanIntervalSeconds: 0,
+      durationSeconds: 2,
+      gateId: '1',
+    });
+    const belowMinErrors = await validate(belowMinDto);
+    expect(belowMinErrors.find((e) => e.property === 'scanIntervalSeconds')).toBeDefined();
+    expect(belowMinErrors.find((e) => e.property === 'durationSeconds')).toBeDefined();
+
+    // Above maximums
+    const aboveMaxDto = plainToInstance(StartLoadTestDto, {
+      scenario: LoadTestScenario.NORMAL,
+      mode: LoadTestMode.REAL_HTTP,
+      simulatedUsers: 6,
+      scanIntervalSeconds: 70,
+      durationSeconds: 400,
+      gateId: '1',
+    });
+    const aboveMaxErrors = await validate(aboveMaxDto);
+    expect(aboveMaxErrors.find((e) => e.property === 'scanIntervalSeconds')).toBeDefined();
+    expect(aboveMaxErrors.find((e) => e.property === 'durationSeconds')).toBeDefined();
+  });
 });

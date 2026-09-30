@@ -6,6 +6,46 @@ export function calculateSliderPosition(value: number): number {
   return ((value - MIN_SIMULATED_USERS) / (MAX_SIMULATED_USERS - MIN_SIMULATED_USERS)) * 100;
 }
 
+export const MIN_GATES = 1;
+export const MAX_GATES = 3;
+export const DEFAULT_GATES = 3;
+
+export const MIN_SCANNERS_PER_GATE = 1;
+export const MAX_SCANNERS_PER_GATE = 10;
+export const DEFAULT_SCANNERS_PER_GATE = 2;
+
+export const MIN_SCAN_INTERVAL = 1;
+export const MAX_SCAN_INTERVAL = 60;
+export const DEFAULT_SCAN_INTERVAL = 2;
+
+export const MIN_DURATION_SECONDS = 5;
+export const MAX_DURATION_SECONDS = 300;
+export const DEFAULT_DURATION_SECONDS = 30;
+
+export function calculateEstimatedCycles(durationSeconds: number, scanIntervalSeconds: number): number {
+  const safeDuration = Math.max(MIN_DURATION_SECONDS, Math.min(MAX_DURATION_SECONDS, Math.floor(durationSeconds) || MIN_DURATION_SECONDS));
+  const safeInterval = Math.max(MIN_SCAN_INTERVAL, Math.min(MAX_SCAN_INTERVAL, Math.floor(scanIntervalSeconds) || MIN_SCAN_INTERVAL));
+  return Math.floor(safeDuration / safeInterval);
+}
+
+export function calculateEstimatedRequests(totalScanners: number, durationSeconds: number, scanIntervalSeconds: number): number {
+  const cycles = calculateEstimatedCycles(durationSeconds, scanIntervalSeconds);
+  return totalScanners * cycles;
+}
+
+export function calculateTotalScanners(numberOfGates: number, scannersPerGate: number): number {
+  const safeGates = Math.max(MIN_GATES, Math.min(MAX_GATES, Math.floor(numberOfGates) || MIN_GATES));
+  const safeScanners = Math.max(MIN_SCANNERS_PER_GATE, Math.min(MAX_SCANNERS_PER_GATE, Math.floor(scannersPerGate) || MIN_SCANNERS_PER_GATE));
+  return safeGates * safeScanners;
+}
+
+export function calculateExpectedScanRate(totalScanners: number, scanIntervalSeconds: number): string {
+  const safeInterval = Math.max(MIN_SCAN_INTERVAL, Math.min(MAX_SCAN_INTERVAL, scanIntervalSeconds || MIN_SCAN_INTERVAL));
+  const rate = totalScanners / safeInterval;
+  const formatted = Number.isInteger(rate) ? rate.toString() : rate.toFixed(1);
+  return `~${formatted} scans/sec`;
+}
+
 export function buildInitialRunTelemetry(
   runId: string,
   params: {

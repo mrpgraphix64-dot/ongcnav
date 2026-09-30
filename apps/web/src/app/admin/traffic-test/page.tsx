@@ -25,10 +25,21 @@ import {
 import { fetchApi } from '@/lib/api';
 import { LoadTestMode, LoadTestScenario, LoadTestStatus } from '@ongc/shared-types';
 import {
-  MIN_SIMULATED_USERS,
-  MAX_SIMULATED_USERS,
-  USER_SCALE_MARKS,
-  calculateSliderPosition,
+  MIN_GATES,
+  MAX_GATES,
+  DEFAULT_GATES,
+  MIN_SCANNERS_PER_GATE,
+  MAX_SCANNERS_PER_GATE,
+  DEFAULT_SCANNERS_PER_GATE,
+  MIN_SCAN_INTERVAL,
+  MAX_SCAN_INTERVAL,
+  DEFAULT_SCAN_INTERVAL,
+  MIN_DURATION_SECONDS,
+  MAX_DURATION_SECONDS,
+  DEFAULT_DURATION_SECONDS,
+  calculateTotalScanners,
+  calculateExpectedScanRate,
+  calculateEstimatedRequests,
   buildInitialRunTelemetry,
 } from './traffic-test.constants';
 
@@ -41,14 +52,19 @@ export default function AdminTrafficTestPage() {
   const [selectedRun, setSelectedRun] = useState<any | null>(null);
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Form Controls
+  // Form Controls (Physical Scanner Setup)
   const [scenario, setScenario] = useState<LoadTestScenario>(LoadTestScenario.NORMAL);
   const [mode, setMode] = useState<LoadTestMode>(LoadTestMode.REAL_HTTP);
-  const [simulatedUsers, setSimulatedUsers] = useState(100);
-  const [concurrency, setConcurrency] = useState(25);
-  const [rampUpSeconds, setRampUpSeconds] = useState(5);
   const [testDate, setTestDate] = useState('2026-10-11');
+  const [numberOfGates, setNumberOfGates] = useState(DEFAULT_GATES);
+  const [scannersPerGate, setScannersPerGate] = useState(DEFAULT_SCANNERS_PER_GATE);
+  const [scanInterval, setScanInterval] = useState(DEFAULT_SCAN_INTERVAL);
+  const [durationSeconds, setDurationSeconds] = useState(DEFAULT_DURATION_SECONDS);
   const [gateId, setGateId] = useState('1');
+
+  const totalScanners = calculateTotalScanners(numberOfGates, scannersPerGate);
+  const expectedTraffic = calculateExpectedScanRate(totalScanners, scanInterval);
+  const estimatedRequests = calculateEstimatedRequests(totalScanners, durationSeconds, scanInterval);
 
   const selectedRunRef = useRef<any | null>(selectedRun);
   useEffect(() => {
@@ -151,17 +167,25 @@ export default function AdminTrafficTestPage() {
     setStarting(true);
     setMsg(null);
 
+    const safeGates = Math.max(MIN_GATES, Math.min(MAX_GATES, Math.floor(numberOfGates) || MIN_GATES));
+    const safeScanners = Math.max(MIN_SCANNERS_PER_GATE, Math.min(MAX_SCANNERS_PER_GATE, Math.floor(scannersPerGate) || MIN_SCANNERS_PER_GATE));
+    const safeInterval = Math.max(MIN_SCAN_INTERVAL, Math.min(MAX_SCAN_INTERVAL, Math.floor(scanInterval) || MIN_SCAN_INTERVAL));
+    const safeDuration = Math.max(MIN_DURATION_SECONDS, Math.min(MAX_DURATION_SECONDS, Math.floor(durationSeconds) || MIN_DURATION_SECONDS));
+    const effectiveScanners = safeGates * safeScanners;
+
     try {
       const res = await fetchApi('/admin/traffic-test/start', {
         method: 'POST',
         body: JSON.stringify({
           scenario,
           mode,
-          simulatedUsers: Number(simulatedUsers),
-          concurrency: Number(concurrency),
-          rampUpSeconds: Number(rampUpSeconds),
+          simulatedUsers: effectiveScanners,
+          concurrency: effectiveScanners,
+          scanIntervalSeconds: safeInterval,
+          durationSeconds: safeDuration,
+          rampUpSeconds: 0,
           testDate,
-          gateId,
+          gateId: gateId || (gates[0]?.id?.toString() || '1'),
         }),
       });
 
@@ -172,7 +196,7 @@ export default function AdminTrafficTestPage() {
           status: res.status || LoadTestStatus.RUNNING,
           scenario: res.scenario || scenario,
           mode: res.mode || mode,
-          simulatedUsers: Number(simulatedUsers),
+          simulatedUsers: effectiveScanners,
         });
         setSelectedRun(initialTelemetry);
         selectedRunRef.current = initialTelemetry;
@@ -190,7 +214,7 @@ export default function AdminTrafficTestPage() {
       }
 
       setMsg({
-        text: `Traffic test initiated (Run #${res.runId}). Mode: ${mode}, Scenario: ${scenario}`,
+        text: `Traffic test initiated (Run #${res.runId}). Mode: ${mode}, Scenario: ${scenario} (${effectiveScanners} Scanners)`,
         type: 'success',
       });
       await loadData(true);
@@ -395,7 +419,7 @@ export default function AdminTrafficTestPage() {
         </h3>
 
         <form onSubmit={handleStartTest} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Scenario */}
             <div>
               <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
@@ -446,24 +470,6 @@ export default function AdminTrafficTestPage() {
               </select>
             </div>
 
-            {/* Target Gate */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Target Gate
-              </label>
-              <select
-                value={gateId}
-                onChange={(e) => setGateId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
-              >
-                {gates.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Simulation Date */}
             <div>
               <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
@@ -487,69 +493,92 @@ export default function AdminTrafficTestPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Simulated Users */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Simulated Users ({simulatedUsers})
-              </label>
-              <div className="relative w-full">
+          {/* Physical Turnstile & Scanner Configuration */}
+          <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Number of Gates */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Number of Gates
+                </label>
                 <input
-                  type="range"
-                  min={MIN_SIMULATED_USERS}
-                  max={MAX_SIMULATED_USERS}
-                  step={10}
-                  value={simulatedUsers}
-                  onChange={(e) => setSimulatedUsers(Number(e.target.value))}
-                  className="w-full accent-red-600 mt-2 block cursor-pointer"
+                  type="number"
+                  min={MIN_GATES}
+                  max={MAX_GATES}
+                  value={numberOfGates}
+                  onChange={(e) => setNumberOfGates(Math.max(MIN_GATES, Math.min(MAX_GATES, Number(e.target.value) || MIN_GATES)))}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
                 />
-                <div className="relative w-full h-4 mt-1 select-none pointer-events-none">
-                  {USER_SCALE_MARKS.map((mark) => {
-                    const pct = calculateSliderPosition(mark);
-                    return (
-                      <span
-                        key={`user-mark-${mark}`}
-                        style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
-                        className="absolute text-[10px] text-slate-500 font-mono -translate-x-1/2"
-                      >
-                        {mark}
-                      </span>
-                    );
-                  })}
-                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Active entrance gates (1–3)</p>
+              </div>
+
+              {/* Scanners per Gate */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Scanners per Gate
+                </label>
+                <input
+                  type="number"
+                  min={MIN_SCANNERS_PER_GATE}
+                  max={MAX_SCANNERS_PER_GATE}
+                  value={scannersPerGate}
+                  onChange={(e) => setScannersPerGate(Math.max(MIN_SCANNERS_PER_GATE, Math.min(MAX_SCANNERS_PER_GATE, Number(e.target.value) || MIN_SCANNERS_PER_GATE)))}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Turnstile scanners per gate (1–10)</p>
+              </div>
+
+              {/* Scan Interval */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Scan Interval (s)
+                </label>
+                <input
+                  type="number"
+                  min={MIN_SCAN_INTERVAL}
+                  max={MAX_SCAN_INTERVAL}
+                  value={scanInterval}
+                  onChange={(e) => setScanInterval(Math.max(MIN_SCAN_INTERVAL, Math.min(MAX_SCAN_INTERVAL, Number(e.target.value) || MIN_SCAN_INTERVAL)))}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Time between scans from each scanner.</p>
+              </div>
+
+              {/* Test Duration */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Test Duration (seconds)
+                </label>
+                <input
+                  type="number"
+                  min={MIN_DURATION_SECONDS}
+                  max={MAX_DURATION_SECONDS}
+                  value={durationSeconds}
+                  onChange={(e) => setDurationSeconds(Math.max(MIN_DURATION_SECONDS, Math.min(MAX_DURATION_SECONDS, Number(e.target.value) || MIN_DURATION_SECONDS)))}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">How long the scanners should continue scanning.</p>
               </div>
             </div>
 
-            {/* Concurrency */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Concurrency (Workers)
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={concurrency}
-                onChange={(e) => setConcurrency(Math.max(1, Math.min(500, Number(e.target.value))))}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
-              />
-              <p className="text-[10px] text-slate-500 mt-1">Parallel connection workers (1–500)</p>
-            </div>
-
-            {/* Ramp-Up Seconds */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Ramp-Up Duration (s)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={60}
-                value={rampUpSeconds}
-                onChange={(e) => setRampUpSeconds(Math.max(0, Math.min(60, Number(e.target.value))))}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
-              />
-              <p className="text-[10px] text-slate-500 mt-1">Pacing interval (0s for immediate burst)</p>
+            {/* Read-only Scanner Setup Summary */}
+            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-800/80 text-xs">
+              <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center gap-2" aria-label={`Total Scanners: ${totalScanners}`}>
+                <span className="text-slate-400 text-[11px] font-medium">Total Scanners:</span>
+                <span className="text-amber-400 font-mono font-bold">{totalScanners}</span>
+              </div>
+              <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center gap-2" aria-label={`Parallel Scanners: ${totalScanners}`}>
+                <span className="text-slate-400 text-[11px] font-medium">Parallel Scanners:</span>
+                <span className="text-emerald-400 font-mono font-bold">{totalScanners}</span>
+              </div>
+              <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center gap-2" aria-label={`Expected Traffic: ${expectedTraffic}`}>
+                <span className="text-slate-400 text-[11px] font-medium">Expected Traffic:</span>
+                <span className="text-blue-400 font-mono font-bold">{expectedTraffic}</span>
+              </div>
+              <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/60 flex items-center gap-2" aria-label={`Estimated Requests: ~${estimatedRequests}`}>
+                <span className="text-slate-400 text-[11px] font-medium">Estimated Requests:</span>
+                <span className="text-purple-400 font-mono font-bold">~{estimatedRequests}</span>
+              </div>
             </div>
           </div>
 

@@ -7,6 +7,22 @@ import {
   MAX_SIMULATED_USERS,
   USER_SCALE_MARKS,
   buildInitialRunTelemetry,
+  MIN_GATES,
+  MAX_GATES,
+  DEFAULT_GATES,
+  MIN_SCANNERS_PER_GATE,
+  MAX_SCANNERS_PER_GATE,
+  DEFAULT_SCANNERS_PER_GATE,
+  MIN_SCAN_INTERVAL,
+  MAX_SCAN_INTERVAL,
+  DEFAULT_SCAN_INTERVAL,
+  MIN_DURATION_SECONDS,
+  MAX_DURATION_SECONDS,
+  DEFAULT_DURATION_SECONDS,
+  calculateTotalScanners,
+  calculateExpectedScanRate,
+  calculateEstimatedCycles,
+  calculateEstimatedRequests,
 } from './traffic-test.constants';
 import { LoadTestMode, LoadTestScenario, LoadTestStatus } from '@ongc/shared-types';
 
@@ -181,7 +197,7 @@ describe('AdminTrafficTestPage', () => {
     expect(LoadTestMode.REAL_HTTP).toBe('REAL_HTTP');
   });
 
-  describe('Issue 2: Slider Label Alignment', () => {
+  describe('Slider and Manual Controls Removal', () => {
     it('calculates mathematically correct percentages corresponding to HTML range input scale', () => {
       // Scale: min = 10, max = 500
       expect(MIN_SIMULATED_USERS).toBe(10);
@@ -202,18 +218,15 @@ describe('AdminTrafficTestPage', () => {
       expect(calculateSliderPosition(500)).toBe(100);
     });
 
-    it('renders slider labels at exact calculated percentages with centering transform', () => {
+    it('verifies manual simulated users and concurrency inputs are removed from the UI', () => {
       const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
 
-      // Marks: 10, 100, 250, 500
-      expect(USER_SCALE_MARKS).toEqual([10, 100, 250, 500]);
-
-      // Check left percentage in rendered HTML
-      expect(html).toContain('left:0%');
-      expect(html).toContain(`left:${calculateSliderPosition(100)}%`);
-      expect(html).toContain(`left:${calculateSliderPosition(250)}%`);
-      expect(html).toContain('left:100%');
-      expect(html).toContain('transform:translateX(-50%)');
+      expect(html).not.toContain('Simulated Users (');
+      expect(html).not.toContain('type="range"');
+      expect(html).not.toContain('Concurrency (Workers)');
+      expect(html).not.toContain('Parallel connection workers');
+      expect(html).not.toContain('Ramp-Up Duration (s)');
+      expect(html).not.toContain('Pacing interval');
     });
   });
 
@@ -322,24 +335,187 @@ describe('AdminTrafficTestPage', () => {
   });
 
   describe('Audit Fixes: Controls, Telemetry & Metrics', () => {
-    it('renders Concurrency, Simulation Date, and Ramp-up controls', () => {
+    it('renders Simulation Date and replaces Concurrency/Ramp-up with Physical Scanner controls', () => {
       const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
 
-      expect(html).toContain('Concurrency (Workers)');
-      expect(html).toContain('Parallel connection workers (1–500)');
-
+      // Simulation date is retained
       expect(html).toContain('Simulation Date');
       expect(html).toContain('2026-10-11 (Day 1 - Inauguration)');
       expect(html).toContain('2026-10-19 (Day 9 - Grand Finale)');
 
-      expect(html).toContain('Ramp-Up Duration (s)');
-      expect(html).toContain('Pacing interval (0s for immediate burst)');
+      // Physical scanner controls
+      expect(html).toContain('Number of Gates');
+      expect(html).toContain('Scanners per Gate');
+      expect(html).toContain('Scan Interval (s)');
+      expect(html).toContain('Time between scans from each scanner.');
     });
 
     it('renders Success / Dup / Inv / Err in history table header', () => {
       const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
 
       expect(html).toContain('Success / Dup / Inv / Err');
+    });
+  });
+
+  describe('Physical Scanner Configuration Model', () => {
+    describe('Scanner Count and Rate Calculations', () => {
+      it('calculates total scanners for standard turnstile configurations', () => {
+        // 1 gate × 1 scanner = 1 total scanner
+        expect(calculateTotalScanners(1, 1)).toBe(1);
+
+        // 3 gates × 2 scanners = 6 total scanners (default setup)
+        expect(calculateTotalScanners(3, 2)).toBe(6);
+
+        // 3 gates × 6 scanners = 18 total scanners
+        expect(calculateTotalScanners(3, 6)).toBe(18);
+      });
+
+      it('calculates expected scan rate based on total scanners and scan interval', () => {
+        // 6 total scanners with 1s interval -> ~6 scans/sec
+        expect(calculateExpectedScanRate(6, 1)).toBe('~6 scans/sec');
+
+        // 6 total scanners with 2s interval -> ~3 scans/sec
+        expect(calculateExpectedScanRate(6, 2)).toBe('~3 scans/sec');
+
+        // 18 total scanners with 2s interval -> ~9 scans/sec
+        expect(calculateExpectedScanRate(18, 2)).toBe('~9 scans/sec');
+
+        // 6 total scanners with 4s interval -> ~1.5 scans/sec (fractional formatting)
+        expect(calculateExpectedScanRate(6, 4)).toBe('~1.5 scans/sec');
+
+        // 1 scanner with 2s interval -> ~0.5 scans/sec
+        expect(calculateExpectedScanRate(1, 2)).toBe('~0.5 scans/sec');
+      });
+
+      it('calculates estimated cycles and requests based on total scanners, duration, and interval', () => {
+        // 6 scanners, 2s interval, 10s duration -> 5 cycles, 30 requests
+        expect(calculateEstimatedCycles(10, 2)).toBe(5);
+        expect(calculateEstimatedRequests(6, 10, 2)).toBe(30);
+
+        // 6 scanners, 2s interval, 30s duration -> 15 cycles, 90 requests (default setup)
+        expect(calculateEstimatedCycles(30, 2)).toBe(15);
+        expect(calculateEstimatedRequests(6, 30, 2)).toBe(90);
+
+        // 18 scanners, 2s interval, 30s duration -> 15 cycles, 270 requests
+        expect(calculateEstimatedCycles(30, 2)).toBe(15);
+        expect(calculateEstimatedRequests(18, 30, 2)).toBe(270);
+
+        // Clamping validation:
+        // duration < 5 clamped to 5: 5 / 2 = 2 cycles
+        expect(calculateEstimatedCycles(2, 2)).toBe(2);
+        // duration > 300 clamped to 300: 300 / 2 = 150 cycles
+        expect(calculateEstimatedCycles(500, 2)).toBe(150);
+      });
+
+      it('enforces input validation and clamping to prevent 0 or invalid values', () => {
+        // Gates clamped to [MIN_GATES, MAX_GATES] (1 to 3)
+        expect(calculateTotalScanners(0, 2)).toBe(1 * 2); // 0 clamped to 1
+        expect(calculateTotalScanners(-5, 2)).toBe(1 * 2); // negative clamped to 1
+        expect(calculateTotalScanners(10, 2)).toBe(3 * 2); // > 3 clamped to 3
+
+        // Scanners per gate clamped to [MIN_SCANNERS_PER_GATE, MAX_SCANNERS_PER_GATE] (1 to 10)
+        expect(calculateTotalScanners(3, 0)).toBe(3 * 1); // 0 clamped to 1
+        expect(calculateTotalScanners(3, -1)).toBe(3 * 1); // negative clamped to 1
+        expect(calculateTotalScanners(3, 20)).toBe(3 * 10); // > 10 clamped to 10
+
+        // Both clamped
+        expect(calculateTotalScanners(0, 0)).toBe(1 * 1);
+
+        // Scan interval clamped to [MIN_SCAN_INTERVAL, MAX_SCAN_INTERVAL] (1 to 60)
+        expect(calculateExpectedScanRate(6, 0)).toBe('~6 scans/sec'); // 0 clamped to 1
+        expect(calculateExpectedScanRate(6, -2)).toBe('~6 scans/sec'); // negative clamped to 1
+        expect(calculateExpectedScanRate(6, 120)).toBe('~0.1 scans/sec'); // 120 clamped to 60 (6/60 = 0.1)
+      });
+    });
+
+    describe('UI Rendering & Verification', () => {
+      it('renders gate, scanner, interval, and duration controls with correct attributes and helper text', () => {
+        const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
+
+        // Number of Gates input
+        expect(html).toContain('Number of Gates');
+        expect(html).toContain(`min="${MIN_GATES}"`);
+        expect(html).toContain(`max="${MAX_GATES}"`);
+        expect(html).toContain(`value="${DEFAULT_GATES}"`);
+        expect(html).toContain('Active entrance gates (1–3)');
+
+        // Scanners per Gate input
+        expect(html).toContain('Scanners per Gate');
+        expect(html).toContain(`min="${MIN_SCANNERS_PER_GATE}"`);
+        expect(html).toContain(`max="${MAX_SCANNERS_PER_GATE}"`);
+        expect(html).toContain(`value="${DEFAULT_SCANNERS_PER_GATE}"`);
+        expect(html).toContain('Turnstile scanners per gate (1–10)');
+
+        // Scan Interval input
+        expect(html).toContain('Scan Interval (s)');
+        expect(html).toContain(`min="${MIN_SCAN_INTERVAL}"`);
+        expect(html).toContain(`max="${MAX_SCAN_INTERVAL}"`);
+        expect(html).toContain(`value="${DEFAULT_SCAN_INTERVAL}"`);
+        expect(html).toContain('Time between scans from each scanner.');
+
+        // Test Duration input
+        expect(html).toContain('Test Duration (seconds)');
+        expect(html).toContain(`min="${MIN_DURATION_SECONDS}"`);
+        expect(html).toContain(`max="${MAX_DURATION_SECONDS}"`);
+        expect(html).toContain(`value="${DEFAULT_DURATION_SECONDS}"`);
+        expect(html).toContain('How long the scanners should continue scanning.');
+      });
+
+      it('renders read-only scanner setup summary badges matching default 3 gates × 2 scanners = 6', () => {
+        const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
+
+        expect(html).toContain('Total Scanners: 6');
+        expect(html).toContain('Parallel Scanners: 6');
+        expect(html).toContain('Expected Traffic: ~3 scans/sec');
+        expect(html).toContain('Estimated Requests: ~90');
+      });
+
+      it('ensures no manual simulated-user slider or manual concurrency input is rendered', () => {
+        const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
+
+        // Manual controls must be absent
+        expect(html).not.toContain('Simulated Users');
+        expect(html).not.toContain('Concurrency (Workers)');
+        expect(html).not.toContain('Parallel connection workers');
+        expect(html).not.toContain('Ramp-Up Duration');
+      });
+
+      it('proves concurrency automatically equals totalScanners and sets payload correctly with scanIntervalSeconds and durationSeconds without rampUpSeconds pacing', () => {
+        // Test calculation logic used when building the start-test payload
+        const testCases = [
+          { gates: 1, scanners: 1, interval: 1, duration: 10, expectedTotal: 1, expectedRate: '~1 scans/sec', expectedCycles: 10, expectedReqs: 10 },
+          { gates: 3, scanners: 2, interval: 2, duration: 10, expectedTotal: 6, expectedRate: '~3 scans/sec', expectedCycles: 5, expectedReqs: 30 },
+          { gates: 3, scanners: 2, interval: 2, duration: 30, expectedTotal: 6, expectedRate: '~3 scans/sec', expectedCycles: 15, expectedReqs: 90 },
+          { gates: 3, scanners: 6, interval: 2, duration: 30, expectedTotal: 18, expectedRate: '~9 scans/sec', expectedCycles: 15, expectedReqs: 270 },
+        ];
+
+        for (const tc of testCases) {
+          const total = calculateTotalScanners(tc.gates, tc.scanners);
+          const rate = calculateExpectedScanRate(total, tc.interval);
+          const cycles = calculateEstimatedCycles(tc.duration, tc.interval);
+          const reqs = calculateEstimatedRequests(total, tc.duration, tc.interval);
+
+          expect(total).toBe(tc.expectedTotal);
+          expect(rate).toBe(tc.expectedRate);
+          expect(cycles).toBe(tc.expectedCycles);
+          expect(reqs).toBe(tc.expectedReqs);
+
+          // In payload construction:
+          const payload = {
+            simulatedUsers: total,
+            concurrency: total,
+            scanIntervalSeconds: tc.interval,
+            durationSeconds: tc.duration,
+            rampUpSeconds: 0, // rampUpSeconds is NOT used for physical scanner pacing
+          };
+
+          expect(payload.concurrency).toBe(tc.expectedTotal);
+          expect(payload.simulatedUsers).toBe(tc.expectedTotal);
+          expect(payload.scanIntervalSeconds).toBe(tc.interval);
+          expect(payload.durationSeconds).toBe(tc.duration);
+          expect(payload.rampUpSeconds).toBe(0);
+        }
+      });
     });
   });
 });

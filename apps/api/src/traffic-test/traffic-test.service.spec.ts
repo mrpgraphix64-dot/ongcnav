@@ -209,5 +209,100 @@ describe('TrafficTestService', () => {
       expect(result.runId).toBe('2');
       expect(prisma.loadTestRun.create).toHaveBeenCalled();
     });
+
+    describe('Physical Scanner Execution Model', () => {
+      it('executes 5 cycles of 6 scanners (30 requests total) for 10s duration and 2s interval with no delay after final cycle', async () => {
+        const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+
+        const result = await service.startTest(
+          {
+            scenario: LoadTestScenario.NORMAL,
+            mode: LoadTestMode.DRY_RUN,
+            simulatedUsers: 6,
+            concurrency: 6,
+            scanIntervalSeconds: 2,
+            durationSeconds: 10,
+            rampUpSeconds: 0, // rampUpSeconds is ignored
+            testDate: '2026-10-11',
+            gateId: '1',
+          } as any,
+          BigInt(1),
+        );
+
+        expect(result.success).toBe(true);
+
+        // Wait a tick for async execution
+        await new Promise((resolve) => setImmediate(resolve));
+
+        // 5 cycles: 10s / 2s = 5 cycles.
+        // Sleep between cycles: exactly 4 times (cycles 0, 1, 2, 3). No sleep after cycle 4!
+        expect(sleepSpy).toHaveBeenCalledTimes(4);
+        expect(sleepSpy).toHaveBeenNthCalledWith(1, 2000);
+        expect(sleepSpy).toHaveBeenNthCalledWith(2, 2000);
+        expect(sleepSpy).toHaveBeenNthCalledWith(3, 2000);
+        expect(sleepSpy).toHaveBeenNthCalledWith(4, 2000);
+
+        // Verify checkinService was called for all 30 scans (6 scanners × 5 cycles)
+        expect(checkinService.processCheckin).toHaveBeenCalledTimes(30);
+
+        sleepSpy.mockRestore();
+      });
+
+      it('preserves PEAK_BURST as an immediate single burst without interval pacing', async () => {
+        const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+
+        const result = await service.startTest(
+          {
+            scenario: LoadTestScenario.PEAK_BURST,
+            mode: LoadTestMode.DRY_RUN,
+            simulatedUsers: 12,
+            concurrency: 12,
+            scanIntervalSeconds: 2,
+            durationSeconds: 10,
+            testDate: '2026-10-11',
+            gateId: '1',
+          } as any,
+          BigInt(1),
+        );
+
+        expect(result.success).toBe(true);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        // PEAK_BURST bypasses cycles and executes all 12 at once with 0 delay
+        expect(sleepSpy).not.toHaveBeenCalled();
+        expect(checkinService.processCheckin).toHaveBeenCalledTimes(12);
+
+        sleepSpy.mockRestore();
+      });
+
+      it('executes DUPLICATE scenario with 2 requests per scanner per cycle', async () => {
+        const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+
+        // 2 scanners, 2s interval, 6s duration -> 3 cycles
+        // Each cycle: 2 scanners × 2 scans = 4 scans per cycle
+        // Total scans: 3 cycles × 4 = 12 scans
+        const result = await service.startTest(
+          {
+            scenario: LoadTestScenario.DUPLICATE,
+            mode: LoadTestMode.DRY_RUN,
+            simulatedUsers: 2,
+            concurrency: 2,
+            scanIntervalSeconds: 2,
+            durationSeconds: 6,
+            testDate: '2026-10-11',
+            gateId: '1',
+          } as any,
+          BigInt(1),
+        );
+
+        expect(result.success).toBe(true);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(sleepSpy).toHaveBeenCalledTimes(2); // 3 cycles -> 2 pauses
+        expect(checkinService.processCheckin).toHaveBeenCalledTimes(12);
+
+        sleepSpy.mockRestore();
+      });
+    });
   });
 });
