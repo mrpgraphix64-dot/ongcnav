@@ -320,4 +320,26 @@ describe('AdminTrafficTestPage', () => {
       expect(selectedRunRef.current.id).not.toBe('1');
     });
   });
+
+  describe('Audit Fixes: Controls, Telemetry & Metrics', () => {
+    it('renders Concurrency, Simulation Date, and Ramp-up controls', () => {
+      const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
+
+      expect(html).toContain('Concurrency (Workers)');
+      expect(html).toContain('Parallel connection workers (1–500)');
+
+      expect(html).toContain('Simulation Date');
+      expect(html).toContain('2026-10-11 (Day 1 - Inauguration)');
+      expect(html).toContain('2026-10-19 (Day 9 - Grand Finale)');
+
+      expect(html).toContain('Ramp-Up Duration (s)');
+      expect(html).toContain('Pacing interval (0s for immediate burst)');
+    });
+
+    it('renders Success / Dup / Inv / Err in history table header', () => {
+      const html = ReactDOMServer.renderToStaticMarkup(<AdminTrafficTestPage />);
+
+      expect(html).toContain('Success / Dup / Inv / Err');
+    });
+  });
 });

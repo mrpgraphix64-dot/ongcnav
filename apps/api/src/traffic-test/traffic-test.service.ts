@@ -1,6 +1,7 @@
 import {
   Injectable,
   ForbiddenException,
+  BadRequestException,
   NotFoundException,
   Logger,
 } from '@nestjs/common';
@@ -13,7 +14,9 @@ import {
   LoadTestScenario,
   CheckinResult,
   UserRole,
+  isOfficialEventDate,
 } from '@ongc/shared-types';
+import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -153,6 +156,15 @@ export class TrafficTestService {
       );
     }
 
+    if (dto.mode === LoadTestMode.REAL_HTTP) {
+      const targetUrl = process.env.LOAD_TEST_TARGET_URL?.trim();
+      if (!targetUrl) {
+        throw new BadRequestException(
+          'LOAD_TEST_TARGET_URL environment variable is required for REAL_HTTP load testing. Please configure LOAD_TEST_TARGET_URL before running REAL_HTTP tests.',
+        );
+      }
+    }
+
     const run = await this.prisma.loadTestRun.create({
       data: {
         scenario: dto.scenario as any,
@@ -193,17 +205,80 @@ export class TrafficTestService {
     startedById: bigint,
   ) {
     const startTime = Date.now();
-    const port = process.env.PORT || 3001;
-    const apiUrl = `http://localhost:${port}/admin/traffic-test/execute-checkin`;
+    let apiUrl = '';
+    if (dto.mode === LoadTestMode.REAL_HTTP) {
+      const targetUrl = process.env.LOAD_TEST_TARGET_URL?.trim();
+      if (!targetUrl) {
+        throw new Error('LOAD_TEST_TARGET_URL is not configured for REAL_HTTP mode');
+      }
+      apiUrl = targetUrl;
+    }
 
-    // Fetch or generate synthetic attendee tokens for testing
-    const attendees = await this.prisma.attendee.findMany({
-      take: Math.min(dto.simulatedUsers, 1000),
-      select: { qrCodeToken: true },
+    // Resolve simulated event date (defaults strictly to an official event date)
+    const effectiveTestDate =
+      dto.testDate && isOfficialEventDate(dto.testDate.trim())
+        ? dto.testDate.trim()
+        : '2026-10-11';
+
+    let tokens: string[] = [];
+
+    // Query active attendees and evaluate their booking dates with resolveBookingDays
+    const activeCandidates = await this.prisma.attendee.findMany({
+      where: { status: 'ACTIVE' },
+      take: Math.max(dto.simulatedUsers * 2, 500),
+      select: {
+        qrCodeToken: true,
+        category: true,
+        bookingDays: true,
+        employee: {
+          select: { bookingDays: true },
+        },
+      },
     });
 
-    const tokens: string[] = attendees.map((a) => a.qrCodeToken);
-    // If not enough attendees in DB, generate dummy tokens
+    if (dto.scenario === LoadTestScenario.NOT_BOOKED) {
+      // Find active attendees NOT booked for effectiveTestDate
+      const notBooked = activeCandidates.filter((a) => {
+        const cat = a.category || '';
+        const isSeason = ['Season Pass', 'Any Day Pass', 'COMMERCIAL_SEASON', 'COMMERCIAL_ANY_DAY'].includes(cat);
+        if (isSeason) return false;
+        const days = resolveBookingDays(a);
+        return days.length > 0 && !days.includes(effectiveTestDate);
+      });
+      tokens = notBooked.map((a) => a.qrCodeToken).slice(0, dto.simulatedUsers);
+
+      // Fallback: if not enough in DB, add other active attendees
+      if (tokens.length < dto.simulatedUsers) {
+        for (const a of activeCandidates) {
+          if (tokens.length >= dto.simulatedUsers) break;
+          if (!tokens.includes(a.qrCodeToken)) {
+            tokens.push(a.qrCodeToken);
+          }
+        }
+      }
+    } else {
+      // For NORMAL, DUPLICATE, PEAK_BURST, MIXED (valid portion):
+      // Prefer attendees valid for effectiveTestDate
+      const valid = activeCandidates.filter((a) => {
+        const cat = a.category || '';
+        const isSeason = ['Season Pass', 'Any Day Pass', 'COMMERCIAL_SEASON', 'COMMERCIAL_ANY_DAY'].includes(cat);
+        if (isSeason) return true;
+        const days = resolveBookingDays(a);
+        return days.length === 0 || days.includes(effectiveTestDate);
+      });
+      tokens = valid.map((a) => a.qrCodeToken).slice(0, dto.simulatedUsers);
+
+      if (tokens.length < dto.simulatedUsers) {
+        for (const a of activeCandidates) {
+          if (tokens.length >= dto.simulatedUsers) break;
+          if (!tokens.includes(a.qrCodeToken)) {
+            tokens.push(a.qrCodeToken);
+          }
+        }
+      }
+    }
+
+    // If still not enough attendees in DB, generate dummy tokens
     while (tokens.length < dto.simulatedUsers) {
       tokens.push(crypto.randomBytes(32).toString('hex'));
     }
@@ -234,6 +309,7 @@ export class TrafficTestService {
           const payload = JSON.stringify({
             token,
             gateId: dto.gateId,
+            testDate: effectiveTestDate,
             isLoadTest: true,
             loadTestRunId: runId.toString(),
           });
@@ -243,10 +319,8 @@ export class TrafficTestService {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              // If unset, the internal endpoint fails closed (rejects the
-              // request) rather than accepting a default/blank value —
-              // see execute-checkin's own check.
               'x-load-test-auth': process.env.LOAD_TEST_INTERNAL_SECRET || '',
+              'x-traffic-test-run': runId.toString(),
             },
             body: payload,
           });
@@ -267,6 +341,7 @@ export class TrafficTestService {
             {
               token,
               gateId: dto.gateId,
+              testDate: effectiveTestDate,
               isLoadTest: true,
               loadTestRunId: runId.toString(),
             },
@@ -284,7 +359,11 @@ export class TrafficTestService {
 
       if (resResult === CheckinResult.SUCCESS) successCount++;
       else if (resResult === CheckinResult.ALREADY_CHECKED_IN) duplicateCount++;
-      else if (resResult === CheckinResult.INVALID_QR || resResult === CheckinResult.NOT_BOOKED_TODAY)
+      else if (
+        resResult === CheckinResult.INVALID_QR ||
+        resResult === CheckinResult.NOT_BOOKED_TODAY ||
+        resResult === CheckinResult.ATTENDEE_INACTIVE
+      )
         invalidCount++;
       else errorCount++;
 
@@ -316,8 +395,17 @@ export class TrafficTestService {
       for (let i = 0; i < dto.simulatedUsers; i++) {
         tasks.push(() => executeOne('INVALID_TOKEN_' + crypto.randomBytes(8).toString('hex')));
       }
+    } else if (dto.scenario === LoadTestScenario.NOT_BOOKED) {
+      for (let i = 0; i < dto.simulatedUsers; i++) {
+        tasks.push(() => executeOne(tokens[i % tokens.length]));
+      }
+    } else if (dto.scenario === LoadTestScenario.PEAK_BURST) {
+      // PEAK_BURST: maximum gate surge, all simulated users attempt check-in concurrently
+      for (let i = 0; i < dto.simulatedUsers; i++) {
+        tasks.push(() => executeOne(tokens[i % tokens.length]));
+      }
     } else {
-      // MIXED / PEAK_BURST
+      // MIXED: 70% normal, 20% duplicate (2 requests), 10% invalid
       for (let i = 0; i < dto.simulatedUsers; i++) {
         const rand = Math.random();
         if (rand < 0.7) {
@@ -334,14 +422,26 @@ export class TrafficTestService {
       }
     }
 
-    // Execute concurrently with concurrency pool (e.g., 25 at a time)
-    const concurrency = 25;
+    // Controlled concurrency pool & pacing
+    const concurrency = Math.max(1, Math.min(dto.concurrency || 25, 500));
+    // For PEAK_BURST, disable ramp-up delay to execute as a true burst surge
+    const rampUpSeconds = dto.scenario === LoadTestScenario.PEAK_BURST ? 0 : (dto.rampUpSeconds || 0);
+
+    const totalChunks = Math.ceil(tasks.length / concurrency);
+    const chunkDelayMs = totalChunks > 1 && rampUpSeconds > 0
+      ? Math.floor((rampUpSeconds * 1000) / (totalChunks - 1))
+      : 0;
+
     for (let i = 0; i < tasks.length; i += concurrency) {
       if (!this.activeRuns.has(runId.toString())) {
         break; // Cancelled
       }
       const chunk = tasks.slice(i, i + concurrency);
       await Promise.all(chunk.map((fn) => fn()));
+
+      if (chunkDelayMs > 0 && i + concurrency < tasks.length) {
+        await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
+      }
     }
 
     // Batch insert request logs

@@ -68,7 +68,7 @@ export class CheckinService {
     // 0. Test Date Resolution & Strict RBAC Enforcement
     const rawTestDate = (dto.testDate || (dto as any).simulationDate)?.trim();
     if (rawTestDate) {
-      if (scannedByUser?.role !== UserRole.SUPER_ADMIN) {
+      if (!isLoadTest && scannedByUser?.role !== UserRole.SUPER_ADMIN) {
         throw new ForbiddenException('Only SUPER_ADMIN is authorized to use scanner test-date simulation.');
       }
       if (!isOfficialEventDate(rawTestDate)) {
@@ -79,11 +79,12 @@ export class CheckinService {
     }
 
     const isSuperAdminTest = scannedByUser?.role === UserRole.SUPER_ADMIN && !!rawTestDate;
+    const isTestDateActive = (isSuperAdminTest || isLoadTest) && !!rawTestDate;
 
     // 3. Active Event Date Resolution
     const activeDateVal = await this.getSetting('event_control.active_event_date', 'active_event_date');
     const configuredDate = activeDateVal && activeDateVal.trim() !== '' ? activeDateVal.trim() : this.getTodayIst();
-    const activeDate = isSuperAdminTest ? rawTestDate : configuredDate;
+    const activeDate = isTestDateActive ? rawTestDate : configuredDate;
 
     const effectiveReqMeta = {
       ip: reqMeta?.ip,
@@ -120,7 +121,7 @@ export class CheckinService {
 
     // 1. Master Event Status Check (Laravel parity)
     const eventStatus = await this.getSetting('event_control.event_status', 'event_status');
-    if (eventStatus === 'closed') {
+    if (eventStatus === 'closed' && !isLoadTest) {
       await this.recordScanLog({
         gateId,
         scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,

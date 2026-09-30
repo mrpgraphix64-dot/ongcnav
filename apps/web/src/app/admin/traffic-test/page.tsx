@@ -45,6 +45,9 @@ export default function AdminTrafficTestPage() {
   const [scenario, setScenario] = useState<LoadTestScenario>(LoadTestScenario.NORMAL);
   const [mode, setMode] = useState<LoadTestMode>(LoadTestMode.REAL_HTTP);
   const [simulatedUsers, setSimulatedUsers] = useState(100);
+  const [concurrency, setConcurrency] = useState(25);
+  const [rampUpSeconds, setRampUpSeconds] = useState(5);
+  const [testDate, setTestDate] = useState('2026-10-11');
   const [gateId, setGateId] = useState('1');
 
   const selectedRunRef = useRef<any | null>(selectedRun);
@@ -155,6 +158,9 @@ export default function AdminTrafficTestPage() {
           scenario,
           mode,
           simulatedUsers: Number(simulatedUsers),
+          concurrency: Number(concurrency),
+          rampUpSeconds: Number(rampUpSeconds),
+          testDate,
           gateId,
         }),
       });
@@ -328,7 +334,7 @@ export default function AdminTrafficTestPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status</p>
               <p className={`text-base font-black mt-1 ${selectedRun.status === 'RUNNING' ? 'text-amber-400 animate-pulse' : 'text-emerald-400'}`}>
@@ -354,13 +360,25 @@ export default function AdminTrafficTestPage() {
               </p>
             </div>
             <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Success / Dup / Inv / Err</p>
+              <p className="text-xs font-black mt-1 font-mono">
+                <span className="text-emerald-400">{selectedRun.successfulRequests ?? 0}</span>
+                <span className="text-slate-500"> / </span>
+                <span className="text-amber-400">{selectedRun.duplicateRequests ?? 0}</span>
+                <span className="text-slate-500"> / </span>
+                <span className="text-indigo-400">{selectedRun.invalidRequests ?? 0}</span>
+                <span className="text-slate-500"> / </span>
+                <span className="text-rose-400">{selectedRun.errorRequests ?? 0}</span>
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Success Rate</p>
               <p className="text-base font-black text-emerald-400 mt-1">
                 {selectedRun.successPercentage || '0'}%
               </p>
             </div>
             <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Network Traffic</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Measured HTTP Payload</p>
               <p className="text-base font-black text-blue-400 mt-1">
                 {selectedRun.bytesTransferredMb || '0'} MB
               </p>
@@ -428,6 +446,48 @@ export default function AdminTrafficTestPage() {
               </select>
             </div>
 
+            {/* Target Gate */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                Target Gate
+              </label>
+              <select
+                value={gateId}
+                onChange={(e) => setGateId(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
+              >
+                {gates.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Simulation Date */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                Simulation Date
+              </label>
+              <select
+                value={testDate}
+                onChange={(e) => setTestDate(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
+              >
+                <option value="2026-10-11">2026-10-11 (Day 1 - Inauguration)</option>
+                <option value="2026-10-12">2026-10-12 (Day 2)</option>
+                <option value="2026-10-13">2026-10-13 (Day 3)</option>
+                <option value="2026-10-14">2026-10-14 (Day 4)</option>
+                <option value="2026-10-15">2026-10-15 (Day 5)</option>
+                <option value="2026-10-16">2026-10-16 (Day 6)</option>
+                <option value="2026-10-17">2026-10-17 (Day 7)</option>
+                <option value="2026-10-18">2026-10-18 (Day 8)</option>
+                <option value="2026-10-19">2026-10-19 (Day 9 - Grand Finale)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Simulated Users */}
             <div>
               <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
@@ -460,22 +520,36 @@ export default function AdminTrafficTestPage() {
               </div>
             </div>
 
-            {/* Target Gate */}
+            {/* Concurrency */}
             <div>
               <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Target Gate
+                Concurrency (Workers)
               </label>
-              <select
-                value={gateId}
-                onChange={(e) => setGateId(e.target.value)}
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={concurrency}
+                onChange={(e) => setConcurrency(Math.max(1, Math.min(500, Number(e.target.value))))}
                 className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
-              >
-                {gates.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Parallel connection workers (1–500)</p>
+            </div>
+
+            {/* Ramp-Up Seconds */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                Ramp-Up Duration (s)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={60}
+                value={rampUpSeconds}
+                onChange={(e) => setRampUpSeconds(Math.max(0, Math.min(60, Number(e.target.value))))}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-red-500 focus:outline-none"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Pacing interval (0s for immediate burst)</p>
             </div>
           </div>
 
@@ -527,7 +601,7 @@ export default function AdminTrafficTestPage() {
                 <th className="px-5 py-3">RPS</th>
                 <th className="px-5 py-3">Avg Latency</th>
                 <th className="px-5 py-3">HTTP Traffic</th>
-                <th className="px-5 py-3">Success / Dup / Err</th>
+                <th className="px-5 py-3">Success / Dup / Inv / Err</th>
                 <th className="px-5 py-3">Status</th>
                 <th className="px-5 py-3 text-right">Actions</th>
               </tr>
@@ -579,6 +653,7 @@ export default function AdminTrafficTestPage() {
                     <td className="px-5 py-3 font-mono text-[11px]">
                       <span className="text-emerald-400">{r.successfulRequests}</span> /{' '}
                       <span className="text-amber-400">{r.duplicateRequests}</span> /{' '}
+                      <span className="text-indigo-400">{r.invalidRequests || 0}</span> /{' '}
                       <span className="text-rose-400">{r.errorRequests}</span>
                     </td>
                     <td className="px-5 py-3">

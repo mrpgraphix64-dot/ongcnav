@@ -20,9 +20,21 @@ export class StartLoadTestDto {
   @ApiPropertyOptional({ example: 10, description: 'Ramp-up duration in seconds' })
   @IsInt()
   @IsOptional()
-  @Min(1)
+  @Min(0)
   @Max(60)
   rampUpSeconds?: number;
+
+  @ApiPropertyOptional({ example: 25, description: 'Max concurrent in-flight requests (1 - 500)' })
+  @IsInt()
+  @IsOptional()
+  @Min(1)
+  @Max(500)
+  concurrency?: number;
+
+  @ApiPropertyOptional({ example: '2026-10-11', description: 'Simulated event date for load test (YYYY-MM-DD)' })
+  @IsString()
+  @IsOptional()
+  testDate?: string;
 
   @ApiProperty({ example: '1', description: 'Target gate ID' })
   @IsString()

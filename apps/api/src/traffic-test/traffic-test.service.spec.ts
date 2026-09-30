@@ -143,4 +143,71 @@ describe('TrafficTestService', () => {
       expect(prisma.loadTestRun.delete).toHaveBeenCalledWith({ where: { id: BigInt(1) } });
     });
   });
+
+  describe('startTest', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+      delete process.env.LOAD_TEST_TARGET_URL;
+    });
+
+    afterAll(() => {
+      process.env = originalEnv;
+    });
+
+    it('should throw BadRequestException if mode is REAL_HTTP and LOAD_TEST_TARGET_URL is unset', async () => {
+      delete process.env.LOAD_TEST_TARGET_URL;
+
+      await expect(
+        service.startTest(
+          {
+            scenario: LoadTestScenario.NORMAL,
+            mode: LoadTestMode.REAL_HTTP,
+            simulatedUsers: 10,
+          } as any,
+          BigInt(1),
+        ),
+      ).rejects.toThrow('LOAD_TEST_TARGET_URL environment variable is required');
+    });
+
+    it('should succeed for DRY_RUN even if LOAD_TEST_TARGET_URL is unset', async () => {
+      delete process.env.LOAD_TEST_TARGET_URL;
+
+      const result = await service.startTest(
+        {
+          scenario: LoadTestScenario.NORMAL,
+          mode: LoadTestMode.DRY_RUN,
+          simulatedUsers: 10,
+          concurrency: 5,
+          testDate: '2026-10-11',
+        } as any,
+        BigInt(1),
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.runId).toBe('2');
+      expect(prisma.loadTestRun.create).toHaveBeenCalled();
+    });
+
+    it('should succeed for REAL_HTTP when LOAD_TEST_TARGET_URL is configured', async () => {
+      process.env.LOAD_TEST_TARGET_URL = 'https://staging.example.com/admin/traffic-test/execute-checkin';
+
+      const result = await service.startTest(
+        {
+          scenario: LoadTestScenario.NORMAL,
+          mode: LoadTestMode.REAL_HTTP,
+          simulatedUsers: 10,
+          concurrency: 10,
+          rampUpSeconds: 2,
+          testDate: '2026-10-12',
+        } as any,
+        BigInt(1),
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.runId).toBe('2');
+      expect(prisma.loadTestRun.create).toHaveBeenCalled();
+    });
+  });
 });
