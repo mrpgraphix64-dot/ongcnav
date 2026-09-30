@@ -504,10 +504,10 @@ export class StaffService {
 
     const [total, logs] = await Promise.all([
       this.prisma.scanLog.count({
-        where: { scannedById: id },
+        where: { scannedById: id, isLoadTest: false },
       }),
       this.prisma.scanLog.findMany({
-        where: { scannedById: id },
+        where: { scannedById: id, isLoadTest: false },
         include: {
           attendee: {
             include: {

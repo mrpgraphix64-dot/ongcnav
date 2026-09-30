@@ -29,7 +29,7 @@ import {
   ExternalLink,
   Zap,
 } from 'lucide-react';
-import { fetchApi } from '@/lib/api';
+import { fetchApi, API_BASE_URL } from '@/lib/api';
 import { fetchSuperAdminSettings, subscribeToSuperAdminSync } from '@/lib/super-admin-state';
 
 interface EmployeeData {
@@ -74,6 +74,10 @@ interface AttendeeItem {
   ticketNumber: string;
   secure_token: string;
   category: string;
+  source?: string;
+  sourceLabel?: string;
+  sourceSublabel?: string | null;
+  agentName?: string | null;
   registrationType?: string;
   classification?: 'TEST' | 'PROTECTED' | 'OTHER';
   status: string;
@@ -103,6 +107,40 @@ interface SummaryMetrics {
   total_family_members: number;
 }
 
+function renderSourceBadge(item: AttendeeItem) {
+  const source = (item.source || 'ONLINE').toUpperCase();
+  const label = item.sourceLabel || source;
+  const sublabel = item.agentName || item.sourceSublabel;
+
+  let badgeClasses = 'bg-stone-50 text-stone-700 border-stone-200';
+  if (source === 'ONLINE') {
+    badgeClasses = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+  } else if (source === 'AGENT') {
+    badgeClasses = 'bg-amber-50 text-amber-800 border-amber-200';
+  } else if (source === 'FREE') {
+    badgeClasses = 'bg-sky-50 text-sky-800 border-sky-200';
+  } else if (source === 'ADMIN') {
+    badgeClasses = 'bg-purple-50 text-purple-800 border-purple-200';
+  } else if (source === 'EMPLOYEE') {
+    badgeClasses = 'bg-indigo-50 text-indigo-800 border-indigo-200';
+  } else if (source === 'LOAD_TEST') {
+    badgeClasses = 'bg-rose-50 text-rose-800 border-rose-200';
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClasses}`}>
+        {label}
+      </span>
+      {sublabel && (
+        <span className="text-[10px] text-stone-500 font-medium truncate max-w-[130px]" title={sublabel}>
+          {sublabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function AdminAttendeesPage() {
   const [metrics, setMetrics] = useState<SummaryMetrics>({
     total_registrations: 0,
@@ -121,6 +159,7 @@ export default function AdminAttendeesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
 
   // Multi-selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -189,6 +228,7 @@ export default function AdminAttendeesPage() {
         status: statusFilter,
         category: categoryFilter,
       });
+      if (sourceFilter !== 'all') params.append('source', sourceFilter);
       if (search.trim() !== '') params.append('search', search.trim());
 
       const res = await fetchApi<any>(`/admin/attendees?${params.toString()}`);
@@ -232,7 +272,7 @@ export default function AdminAttendeesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, statusFilter, categoryFilter]);
+  }, [page, limit, search, statusFilter, categoryFilter, sourceFilter]);
 
   useEffect(() => {
     loadData();
@@ -538,8 +578,10 @@ export default function AdminAttendeesPage() {
       if (search.trim()) params.append('search', search.trim());
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (categoryFilter !== 'all') params.append('category', categoryFilter);
+      if (sourceFilter !== 'all') params.append('source', sourceFilter);
     }
-    window.location.href = `/api/attendees/bulk/export?${params.toString()}`;
+    const downloadUrl = `${API_BASE_URL}/admin/attendees/bulk/export?${params.toString()}`;
+    window.open(downloadUrl, '_blank');
   };
 
   return (
@@ -724,6 +766,23 @@ export default function AdminAttendeesPage() {
               <option value="ANY_DAY">Any Day Pass</option>
             </select>
 
+            {/* Source Filter */}
+            <select
+              value={sourceFilter}
+              onChange={(e) => {
+                setSourceFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 bg-white hover:border-stone-300 focus:outline-none focus:ring-1 focus:ring-[#7A1113]"
+            >
+              <option value="all">All Sources</option>
+              <option value="online">Online</option>
+              <option value="agent">Agent</option>
+              <option value="free">Free</option>
+              <option value="admin">Admin</option>
+              <option value="employee">Employee Portal</option>
+            </select>
+
             <button
               onClick={() => setGroupByRegistration(!groupByRegistration)}
               className={`px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
@@ -821,6 +880,7 @@ export default function AdminAttendeesPage() {
                 <th className="px-4 py-3.5">Ticket ID</th>
                 <th className="px-4 py-3.5">Registration / Employee</th>
                 <th className="px-4 py-3.5">Category</th>
+                <th className="px-4 py-3.5">Source</th>
                 <th className="px-4 py-3.5">Live Entry Status</th>
                 <th className="px-4 py-3.5">Digital Pass</th>
                 <th className="px-4 py-3.5 text-right">Actions</th>
@@ -829,14 +889,14 @@ export default function AdminAttendeesPage() {
             <tbody className="divide-y divide-stone-100 text-stone-900">
               {loading && primaryAttendees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-stone-400">
+                  <td colSpan={9} className="px-5 py-12 text-center text-stone-400">
                     <RefreshCw className="w-6 h-6 text-stone-300 animate-spin mx-auto mb-2" />
                     <p className="font-semibold text-stone-600">Loading attendee directory...</p>
                   </td>
                 </tr>
               ) : primaryAttendees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-stone-400">
+                  <td colSpan={9} className="px-5 py-12 text-center text-stone-400">
                     <Users className="w-10 h-10 text-stone-300 mx-auto mb-2" />
                     <p className="font-semibold text-stone-600">No attendees found.</p>
                   </td>
@@ -987,6 +1047,11 @@ export default function AdminAttendeesPage() {
                           </span>
                         </td>
 
+                        {/* Source */}
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          {renderSourceBadge(primary)}
+                        </td>
+
                         {/* Live Entry Status */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           {primary.isCommercialOrder ? (
@@ -1120,6 +1185,9 @@ export default function AdminAttendeesPage() {
                                   {pass.category || primary.category}
                                 </span>
                               </td>
+                              <td className="px-4 py-2.5 whitespace-nowrap">
+                                {renderSourceBadge(pass)}
+                              </td>
                               <td className="px-4 py-2.5">
                                 {passCheckedIn ? (
                                   <div>
@@ -1233,6 +1301,9 @@ export default function AdminAttendeesPage() {
                                 <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                   Family Member
                                 </span>
+                              </td>
+                              <td className="px-4 py-2.5 whitespace-nowrap">
+                                {renderSourceBadge(fam)}
                               </td>
                               <td className="px-4 py-2.5">
                                 {famCheckedIn ? (

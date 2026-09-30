@@ -242,27 +242,43 @@ export class EmployeesService {
       websitePasses,
       agentPasses,
       employeePasses,
+      freePasses,
+      adminPasses,
       checkedInPasses,
     ] = await Promise.all([
       this.prisma.attendee.count({ where: { isLoadTest: false } }),
       this.prisma.attendee.count({
         where: {
           isLoadTest: false,
-          order: { source: 'PUBLIC' },
+          order: {
+            AND: [
+              { source: { notIn: ['AGENT', 'FREE', 'ADMIN'] } },
+              { agentId: null },
+              { paymentMode: { not: 'COMPLIMENTARY' } },
+              { unitPricePaise: { gt: 0 } },
+            ],
+          },
         },
       }),
       this.prisma.attendee.count({
         where: {
           isLoadTest: false,
-          order: { source: 'AGENT' },
+          order: {
+            OR: [
+              { source: 'AGENT' },
+              { agentId: { not: null } },
+            ],
+          },
         },
       }),
       this.prisma.attendee.count({
         where: {
           isLoadTest: false,
+          orderId: null,
           OR: [
             { registrationType: RegistrationType.EMPLOYEE },
             { employeeId: { not: null } },
+            { familyMemberId: { not: null } },
             { category: 'ONGC STAFF' },
             { category: 'FAMILY MEMBER' },
           ],
@@ -271,7 +287,33 @@ export class EmployeesService {
       this.prisma.attendee.count({
         where: {
           isLoadTest: false,
-          dailyCheckins: { some: { isLoadTest: false } },
+          OR: [
+            { registrationType: RegistrationType.FREE },
+            { order: { source: 'FREE' } },
+            { order: { paymentMode: 'COMPLIMENTARY' } },
+            { order: { unitPricePaise: 0 } },
+          ],
+        },
+      }),
+      this.prisma.attendee.count({
+        where: {
+          isLoadTest: false,
+          OR: [
+            { order: { source: 'ADMIN' } },
+            {
+              orderId: null,
+              employeeId: null,
+              familyMemberId: null,
+              registrationType: { notIn: [RegistrationType.EMPLOYEE, RegistrationType.FREE] },
+              category: { notIn: ['ONGC STAFF', 'FAMILY MEMBER'] },
+            },
+          ],
+        },
+      }),
+      this.prisma.attendee.count({
+        where: {
+          isLoadTest: false,
+          dailyCheckins: { some: { isLoadTest: false, status: 'SUCCESS' } },
         },
       }),
     ]);
@@ -279,10 +321,21 @@ export class EmployeesService {
     const notCheckedInPasses = Math.max(0, totalPasses - checkedInPasses);
 
     return {
+      total: totalPasses,
+      website: websitePasses,
+      agent: agentPasses,
+      employee: employeePasses,
+      free: freePasses,
+      admin: adminPasses,
+      checkedIn: checkedInPasses,
+      notCheckedIn: notCheckedInPasses,
+      // Backward compatibility aliases
       totalPasses,
       websitePasses,
       agentPasses,
       employeePasses,
+      freePasses,
+      adminPasses,
       checkedInPasses,
       notCheckedInPasses,
     };

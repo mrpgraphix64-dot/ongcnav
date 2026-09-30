@@ -59,6 +59,22 @@ export enum RegistrationType {
   FREE = 'FREE',
 }
 
+export enum AttendeeSource {
+  ONLINE = 'ONLINE',
+  AGENT = 'AGENT',
+  FREE = 'FREE',
+  ADMIN = 'ADMIN',
+  EMPLOYEE = 'EMPLOYEE',
+  LOAD_TEST = 'LOAD_TEST',
+}
+
+export interface AttendeeSourceInfo {
+  source: AttendeeSource;
+  label: string;
+  sublabel?: string;
+  agentName?: string;
+}
+
 export enum EmployeeCategory {
   REGULAR = 'REGULAR',
   RETIRED = 'RETIRED',

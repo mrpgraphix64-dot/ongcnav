@@ -1281,6 +1281,7 @@ export class CommercialService {
             },
           },
           attendees: {
+            where: { isLoadTest: false },
             select: {
               id: true,
               ticketNumber: true,
@@ -1288,6 +1289,7 @@ export class CommercialService {
               category: true,
               bookingDays: true,
               dailyCheckins: {
+                where: { isLoadTest: false },
                 select: {
                   id: true,
                   checkinTime: true,
@@ -1335,12 +1337,16 @@ export class CommercialService {
       }),
       this.prisma.attendee?.count
         ? this.prisma.attendee.count({
-            where: { registrationType: RegistrationType.FREE },
+            where: { registrationType: RegistrationType.FREE, isLoadTest: false },
           })
         : Promise.resolve(0),
       this.prisma.attendee?.count
         ? this.prisma.attendee.count({
-            where: { registrationType: RegistrationType.FREE, dailyCheckins: { some: {} } },
+            where: {
+              registrationType: RegistrationType.FREE,
+              isLoadTest: false,
+              dailyCheckins: { some: { isLoadTest: false } },
+            },
           })
         : Promise.resolve(0),
       this.prisma.commercialOrder.count({
@@ -1366,7 +1372,15 @@ export class CommercialService {
             },
             include: {
               attendees: {
-                select: { id: true, status: true, dailyCheckins: { select: { id: true } } },
+                where: { isLoadTest: false },
+                select: {
+                  id: true,
+                  status: true,
+                  dailyCheckins: {
+                    where: { isLoadTest: false },
+                    select: { id: true },
+                  },
+                },
               },
             },
           },
@@ -1517,12 +1531,15 @@ export class CommercialService {
     // Fallback for standalone free attendees when viewing FREE passes tab and no free orders exist
     if (source === 'FREE' && ordersResult.length === 0 && freePassesCount > 0) {
       const freeAttendees = await this.prisma.attendee.findMany({
-        where: { registrationType: RegistrationType.FREE },
+        where: { registrationType: RegistrationType.FREE, isLoadTest: false },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          dailyCheckins: { select: { id: true } },
+          dailyCheckins: {
+            where: { isLoadTest: false },
+            select: { id: true },
+          },
         },
       });
 

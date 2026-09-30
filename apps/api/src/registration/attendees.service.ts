@@ -24,6 +24,7 @@ import {
   isAdminTestDataDeleteEnabled,
   isStagingTestOrder,
 } from '../commercial/commercial-test-payment.util';
+import { getAttendeeSource, AttendeeSource } from '../common/utils/attendee-source.util';
 
 const VALID_CATEGORIES = ['General', 'VIP', 'VVIP', 'ONGC STAFF', 'FAMILY MEMBER'];
 
@@ -55,6 +56,7 @@ export class AttendeesService {
       search?: string;
       status?: string;
       category?: string;
+      source?: string;
     },
     userRole?: string,
   ) {
@@ -242,6 +244,65 @@ export class AttendeesService {
       }
     }
 
+    if (query.source && query.source !== 'all' && query.source !== '') {
+      const src = query.source.toLowerCase().trim();
+      if (src === 'online') {
+        where.order = {
+          source: { in: ['PUBLIC', 'ONLINE'] },
+          agentId: null,
+        };
+        where.orderId = { not: null };
+      } else if (src === 'agent') {
+        where.order = {
+          OR: [
+            { source: 'AGENT' },
+            { agentId: { not: null } },
+          ],
+        };
+        where.orderId = { not: null };
+      } else if (src === 'free') {
+        if (!where.AND) where.AND = [];
+        where.AND.push({
+          OR: [
+            { order: { source: 'FREE' } },
+            { order: { paymentMode: 'COMPLIMENTARY' } },
+            { order: { unitPricePaise: 0 } },
+            {
+              AND: [
+                { registrationType: RegistrationType.FREE },
+                { employeeId: null },
+                { orderId: null },
+              ],
+            },
+          ],
+        });
+      } else if (src === 'admin') {
+        if (!where.AND) where.AND = [];
+        where.AND.push({
+          OR: [
+            { order: { source: 'ADMIN' } },
+            {
+              AND: [
+                { employeeId: null },
+                { orderId: null },
+                { familyMemberId: null },
+                { isLoadTest: false },
+                { registrationType: { notIn: [RegistrationType.EMPLOYEE, RegistrationType.COMMERCIAL] } },
+              ],
+            },
+          ],
+        });
+      } else if (src === 'employee') {
+        if (!where.AND) where.AND = [];
+        where.AND.push({
+          OR: [
+            { employeeId: { not: null } },
+            { registrationType: RegistrationType.EMPLOYEE },
+          ],
+        });
+      }
+    }
+
     const [total, primaryRecords] = await Promise.all([
       this.prisma.attendee.count({ where }),
       this.prisma.attendee.findMany({
@@ -268,6 +329,7 @@ export class AttendeesService {
               paymentStatus: true,
               paymentMode: true,
               source: true,
+              agentId: true,
               paidAt: true,
               metadata: true,
               razorpayOrderId: true,
@@ -346,7 +408,8 @@ export class AttendeesService {
       });
 
       for (const pass of orderPasses) {
-        const orderIdStr = pass.orderId!.toString();
+        if (!pass.orderId) continue;
+        const orderIdStr = pass.orderId.toString();
         const list = orderPassesMap.get(orderIdStr) || [];
         list.push(pass);
         orderPassesMap.set(orderIdStr, list);
@@ -368,6 +431,7 @@ export class AttendeesService {
         if (p.orderId && p.order) {
           const isTestPayment = isStagingTestOrder(p.order, (p.order as any).agent);
           const rawPasses = orderPassesMap.get(p.orderId.toString()) || [p];
+          const orderSourceInfo = getAttendeeSource(p, p.order);
           const isRealProtectedOrder =
             (p.order.orderStatus === 'PAID' &&
               p.order.razorpayPaymentId != null &&
@@ -390,6 +454,7 @@ export class AttendeesService {
                 type: 'svg',
                 margin: 1,
               });
+              const passSourceInfo = getAttendeeSource(pass, p.order);
 
               return {
                 id: pass.id.toString(),
@@ -401,6 +466,10 @@ export class AttendeesService {
                 secure_token: pass.qrCodeToken,
                 category: pass.category || p.order!.ticketType || 'Commercial Pass',
                 registrationType: pass.registrationType,
+                source: passSourceInfo.source,
+                sourceLabel: passSourceInfo.label,
+                sourceSublabel: passSourceInfo.sublabel || null,
+                agentName: passSourceInfo.agentName || null,
                 status: passCheckedIn ? 'checked_in' : pass.status.toLowerCase(),
                 rawStatus: pass.status,
                 bookingDays: pass.bookingDays || p.order!.selectedDates,
@@ -416,6 +485,7 @@ export class AttendeesService {
                   orderStatus: p.order!.orderStatus,
                   paymentStatus: p.order!.paymentStatus,
                   paymentMode: (p.order as any).paymentMode,
+                  source: (p.order as any).source,
                   isTestPayment,
                   razorpayOrderId: p.order!.razorpayOrderId,
                   razorpayPaymentId: p.order!.razorpayPaymentId,
@@ -436,6 +506,10 @@ export class AttendeesService {
             secure_token: p.qrCodeToken,
             category: p.order.ticketType || 'Commercial Order',
             registrationType: 'COMMERCIAL',
+            source: orderSourceInfo.source,
+            sourceLabel: orderSourceInfo.label,
+            sourceSublabel: orderSourceInfo.sublabel || null,
+            agentName: orderSourceInfo.agentName || null,
             classification: orderClassification,
             status: anyPassCheckedIn
               ? 'checked_in'
@@ -487,6 +561,7 @@ export class AttendeesService {
               type: 'svg',
               margin: 1,
             });
+            const famSourceInfo = getAttendeeSource(fam);
 
             return {
               id: fam.id.toString(),
@@ -498,6 +573,10 @@ export class AttendeesService {
               secure_token: fam.qrCodeToken,
               category: fam.category || `Family (${fam.familyMember?.relation || 'Member'})`,
               registrationType: fam.registrationType,
+              source: famSourceInfo.source,
+              sourceLabel: famSourceInfo.label,
+              sourceSublabel: famSourceInfo.sublabel || null,
+              agentName: famSourceInfo.agentName || null,
               classification: 'PROTECTED',
               status: famCheckedIn ? 'checked_in' : fam.status.toLowerCase(),
               rawStatus: fam.status,
@@ -517,6 +596,8 @@ export class AttendeesService {
           p.category === 'ONGC STAFF' ||
           p.category === 'FAMILY MEMBER';
 
+        const primarySourceInfo = getAttendeeSource(p);
+
         return {
           id: p.id.toString(),
           name: p.name || p.employee?.name || 'Primary Attendee',
@@ -527,6 +608,10 @@ export class AttendeesService {
           secure_token: p.qrCodeToken,
           category: p.category || (p.employee ? 'ONGC STAFF' : 'General'),
           registrationType: p.registrationType,
+          source: primarySourceInfo.source,
+          sourceLabel: primarySourceInfo.label,
+          sourceSublabel: primarySourceInfo.sublabel || null,
+          agentName: primarySourceInfo.agentName || null,
           classification: isEmployeeOrStaff ? 'PROTECTED' : 'OTHER',
           status: isCheckedIn ? 'checked_in' : p.status.toLowerCase(),
           rawStatus: p.status,
@@ -1575,6 +1660,7 @@ export class AttendeesService {
       search?: string;
       status?: string;
       category?: string;
+      source?: string;
     },
     userRole?: string,
   ): Promise<{ csv: string; filename: string }> {
@@ -1615,12 +1701,89 @@ export class AttendeesService {
       if (query.category && query.category !== 'all') {
         where.category = query.category;
       }
+      if (query.source && query.source !== 'all' && query.source !== '') {
+        const src = query.source.toLowerCase().trim();
+        if (src === 'online') {
+          where.order = {
+            source: { in: ['PUBLIC', 'ONLINE'] },
+            agentId: null,
+          };
+          where.orderId = { not: null };
+        } else if (src === 'agent') {
+          where.order = {
+            OR: [
+              { source: 'AGENT' },
+              { agentId: { not: null } },
+            ],
+          };
+          where.orderId = { not: null };
+        } else if (src === 'free') {
+          if (!where.AND) where.AND = [];
+          where.AND.push({
+            OR: [
+              { order: { source: 'FREE' } },
+              { order: { paymentMode: 'COMPLIMENTARY' } },
+              { order: { unitPricePaise: 0 } },
+              {
+                AND: [
+                  { registrationType: RegistrationType.FREE },
+                  { employeeId: null },
+                  { orderId: null },
+                ],
+              },
+            ],
+          });
+        } else if (src === 'admin') {
+          if (!where.AND) where.AND = [];
+          where.AND.push({
+            OR: [
+              { order: { source: 'ADMIN' } },
+              {
+                AND: [
+                  { employeeId: null },
+                  { orderId: null },
+                  { familyMemberId: null },
+                  { isLoadTest: false },
+                  { registrationType: { notIn: [RegistrationType.EMPLOYEE, RegistrationType.COMMERCIAL] } },
+                ],
+              },
+            ],
+          });
+        } else if (src === 'employee') {
+          if (!where.AND) where.AND = [];
+          where.AND.push({
+            OR: [
+              { employeeId: { not: null } },
+              { registrationType: RegistrationType.EMPLOYEE },
+            ],
+          });
+        }
+      }
     }
 
     const attendees = await this.prisma.attendee.findMany({
       where,
       orderBy: { id: 'desc' },
       include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            source: true,
+            paymentMode: true,
+            agentId: true,
+            unitPricePaise: true,
+            agent: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        employee: true,
+        familyMember: true,
         dailyCheckins: {
           where: { isLoadTest: false },
           orderBy: { checkinTime: 'desc' },
@@ -1631,7 +1794,7 @@ export class AttendeesService {
     });
 
     const rows: string[] = [];
-    rows.push(['Name', 'Mobile', 'Email', 'Ticket ID', 'Category', 'Status', 'Checked In At (IST)', 'Gate'].join(','));
+    rows.push(['Name', 'Mobile', 'Email', 'Ticket ID', 'Category', 'Source', 'Agent Name', 'Status', 'Checked In At (IST)', 'Gate'].join(','));
 
     for (const a of attendees) {
       const checkin = a.dailyCheckins[0];
@@ -1649,6 +1812,7 @@ export class AttendeesService {
           }).format(checkin.checkinTime) + ' IST'
         : '';
       const gateName = checkin?.gate?.name || '';
+      const sourceInfo = getAttendeeSource(a, a.order);
 
       const line = [
         AttendeesService.escapeCsv(AttendeesService.sanitizeCsvValue(a.name) || ''),
@@ -1656,6 +1820,8 @@ export class AttendeesService {
         AttendeesService.escapeCsv(AttendeesService.sanitizeCsvValue(a.email) || ''),
         AttendeesService.escapeCsv(AttendeesService.sanitizeCsvValue(a.ticketNumber) || ''),
         AttendeesService.escapeCsv(AttendeesService.sanitizeCsvValue(a.category) || ''),
+        AttendeesService.escapeCsv(sourceInfo.label),
+        AttendeesService.escapeCsv(sourceInfo.agentName || ''),
         isCheckedIn ? 'Checked In' : 'Pending',
         AttendeesService.escapeCsv(checkedInAt),
         AttendeesService.escapeCsv(AttendeesService.sanitizeCsvValue(gateName) || ''),

@@ -46,6 +46,7 @@ export class AttendeesController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('category') category?: string,
+    @Query('source') source?: string,
   ) {
     const userRole = (req as any).user?.role;
     return this.attendeesService.index(
@@ -55,6 +56,7 @@ export class AttendeesController {
         search,
         status,
         category,
+        source,
       },
       userRole,
     );
@@ -100,6 +102,7 @@ export class AttendeesController {
     @Query('search') search: string,
     @Query('status') status: string,
     @Query('category') category: string,
+    @Query('source') source: string,
     @Res() res: Response,
     @Req() req: Request,
   ) {
@@ -117,6 +120,7 @@ export class AttendeesController {
         search,
         status,
         category,
+        source,
       },
       userRole,
     );

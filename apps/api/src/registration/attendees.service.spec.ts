@@ -1275,5 +1275,243 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
         });
       });
     });
+
+    describe('Attendee Source Classification and Filtering', () => {
+      it('returns source info (ONLINE, AGENT, FREE, ADMIN, EMPLOYEE) on index listing', async () => {
+        const mockOnlineAttendee: any = {
+          id: BigInt(100),
+          ticketNumber: 'ORD-ONL-1',
+          category: 'Commercial Pass',
+          registrationType: RegistrationType.COMMERCIAL,
+          status: 'ACTIVE',
+          orderId: BigInt(10),
+          order: {
+            id: BigInt(10),
+            orderNumber: 'ORD-10',
+            customerName: 'Online Buyer',
+            customerMobile: '9876543210',
+            customerEmail: 'buyer@test.com',
+            ticketType: 'COMMERCIAL_DAILY',
+            quantity: 1,
+            unitPricePaise: 50000,
+            amountPaise: 50000,
+            currency: 'INR',
+            orderStatus: OrderStatus.PAID,
+            paymentStatus: PaymentStatus.CAPTURED,
+            paymentMode: 'RAZORPAY',
+            source: 'PUBLIC',
+            agentId: null,
+            razorpayPaymentId: 'pay_123',
+            razorpayOrderId: 'order_123',
+          },
+          dailyCheckins: [],
+        };
+
+        const mockAgentAttendee: any = {
+          id: BigInt(101),
+          ticketNumber: 'ORD-AGT-1',
+          category: 'Commercial Pass',
+          registrationType: RegistrationType.COMMERCIAL,
+          status: 'ACTIVE',
+          orderId: BigInt(11),
+          order: {
+            id: BigInt(11),
+            orderNumber: 'ORD-11',
+            customerName: 'Agent Buyer',
+            customerMobile: '9876543211',
+            customerEmail: 'agentbuyer@test.com',
+            ticketType: 'COMMERCIAL_SEASON',
+            quantity: 1,
+            unitPricePaise: 100000,
+            amountPaise: 100000,
+            currency: 'INR',
+            orderStatus: OrderStatus.PAID,
+            paymentStatus: PaymentStatus.CAPTURED,
+            paymentMode: 'OFFLINE',
+            source: 'AGENT',
+            agentId: BigInt(5),
+            agent: { id: BigInt(5), name: 'Ramesh Agent', email: 'ramesh@agent.com' },
+          },
+          dailyCheckins: [],
+        };
+
+        const mockAdminAttendee: any = {
+          id: BigInt(102),
+          ticketNumber: 'NR2026-000099',
+          name: 'Manual VIP',
+          mobile: '9876543212',
+          email: 'vip@test.com',
+          category: 'VIP',
+          status: 'ACTIVE',
+          employeeId: null,
+          orderId: null,
+          familyMemberId: null,
+          isLoadTest: false,
+          dailyCheckins: [],
+        };
+
+        const mockFreeAttendee: any = {
+          id: BigInt(103),
+          ticketNumber: 'NR2026-000100',
+          name: 'Free Pass Attendee',
+          mobile: '9876543213',
+          email: 'free@test.com',
+          category: 'Free Pass',
+          registrationType: RegistrationType.FREE,
+          status: 'ACTIVE',
+          employeeId: null,
+          orderId: null,
+          familyMemberId: null,
+          isLoadTest: false,
+          dailyCheckins: [],
+        };
+
+        prisma.attendee.count.mockResolvedValueOnce(4);
+        prisma.attendee.findMany = jest.fn().mockImplementation(({ where }: any = {}) => {
+          if (where?.orderId?.in) {
+            return Promise.resolve([mockOnlineAttendee, mockAgentAttendee]);
+          }
+          if (where?.employeeId?.in) {
+            return Promise.resolve([]);
+          }
+          return Promise.resolve([mockOnlineAttendee, mockAgentAttendee, mockAdminAttendee, mockFreeAttendee]);
+        });
+
+        const res = await service.index({ page: 1, limit: 10 });
+        expect(res.primaryAttendees).toHaveLength(4);
+
+        // Check ONLINE
+        expect(res.primaryAttendees[0].source).toBe('ONLINE');
+        expect(res.primaryAttendees[0].sourceLabel).toBe('ONLINE');
+        expect(res.primaryAttendees[0].sourceSublabel).toBe('Razorpay');
+
+        // Check AGENT
+        expect(res.primaryAttendees[1].source).toBe('AGENT');
+        expect(res.primaryAttendees[1].sourceLabel).toBe('AGENT');
+        expect(res.primaryAttendees[1].agentName).toBe('Ramesh Agent');
+
+        // Check ADMIN
+        expect(res.primaryAttendees[2].source).toBe('ADMIN');
+        expect(res.primaryAttendees[2].sourceLabel).toBe('ADMIN');
+        expect(res.primaryAttendees[2].sourceSublabel).toBe('Admin Entry');
+
+        // Check FREE
+        expect(res.primaryAttendees[3].source).toBe('FREE');
+        expect(res.primaryAttendees[3].sourceLabel).toBe('FREE');
+        expect(res.primaryAttendees[3].sourceSublabel).toBe('Free Pass');
+      });
+
+      it('filters index by source: online', async () => {
+        prisma.attendee.count.mockResolvedValueOnce(0);
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+
+        await service.index({ page: 1, limit: 10, source: 'online' });
+
+        expect(prisma.attendee.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              orderId: { not: null },
+              order: expect.objectContaining({
+                source: { in: ['PUBLIC', 'ONLINE'] },
+                agentId: null,
+              }),
+            }),
+          }),
+        );
+      });
+
+      it('filters index by source: agent', async () => {
+        prisma.attendee.count.mockResolvedValueOnce(0);
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+
+        await service.index({ page: 1, limit: 10, source: 'agent' });
+
+        expect(prisma.attendee.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              orderId: { not: null },
+              order: expect.objectContaining({
+                OR: [
+                  { source: 'AGENT' },
+                  { agentId: { not: null } },
+                ],
+              }),
+            }),
+          }),
+        );
+      });
+
+      it('filters index by source: free', async () => {
+        prisma.attendee.count.mockResolvedValueOnce(0);
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+
+        await service.index({ page: 1, limit: 10, source: 'free' });
+
+        expect(prisma.attendee.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              AND: expect.arrayContaining([
+                expect.objectContaining({
+                  OR: expect.arrayContaining([
+                    { order: { source: 'FREE' } },
+                    { order: { paymentMode: 'COMPLIMENTARY' } },
+                    { order: { unitPricePaise: 0 } },
+                  ]),
+                }),
+              ]),
+            }),
+          }),
+        );
+      });
+
+      it('filters index by source: employee', async () => {
+        prisma.attendee.count.mockResolvedValueOnce(0);
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+
+        await service.index({ page: 1, limit: 10, source: 'employee' });
+
+        expect(prisma.attendee.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              AND: expect.arrayContaining([
+                expect.objectContaining({
+                  OR: [
+                    { employeeId: { not: null } },
+                    { registrationType: RegistrationType.EMPLOYEE },
+                  ],
+                }),
+              ]),
+            }),
+          }),
+        );
+      });
+
+      it('includes Source and Agent Name columns in bulkExport CSV', async () => {
+        const mockAttendee: any = {
+          id: BigInt(500),
+          name: 'Agent Customer',
+          mobile: '9876543210',
+          email: 'customer@test.com',
+          ticketNumber: 'TKT-AGENT-001',
+          category: 'Commercial Pass',
+          orderId: BigInt(50),
+          order: {
+            id: BigInt(50),
+            orderNumber: 'ORD-50',
+            source: 'AGENT',
+            paymentMode: 'OFFLINE',
+            agentId: BigInt(3),
+            agent: { id: BigInt(3), name: 'Deepak Shah', email: 'deepak@agent.com' },
+          },
+          dailyCheckins: [],
+        };
+
+        prisma.attendee.findMany.mockResolvedValueOnce([mockAttendee]);
+
+        const result = await service.bulkExport({ source: 'agent' });
+        expect(result.csv).toContain('Name,Mobile,Email,Ticket ID,Category,Source,Agent Name,Status,Checked In At (IST),Gate');
+        expect(result.csv).toContain('Agent Customer,9876543210,customer@test.com,TKT-AGENT-001,Commercial Pass,AGENT,Deepak Shah,Pending,,');
+      });
+    });
   });
 });

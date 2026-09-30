@@ -193,6 +193,8 @@ export default function CommercialOrdersAuditPage() {
     website: number;
     agent: number;
     employee: number;
+    free?: number;
+    admin?: number;
     checkedIn: number;
     notCheckedIn: number;
   } | null>(null);
@@ -344,7 +346,16 @@ export default function CommercialOrdersAuditPage() {
         });
       }
       if (summaryData) {
-        setPassSummary(summaryData);
+        setPassSummary({
+          total: summaryData.total ?? summaryData.totalPasses ?? 0,
+          website: summaryData.website ?? summaryData.websitePasses ?? 0,
+          agent: summaryData.agent ?? summaryData.agentPasses ?? 0,
+          employee: summaryData.employee ?? summaryData.employeePasses ?? 0,
+          free: summaryData.free ?? summaryData.freePasses ?? 0,
+          admin: summaryData.admin ?? summaryData.adminPasses ?? 0,
+          checkedIn: summaryData.checkedIn ?? summaryData.checkedInPasses ?? 0,
+          notCheckedIn: summaryData.notCheckedIn ?? summaryData.notCheckedInPasses ?? 0,
+        });
       }
       if (res.agentGroups) setAgentGroups(res.agentGroups);
     } catch (err: any) {
@@ -1054,7 +1065,9 @@ export default function CommercialOrdersAuditPage() {
               <div className="text-xs text-stone-500 font-medium">
                 {channelTab === 'AGENT'
                   ? `${hierarchicalAgentGroups.length} Active Agent Groups`
-                  : `Showing ${orders.length} of ${totalOrdersCount} records`}
+                  : channelTab === 'FREE' && orders.length > 0 && orders[0]?.orderNumber?.startsWith('FREE-')
+                  ? `Showing ${orders.length} of ${totalOrdersCount} complimentary passes`
+                  : `Showing ${orders.length} of ${totalOrdersCount} orders`}
               </div>
             )}
           </div>

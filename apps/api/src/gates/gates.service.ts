@@ -222,6 +222,7 @@ export class GatesService {
         gateId: id,
         eventDate: today,
         status: 'SUCCESS',
+        isLoadTest: false,
       },
     });
 
@@ -230,6 +231,7 @@ export class GatesService {
         gateId: id,
         result: { in: ['duplicate', 'ALREADY_CHECKED_IN'] },
         scannedAt: { gte: startOfDay, lte: endOfDay },
+        isLoadTest: false,
       },
     });
 
@@ -238,6 +240,7 @@ export class GatesService {
         gateId: id,
         result: { in: ['invalid', 'INVALID_QR'] },
         scannedAt: { gte: startOfDay, lte: endOfDay },
+        isLoadTest: false,
       },
     });
 
@@ -246,12 +249,14 @@ export class GatesService {
         gateId: id,
         result: { in: ['not_booked', 'NOT_BOOKED_TODAY'] },
         scannedAt: { gte: startOfDay, lte: endOfDay },
+        isLoadTest: false,
       },
     });
 
     const recentLogs = await this.prisma.scanLog.findMany({
       where: {
         gateId: id,
+        isLoadTest: false,
       },
       include: {
         attendee: {
