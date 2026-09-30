@@ -267,12 +267,15 @@ model Attendee {
   // or other family members. Nullable so pre-migration rows fall back to
   // the legacy Employee.bookingDays via resolveBookingDays().
   bookingDays      Json?            @map("booking_days")
+  isLoadTest       Boolean          @default(false) @map("is_load_test")
+  loadTestRunId    BigInt?          @map("load_test_run_id")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
   employee      Employee?        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   familyMember  FamilyMember?    @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
   order         CommercialOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  loadTestRun   LoadTestRun?     @relation(fields: [loadTestRunId], references: [id], onDelete: Cascade)
   dailyCheckins DailyCheckin[]
   scanLogs      ScanLog[]
   incidents     Incident[]
@@ -282,6 +285,8 @@ model Attendee {
   @@index([ticketNumber])
   @@index([qrCodeToken])
   @@index([mobile])
+  @@index([isLoadTest])
+  @@index([loadTestRunId])
   @@map("attendees")
 }
 
@@ -524,12 +529,15 @@ model LoadTestRun {
   requestsPerSecond  Float            @default(0) @map("requests_per_second")
   avgResponseTimeMs  Float            @default(0) @map("avg_response_time_ms")
   bytesTransferred   BigInt           @default(0) @map("bytes_transferred")
+  cleanupStatus      String           @default("PENDING") @map("cleanup_status") @db.VarChar(50)
+  cleanedAt          DateTime?        @map("cleaned_at")
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
 
-  checkins DailyCheckin[]
-  scanLogs ScanLog[]
-  requests LoadTestRequest[]
+  attendees Attendee[]
+  checkins  DailyCheckin[]
+  scanLogs  ScanLog[]
+  requests  LoadTestRequest[]
 
   @@map("load_test_runs")
 }

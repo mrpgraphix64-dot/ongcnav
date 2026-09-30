@@ -82,9 +82,9 @@ export class AttendeesService {
             this.prisma.employee.count(),
             Promise.resolve(0),
             Promise.resolve(0),
-            this.prisma.attendee.count({ where: { orderId: null } }),
-            this.prisma.attendee.count({ where: { category: 'ONGC STAFF' } }),
-            this.prisma.attendee.count({ where: { category: 'FAMILY MEMBER' } }),
+            this.prisma.attendee.count({ where: { orderId: null, isLoadTest: false } }),
+            this.prisma.attendee.count({ where: { category: 'ONGC STAFF', isLoadTest: false } }),
+            this.prisma.attendee.count({ where: { category: 'FAMILY MEMBER', isLoadTest: false } }),
           ])
         : await Promise.all([
             this.prisma.employee.count(),
@@ -95,10 +95,10 @@ export class AttendeesService {
                 paymentMode: { not: 'DEVELOPER_TEST' },
               },
             }),
-            this.prisma.attendee.count({ where: { employeeId: null, orderId: null } }),
-            this.prisma.attendee.count(),
-            this.prisma.attendee.count({ where: { category: 'ONGC STAFF' } }),
-            this.prisma.attendee.count({ where: { category: 'FAMILY MEMBER' } }),
+            this.prisma.attendee.count({ where: { employeeId: null, orderId: null, isLoadTest: false } }),
+            this.prisma.attendee.count({ where: { isLoadTest: false } }),
+            this.prisma.attendee.count({ where: { category: 'ONGC STAFF', isLoadTest: false } }),
+            this.prisma.attendee.count({ where: { category: 'FAMILY MEMBER', isLoadTest: false } }),
           ]);
 
     const metrics = {
@@ -146,6 +146,7 @@ export class AttendeesService {
     // Primary attendees query: whereNull('family_member_id') and not a secondary pass of a commercial order
     const where: any = {
       familyMemberId: null,
+      isLoadTest: false,
     };
 
     if (isEmployeeOnlyStaff) {
@@ -584,6 +585,7 @@ export class AttendeesService {
       userRole === UserRole.EMPLOYEE_ADMIN || userRole === UserRole.REGISTRATION_STAFF;
 
     const where: any = {
+      isLoadTest: false,
       OR: [
         { ticketNumber: { contains: q, mode: 'insensitive' } },
         { name: { contains: q, mode: 'insensitive' } },
@@ -1588,7 +1590,7 @@ export class AttendeesService {
     const isEmployeeOnly =
       userRole === UserRole.EMPLOYEE_ADMIN || userRole === UserRole.REGISTRATION_STAFF;
 
-    const where: any = {};
+    const where: any = { isLoadTest: false };
     if (isEmployeeOnly) {
       where.orderId = null;
       where.employeeId = { not: null };
@@ -1711,9 +1713,14 @@ export class AttendeesService {
     });
 
     const [total, checkedInCount, pendingCount] = await Promise.all([
-      this.prisma.attendee.count(),
-      this.prisma.dailyCheckin.count({ where: { status: 'SUCCESS' } }),
-      this.prisma.attendee.count({ where: { dailyCheckins: { none: {} } } }),
+      this.prisma.attendee.count({ where: { isLoadTest: false } }),
+      this.prisma.dailyCheckin.count({ where: { status: 'SUCCESS', isLoadTest: false } }),
+      this.prisma.attendee.count({
+        where: {
+          isLoadTest: false,
+          dailyCheckins: { none: { isLoadTest: false } },
+        },
+      }),
     ]);
 
     const statuses: Record<string, any> = {};

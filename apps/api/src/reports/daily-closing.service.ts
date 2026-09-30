@@ -36,7 +36,9 @@ export class DailyClosingService {
     const selectedDate = date || activeDate;
 
     // 1. Core Attendee & Booking Counts
-    const attendeeWhere: any = isEmployeeAdmin ? { registrationType: RegistrationType.EMPLOYEE } : {};
+    const attendeeWhere: any = isEmployeeAdmin
+      ? { registrationType: RegistrationType.EMPLOYEE, isLoadTest: false }
+      : { isLoadTest: false };
     const totalRegistered = await this.prisma.attendee.count({ where: attendeeWhere });
     const allAttendees = await this.prisma.attendee.findMany({
       where: attendeeWhere,

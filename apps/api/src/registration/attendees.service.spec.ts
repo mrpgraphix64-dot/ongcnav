@@ -1172,5 +1172,108 @@ Pooja Jain,9872233445,pooja@ongc.co.in,General`;
         expect(prisma.attendee.delete).not.toHaveBeenCalled();
       });
     });
+
+    describe('Load Test Synthetic Attendee Isolation', () => {
+      it('enforces isLoadTest: false across all index metrics and queries', async () => {
+        prisma.employee.count.mockResolvedValueOnce(10);
+        prisma.commercialOrder.count.mockResolvedValueOnce(5);
+        prisma.attendee.count
+          .mockResolvedValueOnce(0) // standaloneCount
+          .mockResolvedValueOnce(15) // totalPeople
+          .mockResolvedValueOnce(10) // staffCount
+          .mockResolvedValueOnce(5) // familyCount
+          .mockResolvedValueOnce(15); // total records for pagination
+
+        prisma.attendee.groupBy.mockResolvedValueOnce([]);
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+
+        const result = await service.index({ page: 1, limit: 10 });
+
+        expect(result.metrics.total_registrations).toBe(15);
+        expect(result.metrics.total_people).toBe(15);
+
+        // Verify standaloneCount filtered by isLoadTest: false
+        expect(prisma.attendee.count).toHaveBeenCalledWith({
+          where: { employeeId: null, orderId: null, isLoadTest: false },
+        });
+
+        // Verify totalPeople filtered by isLoadTest: false
+        expect(prisma.attendee.count).toHaveBeenCalledWith({
+          where: { isLoadTest: false },
+        });
+
+        // Verify staffCount filtered by isLoadTest: false
+        expect(prisma.attendee.count).toHaveBeenCalledWith({
+          where: { category: 'ONGC STAFF', isLoadTest: false },
+        });
+
+        // Verify primary attendees query includes isLoadTest: false
+        expect(prisma.attendee.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              isLoadTest: false,
+              familyMemberId: null,
+            }),
+          }),
+        );
+      });
+
+      it('enforces isLoadTest: false in search queries', async () => {
+        prisma.attendee.count.mockResolvedValueOnce(0);
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+
+        await service.search('Test Query', 1, 20);
+
+        expect(prisma.attendee.count).toHaveBeenCalledWith({
+          where: expect.objectContaining({
+            isLoadTest: false,
+          }),
+        });
+        expect(prisma.attendee.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              isLoadTest: false,
+            }),
+          }),
+        );
+      });
+
+      it('enforces isLoadTest: false in bulkExport', async () => {
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+
+        await service.bulkExport({ search: 'query' });
+
+        expect(prisma.attendee.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              isLoadTest: false,
+            }),
+          }),
+        );
+      });
+
+      it('enforces isLoadTest: false in statusSync counts', async () => {
+        prisma.attendee.findMany.mockResolvedValueOnce([]);
+        prisma.attendee.count
+          .mockResolvedValueOnce(15) // total
+          .mockResolvedValueOnce(5); // pendingCount
+        prisma.dailyCheckin.count.mockResolvedValueOnce(10); // checkedInCount
+
+        await service.statusSync([BigInt(1), BigInt(2)]);
+
+        expect(prisma.attendee.count).toHaveBeenCalledWith({
+          where: { isLoadTest: false },
+        });
+        expect(prisma.dailyCheckin.count).toHaveBeenCalledWith({
+          where: { status: 'SUCCESS', isLoadTest: false },
+        });
+        expect(prisma.attendee.count).toHaveBeenCalledWith({
+          where: {
+            isLoadTest: false,
+            dailyCheckins: { none: { isLoadTest: false } },
+          },
+        });
+      });
+    });
   });
 });

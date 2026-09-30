@@ -71,9 +71,10 @@ export class EventControlService {
       : null;
 
     // 1. Attendees total & booked for today
-    const totalRegistered = await this.prisma.attendee.count();
+    const totalRegistered = await this.prisma.attendee.count({ where: { isLoadTest: false } });
 
     const attendees = await this.prisma.attendee.findMany({
+      where: { isLoadTest: false },
       select: {
         id: true,
         bookingDays: true,

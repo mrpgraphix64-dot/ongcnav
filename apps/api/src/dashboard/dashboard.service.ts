@@ -20,10 +20,10 @@ export class DashboardService {
 
     // Domain condition for attendee queries
     const attendeeDomainWhere: any = isCommercialAdmin
-      ? { registrationType: 'COMMERCIAL' }
+      ? { registrationType: 'COMMERCIAL', isLoadTest: false }
       : isEmployeeAdmin
-      ? { registrationType: 'EMPLOYEE' }
-      : {};
+      ? { registrationType: 'EMPLOYEE', isLoadTest: false }
+      : { isLoadTest: false };
 
     const checkinDomainWhere: any = isCommercialAdmin
       ? { attendee: { registrationType: 'COMMERCIAL' } }

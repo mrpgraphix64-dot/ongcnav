@@ -244,19 +244,22 @@ export class EmployeesService {
       employeePasses,
       checkedInPasses,
     ] = await Promise.all([
-      this.prisma.attendee.count(),
+      this.prisma.attendee.count({ where: { isLoadTest: false } }),
       this.prisma.attendee.count({
         where: {
+          isLoadTest: false,
           order: { source: 'PUBLIC' },
         },
       }),
       this.prisma.attendee.count({
         where: {
+          isLoadTest: false,
           order: { source: 'AGENT' },
         },
       }),
       this.prisma.attendee.count({
         where: {
+          isLoadTest: false,
           OR: [
             { registrationType: RegistrationType.EMPLOYEE },
             { employeeId: { not: null } },
@@ -267,7 +270,8 @@ export class EmployeesService {
       }),
       this.prisma.attendee.count({
         where: {
-          dailyCheckins: { some: {} },
+          isLoadTest: false,
+          dailyCheckins: { some: { isLoadTest: false } },
         },
       }),
     ]);

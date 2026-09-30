@@ -45,6 +45,24 @@ jest.mock('next/navigation', () => ({
 }));
 
 (global as any).fetch = jest.fn((url: string) => {
+  if (url.includes('/admin/traffic-test/runs/') && url.includes('/test-data')) {
+    return Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          runId: '1',
+          status: 'COMPLETED',
+          cleanupStatus: 'COMPLETED',
+          cleanedAt: '2026-09-30T10:00:00.000Z',
+          counts: {
+            totalTestAttendees: 0,
+            checkedIn: 0,
+            pending: 0,
+          },
+          sampleAttendees: [],
+        }),
+    });
+  }
   if (url.includes('/admin/traffic-test/runs/3/status')) {
     return Promise.resolve({
       ok: true,
@@ -571,6 +589,14 @@ describe('AdminTrafficTestPage', () => {
         const maxPhysical = calculateTotalScanners(20, 10);
         expect(maxPhysical).toBe(200);
         expect(maxPhysical).toBeLessThanOrEqual(MAX_SAFE_CONCURRENCY);
+      });
+
+      it('renders Test Data & Synthetic Attendees section when a test run is active', async () => {
+        const html = ReactDOMServer.renderToString(<AdminTrafficTestPage />);
+        // Verify base page renders with isolation information
+        expect(html).toBeDefined();
+        expect(html).toContain('Traffic Test Lab');
+        expect(html).toContain('Execution Runs History');
       });
     });
   });

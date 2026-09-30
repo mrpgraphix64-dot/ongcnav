@@ -18,6 +18,8 @@ describe('TrafficTestController', () => {
       stopRun: jest.fn().mockResolvedValue({ success: true, message: 'Load test run 1 stopped.' }),
       exportCsv: jest.fn().mockResolvedValue('Run ID,Timestamp,Token,Gate ID,Result,Response Time (ms)\r\n"1","2026-09-24T00:00:00.000Z","TOKEN","1","SUCCESS","10"'),
       cleanupRun: jest.fn().mockResolvedValue({ success: true, message: 'Load test run 1 and all associated data purged' }),
+      getRunTestData: jest.fn().mockResolvedValue({ runId: '1', cleanupStatus: 'COMPLETED', counts: { totalTestAttendees: 0, checkedIn: 0, pending: 0 } }),
+      cleanupRunData: jest.fn().mockResolvedValue({ success: true, message: 'Cleaned up test data for Run #1', deletedAttendees: 5 }),
       getVpsStatus: jest.fn().mockResolvedValue({ cpu: { usagePercent: 15, cores: 4 } }),
     };
 
@@ -90,6 +92,18 @@ describe('TrafficTestController', () => {
     const result = await controller.cleanupRun('1');
     expect(result.success).toBe(true);
     expect(service.cleanupRun).toHaveBeenCalledWith(BigInt(1));
+  });
+
+  it('should get run test data', async () => {
+    const data = await controller.getRunTestData('1');
+    expect(data).toBeDefined();
+    expect(service.getRunTestData).toHaveBeenCalledWith(BigInt(1));
+  });
+
+  it('should cleanup run data', async () => {
+    const result = await controller.cleanupRunData('1');
+    expect(result.success).toBe(true);
+    expect(service.cleanupRunData).toHaveBeenCalledWith(BigInt(1));
   });
 
   it('should return vps status', async () => {

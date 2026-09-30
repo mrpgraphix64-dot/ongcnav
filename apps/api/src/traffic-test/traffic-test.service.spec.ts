@@ -4,7 +4,7 @@ import { TrafficTestService } from './traffic-test.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckinService } from '../checkin/checkin.service';
 import { RedisService } from '../redis/redis.service';
-import { LoadTestMode, LoadTestScenario, LoadTestStatus, CheckinResult } from '@ongc/shared-types';
+import { LoadTestMode, LoadTestScenario, LoadTestStatus, LoadTestCleanupStatus, CheckinResult } from '@ongc/shared-types';
 
 describe('TrafficTestService', () => {
   let service: TrafficTestService;
@@ -62,9 +62,11 @@ describe('TrafficTestService', () => {
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       dailyCheckin: {
+        count: jest.fn().mockResolvedValue(0),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       attendee: {
+        count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([{ qrCodeToken: 'ATT_TOKEN_1' }]),
         createMany: jest.fn().mockResolvedValue({ count: 30 }),
         deleteMany: jest.fn().mockResolvedValue({ count: 30 }),
@@ -151,8 +153,22 @@ describe('TrafficTestService', () => {
       const result = await service.cleanupRun(BigInt(1));
       expect(result.success).toBe(true);
       expect(prisma.loadTestRequest.deleteMany).toHaveBeenCalledWith({ where: { runId: BigInt(1) } });
-      expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({ where: { loadTestRunId: BigInt(1) } });
-      expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({ where: { loadTestRunId: BigInt(1) } });
+      expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { isLoadTest: true, loadTestRunId: BigInt(1) },
+            { loadTestRunId: BigInt(1) },
+          ],
+        },
+      });
+      expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { isLoadTest: true, loadTestRunId: BigInt(1) },
+            { loadTestRunId: BigInt(1) },
+          ],
+        },
+      });
       expect(prisma.loadTestRun.delete).toHaveBeenCalledWith({ where: { id: BigInt(1) } });
     });
   });
@@ -423,6 +439,12 @@ describe('TrafficTestService', () => {
 
       it('never deletes historical daily check-ins or real attendees during test execution', async () => {
         const sleepSpy = jest.spyOn(service, 'sleep').mockResolvedValue();
+        const cleanupSpy = jest.spyOn(service, 'performRunDataCleanup').mockResolvedValue({
+          success: true,
+          deletedAttendees: 2,
+          deletedCheckins: 0,
+          deletedScanLogs: 0,
+        });
 
         await service.startTest(
           {
@@ -445,6 +467,7 @@ describe('TrafficTestService', () => {
         expect(prisma.attendee.deleteMany).not.toHaveBeenCalled();
 
         sleepSpy.mockRestore();
+        cleanupSpy.mockRestore();
       });
 
       it('purges run-specific synthetic attendees when cleanupRun is called', async () => {
@@ -453,9 +476,15 @@ describe('TrafficTestService', () => {
 
         expect(prisma.attendee.deleteMany).toHaveBeenCalledWith({
           where: {
-            qrCodeToken: {
-              startsWith: 'LOADTEST-R99-',
-            },
+            OR: [
+              { isLoadTest: true, loadTestRunId: BigInt(99) },
+              { loadTestRunId: BigInt(99) },
+              {
+                qrCodeToken: {
+                  startsWith: 'LOADTEST-R99-',
+                },
+              },
+            ],
           },
         });
       });
@@ -524,6 +553,142 @@ describe('TrafficTestService', () => {
         prisma.$queryRaw = jest.fn().mockRejectedValue(new Error('DB connection lost'));
         const status = await service.getVpsStatus();
         expect(status.services.database.toLowerCase()).toBe('disconnected');
+      });
+    });
+
+    describe('Synthetic Data Isolation & Cleanup Lifecycle', () => {
+      it('performRunDataCleanup deletes test scanLogs, checkins, and attendees using double safety lock', async () => {
+        const runId = BigInt(42);
+        prisma.loadTestRun.update.mockResolvedValueOnce({ id: runId, cleanupStatus: LoadTestCleanupStatus.IN_PROGRESS });
+        prisma.scanLog.deleteMany.mockResolvedValueOnce({ count: 5 });
+        prisma.dailyCheckin.deleteMany.mockResolvedValueOnce({ count: 5 });
+        prisma.attendee.deleteMany.mockResolvedValueOnce({ count: 12 });
+        prisma.loadTestRun.update.mockResolvedValueOnce({ id: runId, cleanupStatus: LoadTestCleanupStatus.COMPLETED });
+
+        const result = await service.performRunDataCleanup(runId);
+
+        expect(result.success).toBe(true);
+        expect(result.deletedAttendees).toBe(12);
+        expect(result.deletedCheckins).toBe(5);
+        expect(result.deletedScanLogs).toBe(5);
+
+        // Verify double safety lock: isLoadTest: true AND loadTestRunId: runId
+        expect(prisma.attendee.deleteMany).toHaveBeenCalledWith({
+          where: {
+            OR: [
+              { isLoadTest: true, loadTestRunId: runId },
+              { loadTestRunId: runId },
+              { qrCodeToken: { startsWith: `LOADTEST-R${runId}-` } },
+            ],
+          },
+        });
+
+        expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+          where: {
+            OR: [
+              { isLoadTest: true, loadTestRunId: runId },
+              { loadTestRunId: runId },
+            ],
+          },
+        });
+
+        expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({
+          where: {
+            OR: [
+              { isLoadTest: true, loadTestRunId: runId },
+              { loadTestRunId: runId },
+            ],
+          },
+        });
+
+        // Verify LoadTestRun status updated to COMPLETED with cleanedAt
+        expect(prisma.loadTestRun.update).toHaveBeenCalledWith({
+          where: { id: runId },
+          data: {
+            cleanupStatus: LoadTestCleanupStatus.COMPLETED,
+            cleanedAt: expect.any(Date),
+          },
+        });
+      });
+
+      it('performRunDataCleanup marks status as FAILED if deletion transaction throws', async () => {
+        const runId = BigInt(43);
+        prisma.loadTestRun.update.mockResolvedValueOnce({ id: runId, cleanupStatus: LoadTestCleanupStatus.IN_PROGRESS });
+        prisma.$transaction.mockRejectedValueOnce(new Error('DB transaction error'));
+        prisma.loadTestRun.update.mockResolvedValueOnce({ id: runId, cleanupStatus: LoadTestCleanupStatus.FAILED });
+
+        await expect(service.performRunDataCleanup(runId)).rejects.toThrow('DB transaction error');
+
+        expect(prisma.loadTestRun.update).toHaveBeenCalledWith({
+          where: { id: runId },
+          data: { cleanupStatus: LoadTestCleanupStatus.FAILED },
+        });
+      });
+
+      it('cleanupRunData rejects cleanup if run is actively RUNNING', async () => {
+        const runId = BigInt(44);
+        prisma.loadTestRun.findUnique.mockResolvedValueOnce({
+          id: runId,
+          status: LoadTestStatus.RUNNING,
+        });
+
+        await expect(service.cleanupRunData(runId)).rejects.toThrow(BadRequestException);
+      });
+
+      it('cleanupRunData succeeds for completed run and returns deleted counts', async () => {
+        const runId = BigInt(45);
+        prisma.loadTestRun.findUnique.mockResolvedValueOnce({
+          id: runId,
+          status: LoadTestStatus.COMPLETED,
+        });
+        prisma.loadTestRun.update.mockResolvedValueOnce({ id: runId, cleanupStatus: LoadTestCleanupStatus.IN_PROGRESS });
+        prisma.scanLog.deleteMany.mockResolvedValueOnce({ count: 2 });
+        prisma.dailyCheckin.deleteMany.mockResolvedValueOnce({ count: 2 });
+        prisma.attendee.deleteMany.mockResolvedValueOnce({ count: 10 });
+        prisma.loadTestRun.update.mockResolvedValueOnce({ id: runId, cleanupStatus: LoadTestCleanupStatus.COMPLETED });
+
+        const result = await service.cleanupRunData(runId);
+
+        expect(result.success).toBe(true);
+        expect(result.deletedAttendees).toBe(10);
+        expect(result.message).toContain('Cleaned up test data for Run #45');
+      });
+
+      it('getRunTestData returns total synthetic attendees, check-in count, pending count, and samples', async () => {
+        const runId = BigInt(46);
+        prisma.loadTestRun.findUnique.mockResolvedValueOnce({
+          id: runId,
+          status: LoadTestStatus.COMPLETED,
+          cleanupStatus: LoadTestCleanupStatus.COMPLETED,
+          cleanedAt: new Date(),
+          startTime: new Date(),
+          endTime: new Date(),
+        });
+
+        prisma.attendee.count.mockResolvedValueOnce(20);
+        prisma.dailyCheckin.count.mockResolvedValueOnce(5);
+        prisma.attendee.findMany.mockResolvedValueOnce([
+          {
+            id: BigInt(101),
+            ticketNumber: 'TK-LT-R46-1',
+            qrCodeToken: 'LOADTEST-R46-1-abc',
+            name: '[LOAD_TEST] Run #46 Attendee 1',
+            category: 'LOAD_TEST',
+            status: 'ACTIVE',
+            bookingDays: ['2026-10-11'],
+            createdAt: new Date(),
+          },
+        ]);
+
+        const data = await service.getRunTestData(runId);
+
+        expect(data.runId).toBe('46');
+        expect(data.cleanupStatus).toBe(LoadTestCleanupStatus.COMPLETED);
+        expect(data.counts.totalTestAttendees).toBe(20);
+        expect(data.counts.checkedIn).toBe(5);
+        expect(data.counts.pending).toBe(15);
+        expect(data.sampleAttendees).toHaveLength(1);
+        expect(data.sampleAttendees[0].ticketNumber).toBe('TK-LT-R46-1');
       });
     });
   });

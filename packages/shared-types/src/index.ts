@@ -156,6 +156,13 @@ export enum LoadTestStatus {
   CANCELLED = 'CANCELLED',
 }
 
+export enum LoadTestCleanupStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
 export enum LoadTestScenario {
   NORMAL = 'NORMAL',
   DUPLICATE = 'DUPLICATE',

@@ -118,6 +118,24 @@ export class TrafficTestController {
     return this.trafficTestService.cleanupRun(BigInt(id));
   }
 
+  @Get('runs/:id/test-data')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get synthetic test attendee status and counts for a run' })
+  async getRunTestData(@Param('id') id: string) {
+    return this.trafficTestService.getRunTestData(BigInt(id));
+  }
+
+  @Post('runs/:id/cleanup-data')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Clean up synthetic test attendees and check-ins while preserving run telemetry' })
+  async cleanupRunData(@Param('id') id: string) {
+    return this.trafficTestService.cleanupRunData(BigInt(id));
+  }
+
   @Post('execute-checkin')
   @ApiOperation({ summary: 'Internal loopback check-in endpoint for real HTTP load testing' })
   async executeCheckin(

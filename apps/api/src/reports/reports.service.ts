@@ -24,7 +24,7 @@ export class ReportsService {
   }
 
   async buildReport(filters?: ReportFilters, userRole?: string) {
-    const attendeeWhere: any = {};
+    const attendeeWhere: any = { isLoadTest: false };
     const scanLogWhere: any = { isLoadTest: false };
 
     const roleUpper = (userRole || '').toUpperCase();

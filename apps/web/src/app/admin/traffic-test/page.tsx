@@ -23,9 +23,12 @@ import {
   Wifi,
   Cpu,
   Network,
+  Database,
+  Users,
+  ChevronDown,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
-import { LoadTestMode, LoadTestScenario, LoadTestStatus } from '@ongc/shared-types';
+import { LoadTestMode, LoadTestScenario, LoadTestStatus, LoadTestCleanupStatus } from '@ongc/shared-types';
 import {
   MIN_GATES,
   MAX_GATES,
@@ -58,6 +61,10 @@ export default function AdminTrafficTestPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [selectedRun, setSelectedRun] = useState<any | null>(null);
+  const [runTestData, setRunTestData] = useState<any | null>(null);
+  const [loadingTestData, setLoadingTestData] = useState(false);
+  const [cleaningUpData, setCleaningUpData] = useState(false);
+  const [showAttendeesList, setShowAttendeesList] = useState(false);
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Form Controls (Physical Scanner Setup)
@@ -360,6 +367,56 @@ export default function AdminTrafficTestPage() {
     window.open(`${apiUrl}/admin/traffic-test/runs/${runId}/export`, '_blank');
   };
 
+  const loadRunTestData = useCallback(async (runId: string) => {
+    try {
+      setLoadingTestData(true);
+      const data = await fetchApi(`/admin/traffic-test/runs/${runId}/test-data`);
+      setRunTestData(data);
+    } catch (err: any) {
+      console.warn('Failed to load run test data:', err);
+    } finally {
+      setLoadingTestData(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedRun?.id) {
+      loadRunTestData(selectedRun.id);
+    } else {
+      setRunTestData(null);
+    }
+  }, [selectedRun?.id, loadRunTestData]);
+
+  const handleCleanupTestData = async (runId: string) => {
+    if (
+      !window.confirm(
+        `Clean up synthetic test attendees, check-ins, and scan logs for Run #${runId}?\n\nThis will remove temporary load test records from the database while preserving all run telemetry, metrics, and CSV request logs.`,
+      )
+    )
+      return;
+
+    try {
+      setCleaningUpData(true);
+      const res = await fetchApi(`/admin/traffic-test/runs/${runId}/cleanup-data`, {
+        method: 'POST',
+      });
+      setMsg({
+        text: `Test data for Run #${runId} cleaned up successfully (${res.deletedAttendees || 0} attendees removed). Run telemetry preserved.`,
+        type: 'success',
+      });
+      await loadRunTestData(runId);
+      const liveStatus = await fetchApi(`/admin/traffic-test/runs/${runId}/status`);
+      if (liveStatus) {
+        setSelectedRun(liveStatus);
+      }
+      await loadData(true);
+    } catch (err: any) {
+      setMsg({ text: err.message || 'Failed to clean up test data', type: 'error' });
+    } finally {
+      setCleaningUpData(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ONGC Official Header Banner */}
@@ -521,6 +578,152 @@ export default function AdminTrafficTestPage() {
               <div className="text-[11px] text-slate-500 font-mono">
                 {selectedRun.isRunning ? 'Active load monitoring' : 'Completed test snapshot'}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Test Data & Synthetic Attendees Isolation Card */}
+      {selectedRun && (
+        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-lg bg-indigo-950/80 border border-indigo-800/40 text-indigo-400">
+                <Database className="w-4 h-4" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-white text-sm">
+                    Test Data & Synthetic Attendees — Run #{selectedRun.id}
+                  </h3>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      (runTestData?.cleanupStatus || selectedRun.cleanupStatus) === 'COMPLETED'
+                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50'
+                        : (runTestData?.cleanupStatus || selectedRun.cleanupStatus) === 'IN_PROGRESS'
+                        ? 'bg-amber-950 text-amber-400 border border-amber-800/50 animate-pulse'
+                        : (runTestData?.cleanupStatus || selectedRun.cleanupStatus) === 'FAILED'
+                        ? 'bg-rose-950 text-rose-400 border border-rose-800/50'
+                        : 'bg-yellow-950 text-yellow-300 border border-yellow-800/50'
+                    }`}
+                  >
+                    {(runTestData?.cleanupStatus || selectedRun.cleanupStatus) === 'COMPLETED'
+                      ? 'Cleaned Up'
+                      : (runTestData?.cleanupStatus || selectedRun.cleanupStatus) === 'IN_PROGRESS'
+                      ? 'Cleaning Up...'
+                      : (runTestData?.cleanupStatus || selectedRun.cleanupStatus) === 'FAILED'
+                      ? 'Cleanup Failed'
+                      : 'Pending Cleanup'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Strictly isolated database records tagged with <code className="text-amber-400 font-mono">is_load_test: true</code>
+                  {runTestData?.cleanedAt && (
+                    <span className="text-slate-500 ml-2">
+                      • Cleaned at {new Date(runTestData.cleanedAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleCleanupTestData(selectedRun.id)}
+                disabled={selectedRun.isRunning || cleaningUpData || (runTestData?.counts?.totalTestAttendees === 0 && runTestData?.cleanupStatus === 'COMPLETED')}
+                className="px-3 py-1.5 rounded-lg bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/50 text-indigo-200 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Purge synthetic attendees, check-ins, and scan logs while keeping telemetry"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {cleaningUpData ? 'Cleaning Up...' : 'Clean Up Test Data'}
+              </button>
+            </div>
+          </div>
+
+          {/* Test Data Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Test Attendees in DB</p>
+              <p className="text-xl font-black text-white mt-1 font-mono">
+                {loadingTestData ? '...' : runTestData?.counts?.totalTestAttendees ?? 0}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {runTestData?.counts?.totalTestAttendees === 0
+                  ? 'All synthetic attendees cleared'
+                  : 'Isolated test records present'}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Simulated Check-ins</p>
+              <p className="text-xl font-black text-emerald-400 mt-1 font-mono">
+                {loadingTestData ? '...' : runTestData?.counts?.checkedIn ?? 0}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Recorded in DailyCheckin table</p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Pending Test Tokens</p>
+              <p className="text-xl font-black text-amber-300 mt-1 font-mono">
+                {loadingTestData ? '...' : runTestData?.counts?.pending ?? 0}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Unused synthetic passes</p>
+            </div>
+          </div>
+
+          {/* Security & Isolation Notice */}
+          <div className="p-3 rounded-xl bg-blue-950/30 border border-blue-900/40 flex items-start gap-2.5 text-xs text-blue-200">
+            <ShieldCheck className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-blue-300 text-[11px]">Strict Operational Data Isolation</p>
+              <p className="text-[11px] text-blue-200/80 leading-relaxed mt-0.5">
+                Synthetic attendees are strictly locked to <span className="font-mono text-amber-300">load_test_run_id = {selectedRun.id}</span> and excluded from the <strong>Attendees & Passes</strong> table, registration counts, staff metrics, commercial totals, reports, and gate turnstiles. Automated cleanup removes them after test completion.
+              </p>
+            </div>
+          </div>
+
+          {/* Expandable Sample Test Attendees Table */}
+          {runTestData?.sampleAttendees && runTestData.sampleAttendees.length > 0 && (
+            <div className="border border-slate-800/80 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowAttendeesList((prev) => !prev)}
+                className="w-full px-4 py-2.5 bg-slate-950/60 hover:bg-slate-950 text-left text-xs font-bold text-slate-300 flex items-center justify-between transition"
+              >
+                <span className="flex items-center gap-2">
+                  <Users className="w-3.5 h-3.5 text-indigo-400" />
+                  Inspect Synthetic Test Tokens ({runTestData.sampleAttendees.length} records shown)
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showAttendeesList ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showAttendeesList && (
+                <div className="max-h-60 overflow-y-auto overflow-x-auto">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-950/90 border-b border-slate-800 text-[10px] text-slate-400 font-bold uppercase">
+                      <tr>
+                        <th className="px-3 py-2">Ticket #</th>
+                        <th className="px-3 py-2">Synthetic Attendee</th>
+                        <th className="px-3 py-2">QR Token (Prefix)</th>
+                        <th className="px-3 py-2">Category</th>
+                        <th className="px-3 py-2">Booking Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40 font-mono">
+                      {runTestData.sampleAttendees.map((att: any) => (
+                        <tr key={att.id} className="hover:bg-slate-800/20">
+                          <td className="px-3 py-1.5 text-slate-300 font-sans">{att.ticketNumber}</td>
+                          <td className="px-3 py-1.5 text-amber-300 font-sans">{att.name}</td>
+                          <td className="px-3 py-1.5 text-slate-400 text-[10px]">{att.qrCodeToken ? att.qrCodeToken.slice(0, 24) + '...' : '—'}</td>
+                          <td className="px-3 py-1.5 text-indigo-300 font-sans">{att.category}</td>
+                          <td className="px-3 py-1.5 text-slate-400">{Array.isArray(att.bookingDays) ? att.bookingDays.join(', ') : att.bookingDays || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1139,20 +1342,50 @@ export default function AdminTrafficTestPage() {
                       <span className="text-rose-400">{r.errorRequests}</span>
                     </td>
                     <td className="px-5 py-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          r.status === LoadTestStatus.COMPLETED
-                            ? 'bg-emerald-950/80 text-emerald-300'
-                            : r.status === LoadTestStatus.RUNNING
-                            ? 'bg-amber-950/80 text-amber-300 animate-pulse'
-                            : 'bg-red-950/80 text-red-300'
-                        }`}
-                      >
-                        {r.status}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            r.status === LoadTestStatus.COMPLETED
+                              ? 'bg-emerald-950/80 text-emerald-300'
+                              : r.status === LoadTestStatus.RUNNING
+                              ? 'bg-amber-950/80 text-amber-300 animate-pulse'
+                              : 'bg-red-950/80 text-red-300'
+                          }`}
+                        >
+                          {r.status}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                            r.cleanupStatus === 'COMPLETED'
+                              ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-800/40'
+                              : r.cleanupStatus === 'IN_PROGRESS'
+                              ? 'text-amber-400 bg-amber-950/40 border border-amber-800/40'
+                              : r.cleanupStatus === 'FAILED'
+                              ? 'text-rose-400 bg-rose-950/40 border border-rose-800/40'
+                              : 'text-slate-400 bg-slate-800/40'
+                          }`}
+                        >
+                          {r.cleanupStatus === 'COMPLETED'
+                            ? 'Cleaned'
+                            : r.cleanupStatus === 'IN_PROGRESS'
+                            ? 'Cleaning...'
+                            : r.cleanupStatus === 'FAILED'
+                            ? 'Cleanup Err'
+                            : 'Pending'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
+                        {r.cleanupStatus !== 'COMPLETED' && r.status !== LoadTestStatus.RUNNING && (
+                          <button
+                            onClick={() => handleCleanupTestData(r.id)}
+                            className="p-1.5 rounded-lg text-indigo-400 hover:text-indigo-200 hover:bg-slate-800 transition"
+                            title="Clean up synthetic attendees (keep telemetry)"
+                          >
+                            <Database className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleExportCsv(r.id)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"

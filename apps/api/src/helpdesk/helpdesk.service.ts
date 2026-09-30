@@ -59,7 +59,7 @@ export class HelpDeskService {
       orConditions.push({ employee: { cpf: { contains: q, mode: 'insensitive' } } });
     }
 
-    const whereClause: any = { OR: orConditions };
+    const whereClause: any = { isLoadTest: false, OR: orConditions };
     if (roleUpper === 'EMPLOYEE_ADMIN') {
       whereClause.registrationType = 'EMPLOYEE';
     }

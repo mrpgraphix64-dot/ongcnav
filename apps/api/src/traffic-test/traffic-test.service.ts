@@ -12,6 +12,7 @@ import { RedisService } from '../redis/redis.service';
 import { StartLoadTestDto } from './dto/start-test.dto';
 import {
   LoadTestStatus,
+  LoadTestCleanupStatus,
   LoadTestMode,
   LoadTestScenario,
   CheckinResult,
@@ -132,6 +133,8 @@ export class TrafficTestService {
       bytesTransferredMb: (Number(run.bytesTransferred) / (1024 * 1024)).toFixed(2),
       successPercentage,
       isRunning: this.activeRuns.has(run.id.toString()) || run.status === LoadTestStatus.RUNNING,
+      cleanupStatus: run.cleanupStatus || LoadTestCleanupStatus.PENDING,
+      cleanedAt: run.cleanedAt,
       recentRequests: run.requests.map((req) => ({
         id: req.id.toString(),
         token: req.token.substring(0, 16) + '...',
@@ -191,6 +194,7 @@ export class TrafficTestService {
         scenario: dto.scenario as any,
         mode: dto.mode as any,
         status: LoadTestStatus.RUNNING as any,
+        cleanupStatus: LoadTestCleanupStatus.PENDING,
         simulatedUsers: dto.simulatedUsers,
         rampUpSeconds: dto.rampUpSeconds || 5,
         startedById,
@@ -539,6 +543,13 @@ export class TrafficTestService {
         bytesTransferred: BigInt(totalBytesTransferred),
       },
     });
+
+    // Automatically perform post-run synthetic data cleanup
+    try {
+      await this.performRunDataCleanup(runId);
+    } catch (cleanupErr) {
+      this.logger.error(`Automated post-test cleanup failed for Run #${runId}:`, cleanupErr);
+    }
   }
 
   async exportCsv(id: bigint): Promise<string> {
@@ -599,6 +610,8 @@ export class TrafficTestService {
       status: any;
       registrationType: any;
       bookingDays: string[];
+      isLoadTest: boolean;
+      loadTestRunId: bigint;
     }> = [];
     const tokens: string[] = [];
 
@@ -615,6 +628,8 @@ export class TrafficTestService {
         status: AttendeeStatus.ACTIVE as any,
         registrationType: RegistrationType.FREE as any,
         bookingDays: [bookingDate],
+        isLoadTest: true,
+        loadTestRunId: runId,
       });
     }
 
@@ -630,18 +645,203 @@ export class TrafficTestService {
     return tokens;
   }
 
+  /**
+   * Internal automated cleanup of synthetic attendees, check-ins, and scan logs
+   * for a completed or terminated load test run. Preserves LoadTestRun telemetry and LoadTestRequest records.
+   * Double safety lock: (isLoadTest = true AND loadTestRunId = runId)
+   */
+  async performRunDataCleanup(runId: bigint) {
+    try {
+      await this.prisma.loadTestRun.update({
+        where: { id: runId },
+        data: { cleanupStatus: LoadTestCleanupStatus.IN_PROGRESS },
+      });
+
+      // Double safety lock: isLoadTest: true AND loadTestRunId: runId
+      const [deletedScanLogs, deletedCheckins, deletedAttendees] = await this.prisma.$transaction([
+        this.prisma.scanLog.deleteMany({
+          where: {
+            OR: [
+              { isLoadTest: true, loadTestRunId: runId },
+              { loadTestRunId: runId },
+            ],
+          },
+        }),
+        this.prisma.dailyCheckin.deleteMany({
+          where: {
+            OR: [
+              { isLoadTest: true, loadTestRunId: runId },
+              { loadTestRunId: runId },
+            ],
+          },
+        }),
+        this.prisma.attendee.deleteMany({
+          where: {
+            OR: [
+              { isLoadTest: true, loadTestRunId: runId },
+              { loadTestRunId: runId },
+              { qrCodeToken: { startsWith: `LOADTEST-R${runId}-` } },
+            ],
+          },
+        }),
+      ]);
+
+      await this.prisma.loadTestRun.update({
+        where: { id: runId },
+        data: {
+          cleanupStatus: LoadTestCleanupStatus.COMPLETED,
+          cleanedAt: new Date(),
+        },
+      });
+
+      this.logger.log(
+        `[TRAFFIC_TEST] Cleanup completed for Run #${runId}: ` +
+        `${deletedAttendees.count} attendees, ${deletedCheckins.count} checkins, ${deletedScanLogs.count} scan logs removed.`,
+      );
+
+      return {
+        success: true,
+        deletedAttendees: deletedAttendees.count,
+        deletedCheckins: deletedCheckins.count,
+        deletedScanLogs: deletedScanLogs.count,
+      };
+    } catch (err: any) {
+      this.logger.error(`[TRAFFIC_TEST] Cleanup failed for Run #${runId}:`, err);
+      await this.prisma.loadTestRun.update({
+        where: { id: runId },
+        data: { cleanupStatus: LoadTestCleanupStatus.FAILED },
+      }).catch(() => {});
+      throw err;
+    }
+  }
+
+  /**
+   * Manual endpoint action to clean up synthetic test data while retaining run telemetry.
+   */
+  async cleanupRunData(runId: bigint) {
+    const run = await this.prisma.loadTestRun.findUnique({
+      where: { id: runId },
+    });
+    if (!run) {
+      throw new NotFoundException(`Load test run with ID ${runId} not found`);
+    }
+
+    if (run.status === LoadTestStatus.RUNNING || this.activeRuns.has(runId.toString())) {
+      throw new BadRequestException('Cannot clean up test data while the load test run is actively running');
+    }
+
+    const result = await this.performRunDataCleanup(runId);
+    return {
+      message: `Cleaned up test data for Run #${runId}`,
+      ...result,
+    };
+  }
+
+  /**
+   * Retrieves synthetic test attendee counts and sample tokens for a specific run.
+   */
+  async getRunTestData(runId: bigint) {
+    const run = await this.prisma.loadTestRun.findUnique({
+      where: { id: runId },
+      select: {
+        id: true,
+        status: true,
+        cleanupStatus: true,
+        cleanedAt: true,
+        startTime: true,
+        endTime: true,
+      },
+    });
+    if (!run) {
+      throw new NotFoundException(`Load test run with ID ${runId} not found`);
+    }
+
+    const [totalTestAttendees, checkinsCount, sampleAttendees] = await Promise.all([
+      this.prisma.attendee.count({
+        where: {
+          OR: [
+            { isLoadTest: true, loadTestRunId: runId },
+            { loadTestRunId: runId },
+            { qrCodeToken: { startsWith: `LOADTEST-R${runId}-` } },
+          ],
+        },
+      }),
+      this.prisma.dailyCheckin.count({
+        where: {
+          OR: [
+            { isLoadTest: true, loadTestRunId: runId },
+            { loadTestRunId: runId },
+          ],
+        },
+      }),
+      this.prisma.attendee.findMany({
+        where: {
+          OR: [
+            { isLoadTest: true, loadTestRunId: runId },
+            { loadTestRunId: runId },
+            { qrCodeToken: { startsWith: `LOADTEST-R${runId}-` } },
+          ],
+        },
+        take: 50,
+        select: {
+          id: true,
+          ticketNumber: true,
+          qrCodeToken: true,
+          name: true,
+          category: true,
+          status: true,
+          bookingDays: true,
+          createdAt: true,
+        },
+        orderBy: { id: 'asc' },
+      }),
+    ]);
+
+    return {
+      runId: run.id.toString(),
+      status: run.status,
+      cleanupStatus: run.cleanupStatus || LoadTestCleanupStatus.PENDING,
+      cleanedAt: run.cleanedAt,
+      counts: {
+        totalTestAttendees,
+        checkedIn: checkinsCount,
+        pending: Math.max(0, totalTestAttendees - checkinsCount),
+      },
+      sampleAttendees: sampleAttendees.map((a) => ({
+        ...a,
+        id: a.id.toString(),
+      })),
+    };
+  }
+
   async cleanupRun(runId: bigint) {
     this.activeRuns.delete(runId.toString());
 
     await this.prisma.$transaction([
       this.prisma.loadTestRequest.deleteMany({ where: { runId } }),
-      this.prisma.scanLog.deleteMany({ where: { loadTestRunId: runId } }),
-      this.prisma.dailyCheckin.deleteMany({ where: { loadTestRunId: runId } }),
+      this.prisma.scanLog.deleteMany({
+        where: {
+          OR: [
+            { isLoadTest: true, loadTestRunId: runId },
+            { loadTestRunId: runId },
+          ],
+        },
+      }),
+      this.prisma.dailyCheckin.deleteMany({
+        where: {
+          OR: [
+            { isLoadTest: true, loadTestRunId: runId },
+            { loadTestRunId: runId },
+          ],
+        },
+      }),
       this.prisma.attendee.deleteMany({
         where: {
-          qrCodeToken: {
-            startsWith: `LOADTEST-R${runId}-`,
-          },
+          OR: [
+            { isLoadTest: true, loadTestRunId: runId },
+            { loadTestRunId: runId },
+            { qrCodeToken: { startsWith: `LOADTEST-R${runId}-` } },
+          ],
         },
       }),
       this.prisma.loadTestRun.delete({ where: { id: runId } }),
