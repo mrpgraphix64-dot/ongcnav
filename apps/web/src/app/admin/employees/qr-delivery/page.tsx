@@ -189,29 +189,6 @@ export default function DailyQrDeliveryPage() {
 
   return (
     <div className="space-y-6">
-      {/* PAGE HEADER */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-stone-200">
-        <div>
-          <h1 className="font-cinzel font-extrabold text-2xl sm:text-3xl text-maroon">
-            DAILY QR PASS DELIVERY
-          </h1>
-          <p className="text-ink-soft text-xs sm:text-sm mt-1">
-            Generate and dispatch unique, date-specific QR entry passes to approved ONGC employees and family members.
-          </p>
-        </div>
-
-        <button
-          onClick={() => {
-            loadStats();
-            loadPasses();
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-bold text-ink shadow-xs transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${statsLoading || passesLoading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
-      </div>
-
       {/* ACTION BANNER */}
       {actionMessage && (
         <div

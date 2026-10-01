@@ -575,9 +575,9 @@ export default function AdminLayout({
     };
   }, [isLoginPage]);
 
-  // Hydrate user safely after mount to prevent React Error #418 (hydration mismatch)
-  const [user, setUser] = useState<AdminUser | null>(() => getStoredAuthUser() as AdminUser | null);
-  const [authChecking, setAuthChecking] = useState(() => !getStoredAuthUser());
+  // User profile and authentication check state (initialized deterministically for SSR to prevent React Error #418)
+  const [user, setUser] = useState<AdminUser | null>(null);
+  const [authChecking, setAuthChecking] = useState(!isLoginPage);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -596,6 +596,13 @@ export default function AdminLayout({
     if (isLoginPage) return;
 
     let isMounted = true;
+
+    // Immediately hydrate session from client storage upon mount (guarantees zero SSR mismatch)
+    const stored = getStoredAuthUser() as AdminUser | null;
+    if (stored) {
+      setUser(stored);
+      setAuthChecking(false);
+    }
 
     async function loadUserProfile() {
       try {
@@ -832,7 +839,7 @@ export default function AdminLayout({
 
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-64 h-full bg-white border-r border-stone-200/70 flex flex-col transition-transform duration-200 lg:static lg:z-auto lg:shrink-0 ${
+          className={`fixed inset-y-0 left-0 z-50 w-64 h-dvh max-h-dvh bg-white border-r border-stone-200/70 flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:shrink-0 lg:h-full ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           }`}
         >
@@ -874,7 +881,7 @@ export default function AdminLayout({
           </Link>
 
           {/* Navigation Links (Strictly Role-Filtered matching Laravel hierarchy) */}
-          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
             {(() => {
               let lastSection: string | undefined = undefined;
               return visibleNavItems.map((item) => {
@@ -939,7 +946,7 @@ export default function AdminLayout({
           </nav>
 
           {/* Sidebar Footer: User Session & Support */}
-          <div className="p-3 border-t border-stone-100 space-y-2 shrink-0">
+          <div className="p-3 border-t border-stone-100 space-y-2 shrink-0 bg-white">
             {/* Authenticated User Quick Info */}
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-cream-soft border border-stone-200/60">
               <div className="flex items-center gap-2 min-w-0">
