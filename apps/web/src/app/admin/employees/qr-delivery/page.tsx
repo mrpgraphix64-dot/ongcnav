@@ -192,15 +192,8 @@ export default function DailyQrDeliveryPage() {
       {/* PAGE HEADER */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-maroon/10 text-maroon border border-maroon/20">
-              EMPLOYEE WORKFLOW
-            </span>
-            <span className="text-xs text-stone-400">&bull;</span>
-            <span className="text-xs text-ink-soft">Daily QR Email Dispatch</span>
-          </div>
-          <h1 className="font-cinzel font-extrabold text-2xl sm:text-3xl text-maroon mt-1">
-            Date-Wise Daily QR Delivery
+          <h1 className="font-cinzel font-extrabold text-2xl sm:text-3xl text-maroon">
+            DAILY QR PASS DELIVERY
           </h1>
           <p className="text-ink-soft text-xs sm:text-sm mt-1">
             Generate and dispatch unique, date-specific QR entry passes to approved ONGC employees and family members.

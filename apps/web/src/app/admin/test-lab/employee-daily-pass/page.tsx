@@ -424,34 +424,34 @@ export default function EmployeeDailyPassTestLabPage() {
   const selectedTheme = getEventDayTheme(selectedEventDate);
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="flex flex-col h-[calc(100vh-6.5rem)] sm:h-[calc(100vh-7rem)] max-h-[calc(100vh-6.5rem)] sm:max-h-[calc(100vh-7rem)] overflow-hidden space-y-3">
       {/* Top Banner & Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gold/30 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gold/30 pb-3 shrink-0">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold font-cinzel text-maroon flex items-center gap-2">
-              <FlaskConical className="w-6 h-6 text-maroon" />
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold font-cinzel text-maroon flex items-center gap-2">
+              <FlaskConical className="w-5 h-5 text-maroon" />
               Employee Daily Pass Test Lab
             </h1>
-            <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider animate-pulse flex items-center gap-1">
+            <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider animate-pulse flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
               TEST MODE
             </span>
           </div>
-          <p className="text-xs text-ink-soft mt-1">
+          <p className="text-[11px] sm:text-xs text-ink-soft mt-0.5">
             Test employee date-specific QR passes, ticket previews, PDFs, email delivery and scanner validation without affecting operational employee data.
           </p>
         </div>
 
         {/* Global Purge Action */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {confirmPurgeAll ? (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 p-1.5 rounded-xl">
-              <span className="text-[11px] font-bold text-red-700 px-2">Purge All Test Data?</span>
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 p-1 rounded-xl">
+              <span className="text-[11px] font-bold text-red-700 px-1.5">Purge All Test Data?</span>
               <button
                 onClick={handleCleanupAll}
                 disabled={cleaningUp}
-                className="px-2.5 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors"
+                className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors"
               >
                 {cleaningUp ? 'Purging...' : 'Yes, Delete All'}
               </button>
@@ -465,7 +465,7 @@ export default function EmployeeDailyPassTestLabPage() {
           ) : (
             <button
               onClick={() => setConfirmPurgeAll(true)}
-              className="px-3.5 py-2 rounded-xl bg-white border border-stone-200 text-stone-600 text-xs font-semibold hover:border-red-400 hover:text-red-700 transition-all flex items-center gap-1.5 shadow-xs"
+              className="px-3 py-1.5 rounded-xl bg-white border border-stone-200 text-stone-600 text-xs font-semibold hover:border-red-400 hover:text-red-700 transition-all flex items-center gap-1.5 shadow-xs"
             >
               <Trash2 className="w-3.5 h-3.5 text-stone-400" />
               <span>Cleanup All Test Data</span>
@@ -477,7 +477,7 @@ export default function EmployeeDailyPassTestLabPage() {
       {/* Global Alerts */}
       {alert && (
         <div
-          className={`p-4 rounded-2xl border text-xs font-medium flex items-center justify-between gap-3 ${
+          className={`p-3 rounded-xl border text-xs font-medium flex items-center justify-between gap-3 shrink-0 ${
             alert.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : 'bg-red-50 border-red-200 text-red-800'
@@ -501,7 +501,7 @@ export default function EmployeeDailyPassTestLabPage() {
       )}
 
       {cleanupMessage && (
-        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between">
+        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between shrink-0">
           <p>{cleanupMessage}</p>
           <button
             onClick={() => setCleanupMessage(null)}
@@ -512,288 +512,290 @@ export default function EmployeeDailyPassTestLabPage() {
         </div>
       )}
 
-      {/* Grid: Left Column Controls, Right Column Live Pass & Scanner */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ================= LEFT COLUMN: STEP 1, STEP 2, STEP 3 ================= */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* STEP 1: SELECT EMPLOYEE */}
-          <div className="bg-white rounded-3xl p-5 border border-stone-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
+      {/* Scrollable Main Content Container */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
+        {/* Grid: Left Column Controls, Right Column Live Pass & Scanner */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* ================= LEFT COLUMN: STEP 1, STEP 2, STEP 3 ================= */}
+          <div className="lg:col-span-5 space-y-4">
+            {/* STEP 1: SELECT EMPLOYEE */}
+            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
+                    1
+                  </span>
+                  Step 1: Select Employee
+                </span>
+                <span className="text-[10px] text-stone-500 font-medium">From existing database</span>
+              </div>
+
+              {/* Search Box */}
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, CPF, or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={searching}
+                  className="px-3 py-1.5 bg-stone-100 text-stone-700 rounded-xl text-xs font-semibold hover:bg-stone-200 transition-colors shrink-0"
+                >
+                  {searching ? 'Searching...' : 'Search'}
+                </button>
+              </form>
+
+              {/* Employee Selector Dropdown / Results */}
+              {employeeResults.length > 0 ? (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase text-stone-500">
+                    Select Registered Employee ({employeeResults.length} found)
+                  </label>
+                  <select
+                    value={selectedEmployee?.id || ''}
+                    onChange={(e) => {
+                      const emp = employeeResults.find((r) => r.id === e.target.value);
+                      if (emp) selectEmployee(emp);
+                    }}
+                    className="w-full p-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
+                  >
+                    {employeeResults.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} &bull; CPF: {emp.cpf} &bull; {emp.department}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <p className="text-xs text-stone-400 italic">No employees found matching query.</p>
+              )}
+
+              {/* Selected Employee Details Card */}
+              {selectedEmployee && (
+                <div className="p-3 bg-cream/50 rounded-xl border border-gold/30 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="font-bold text-ink text-sm">{selectedEmployee.name}</div>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        selectedEmployee.registrationStatus === 'APPROVED'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : selectedEmployee.registrationStatus === 'REJECTED'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {selectedEmployee.registrationStatus}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px] text-stone-600">
+                    <div>CPF: <span className="font-mono font-semibold text-stone-800">{selectedEmployee.cpf}</span></div>
+                    <div>Dept: <span className="font-medium text-stone-800">{selectedEmployee.department}</span></div>
+                    <div className="col-span-2 truncate">Email: <span className="text-stone-800">{selectedEmployee.email}</span></div>
+                    <div className="col-span-2">
+                      Selected Dates: <span className="font-semibold text-maroon">{selectedEmployee.bookingDays.join(', ') || 'None'}</span>
+                    </div>
+                  </div>
+
+                  {/* Sub-Person Selector: Employee or Family Member */}
+                  <div className="pt-2 border-t border-gold/20">
+                    <label className="text-[10px] font-bold uppercase text-stone-500 block mb-1">
+                      Select Test Attendee (Person)
+                    </label>
+                    <div className="space-y-1">
+                      {/* Primary Employee Option */}
+                      {selectedEmployee.attendeeId && (
+                        <label className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-stone-200 cursor-pointer hover:border-maroon/40 text-xs">
+                          <input
+                            type="radio"
+                            name="attendeeSelect"
+                            checked={selectedAttendeeId === selectedEmployee.attendeeId}
+                            onChange={() => {
+                              setSelectedAttendeeId(selectedEmployee.attendeeId!);
+                              setSelectedAttendeeName(`${selectedEmployee.name} (Employee)`);
+                            }}
+                            className="text-maroon focus:ring-maroon"
+                          />
+                          <span className="font-semibold text-ink">{selectedEmployee.name}</span>
+                          <span className="text-[10px] font-bold bg-maroon-soft text-maroon-dark px-1.5 py-0.5 rounded ml-auto">
+                            Self (Employee)
+                          </span>
+                        </label>
+                      )}
+
+                      {/* Family Members Options */}
+                      {selectedEmployee.familyMembers.map((fm) => (
+                        <label
+                          key={fm.id}
+                          className={`flex items-center gap-2 p-1.5 rounded-lg bg-white border border-stone-200 text-xs ${
+                            fm.attendeeId
+                              ? 'cursor-pointer hover:border-maroon/40'
+                              : 'opacity-50 cursor-not-allowed'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="attendeeSelect"
+                            disabled={!fm.attendeeId}
+                            checked={selectedAttendeeId === fm.attendeeId}
+                            onChange={() => {
+                              if (fm.attendeeId) {
+                                setSelectedAttendeeId(fm.attendeeId);
+                                setSelectedAttendeeName(`${fm.name} (${fm.relation})`);
+                              }
+                            }}
+                            className="text-maroon focus:ring-maroon"
+                          />
+                          <span className="font-medium text-ink">{fm.name}</span>
+                          <span className="text-[10px] font-bold bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded ml-auto">
+                            {fm.relation}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* STEP 2: SELECT EVENT DATE */}
+            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-2.5">
               <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
-                  1
+                  2
                 </span>
-                Step 1: Select Employee
+                Step 2: Select Event Date to Test
               </span>
-              <span className="text-[10px] text-stone-500 font-medium">From existing database</span>
-            </div>
 
-            {/* Search Box */}
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search by name, CPF, or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={searching}
-                className="px-3.5 py-2 bg-stone-100 text-stone-700 rounded-xl text-xs font-semibold hover:bg-stone-200 transition-colors shrink-0"
-              >
-                {searching ? 'Searching...' : 'Search'}
-              </button>
-            </form>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-0.5">
+                {OFFICIAL_EVENT_DATES.map((dateStr) => {
+                  const theme = getEventDayTheme(dateStr);
+                  const isSelected = selectedEventDate === dateStr;
 
-            {/* Employee Selector Dropdown / Results */}
-            {employeeResults.length > 0 ? (
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-stone-500">
-                  Select Registered Employee ({employeeResults.length} found)
-                </label>
-                <select
-                  value={selectedEmployee?.id || ''}
-                  onChange={(e) => {
-                    const emp = employeeResults.find((r) => r.id === e.target.value);
-                    if (emp) selectEmployee(emp);
-                  }}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
-                >
-                  {employeeResults.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} &bull; CPF: {emp.cpf} &bull; {emp.department}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <p className="text-xs text-stone-400 italic">No employees found matching query.</p>
-            )}
-
-            {/* Selected Employee Details Card */}
-            {selectedEmployee && (
-              <div className="p-3.5 bg-cream/50 rounded-2xl border border-gold/30 text-xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="font-bold text-ink text-sm">{selectedEmployee.name}</div>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                      selectedEmployee.registrationStatus === 'APPROVED'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : selectedEmployee.registrationStatus === 'REJECTED'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}
-                  >
-                    {selectedEmployee.registrationStatus}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-600">
-                  <div>CPF: <span className="font-mono font-semibold text-stone-800">{selectedEmployee.cpf}</span></div>
-                  <div>Dept: <span className="font-medium text-stone-800">{selectedEmployee.department}</span></div>
-                  <div className="col-span-2 truncate">Email: <span className="text-stone-800">{selectedEmployee.email}</span></div>
-                  <div className="col-span-2">
-                    Selected Dates: <span className="font-semibold text-maroon">{selectedEmployee.bookingDays.join(', ') || 'None'}</span>
-                  </div>
-                </div>
-
-                {/* Sub-Person Selector: Employee or Family Member */}
-                <div className="pt-2 border-t border-gold/20">
-                  <label className="text-[10px] font-bold uppercase text-stone-500 block mb-1.5">
-                    Select Test Attendee (Person)
-                  </label>
-                  <div className="space-y-1.5">
-                    {/* Primary Employee Option */}
-                    {selectedEmployee.attendeeId && (
-                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white border border-stone-200 cursor-pointer hover:border-maroon/40 text-xs">
-                        <input
-                          type="radio"
-                          name="attendeeSelect"
-                          checked={selectedAttendeeId === selectedEmployee.attendeeId}
-                          onChange={() => {
-                            setSelectedAttendeeId(selectedEmployee.attendeeId!);
-                            setSelectedAttendeeName(`${selectedEmployee.name} (Employee)`);
-                          }}
-                          className="text-maroon focus:ring-maroon"
-                        />
-                        <span className="font-semibold text-ink">{selectedEmployee.name}</span>
-                        <span className="text-[10px] font-bold bg-maroon-soft text-maroon-dark px-1.5 py-0.5 rounded ml-auto">
-                          Self (Employee)
-                        </span>
-                      </label>
-                    )}
-
-                    {/* Family Members Options */}
-                    {selectedEmployee.familyMembers.map((fm) => (
-                      <label
-                        key={fm.id}
-                        className={`flex items-center gap-2 p-2 rounded-xl bg-white border border-stone-200 text-xs ${
-                          fm.attendeeId
-                            ? 'cursor-pointer hover:border-maroon/40'
-                            : 'opacity-50 cursor-not-allowed'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="attendeeSelect"
-                          disabled={!fm.attendeeId}
-                          checked={selectedAttendeeId === fm.attendeeId}
-                          onChange={() => {
-                            if (fm.attendeeId) {
-                              setSelectedAttendeeId(fm.attendeeId);
-                              setSelectedAttendeeName(`${fm.name} (${fm.relation})`);
-                            }
-                          }}
-                          className="text-maroon focus:ring-maroon"
-                        />
-                        <span className="font-medium text-ink">{fm.name}</span>
-                        <span className="text-[10px] font-bold bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded ml-auto">
-                          {fm.relation}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* STEP 2: SELECT EVENT DATE */}
-          <div className="bg-white rounded-3xl p-5 border border-stone-200 shadow-xs space-y-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
-                2
-              </span>
-              Step 2: Select Event Date to Test
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-              {OFFICIAL_EVENT_DATES.map((dateStr) => {
-                const theme = getEventDayTheme(dateStr);
-                const isSelected = selectedEventDate === dateStr;
-
-                return (
-                  <button
-                    key={dateStr}
-                    type="button"
-                    onClick={() => setSelectedEventDate(dateStr)}
-                    className={`p-2.5 rounded-2xl border text-left transition-all flex items-center gap-2.5 ${
-                      isSelected
-                        ? 'border-2 shadow-xs'
-                        : 'border-stone-200 hover:border-stone-300 bg-stone-50/50'
-                    }`}
-                    style={{
-                      borderColor: isSelected ? theme.primaryColor : undefined,
-                      backgroundColor: isSelected ? theme.bgColor : undefined,
-                    }}
-                  >
-                    <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0"
+                  return (
+                    <button
+                      key={dateStr}
+                      type="button"
+                      onClick={() => setSelectedEventDate(dateStr)}
+                      className={`p-1.5 sm:p-2 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                        isSelected
+                          ? 'border-2 shadow-xs'
+                          : 'border-stone-200 hover:border-stone-300 bg-stone-50/50'
+                      }`}
                       style={{
-                        backgroundColor: isSelected ? theme.primaryColor : '#E5DDD3',
-                        color: isSelected ? '#FFFFFF' : '#4A3B32',
+                        borderColor: isSelected ? theme.primaryColor : undefined,
+                        backgroundColor: isSelected ? theme.bgColor : undefined,
                       }}
                     >
-                      {theme.dayLabel}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-bold truncate text-ink">
-                        {theme.themeTitle}
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[11px] shrink-0"
+                        style={{
+                          backgroundColor: isSelected ? theme.primaryColor : '#E5DDD3',
+                          color: isSelected ? '#FFFFFF' : '#4A3B32',
+                        }}
+                      >
+                        {theme.dayLabel}
                       </div>
-                      <div className="text-[10px] text-stone-500">
-                        {theme.monthLabel} &bull; {theme.dayOfWeek}
+                      <div className="min-w-0">
+                        <div className="text-[10px] sm:text-[11px] font-bold truncate text-ink">
+                          {theme.themeTitle}
+                        </div>
+                        <div className="text-[9px] text-stone-500">
+                          {theme.monthLabel} &bull; {theme.dayOfWeek}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* STEP 3: GENERATE TEST PASS */}
-          <div className="bg-white rounded-3xl p-5 border border-stone-200 shadow-xs space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
-                3
+            {/* STEP 3: GENERATE TEST PASS */}
+            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
+                  3
+                </span>
+                Step 3: Generate Test Daily Pass
               </span>
-              Step 3: Generate Test Daily Pass
-            </span>
 
-            <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs space-y-1">
-              <p className="text-stone-700">
-                Attendee: <strong className="text-ink">{selectedAttendeeName || 'None'}</strong>
-              </p>
-              <p className="text-stone-700">
-                Target Date: <strong style={{ color: selectedTheme.primaryColor }}>{selectedTheme.fullDateLabel}</strong>
-              </p>
-              <p className="text-[11px] text-stone-500 pt-1">
-                Creates an isolated test <code className="font-mono text-[10px] bg-stone-200 px-1 rounded">DailyEmployeePass</code> record (marked <code className="font-mono text-[10px] bg-amber-100 text-amber-800 px-1 rounded">isTest: true</code>).
-              </p>
+              <div className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-xs space-y-0.5">
+                <p className="text-stone-700">
+                  Attendee: <strong className="text-ink">{selectedAttendeeName || 'None'}</strong>
+                </p>
+                <p className="text-stone-700">
+                  Target Date: <strong style={{ color: selectedTheme.primaryColor }}>{selectedTheme.fullDateLabel}</strong>
+                </p>
+                <p className="text-[10px] text-stone-500 pt-0.5">
+                  Creates an isolated test <code className="font-mono text-[9px] bg-stone-200 px-1 rounded">DailyEmployeePass</code> record (marked <code className="font-mono text-[9px] bg-amber-100 text-amber-800 px-1 rounded">isTest: true</code>).
+                </p>
+              </div>
+
+              <button
+                onClick={handleGeneratePass}
+                disabled={generating || !selectedAttendeeId}
+                className="w-full py-2.5 px-4 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
+              >
+                {generating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Generating Secure Test Pass...</span>
+                  </>
+                ) : (
+                  <>
+                    <QrCode className="w-4 h-4" />
+                    <span>Generate Test Pass</span>
+                  </>
+                )}
+              </button>
             </div>
-
-            <button
-              onClick={handleGeneratePass}
-              disabled={generating || !selectedAttendeeId}
-              className="w-full py-3 px-4 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
-            >
-              {generating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Generating Secure Test Pass...</span>
-                </>
-              ) : (
-                <>
-                  <QrCode className="w-4 h-4" />
-                  <span>Generate Test Pass</span>
-                </>
-              )}
-            </button>
-          </div>
         </div>
 
         {/* ================= RIGHT COLUMN: STEP 4, 5, 6, CLEANUP ================= */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-4">
           {activeTestPass ? (
             <>
               {/* STEP 4: TICKET ACTIONS & PREVIEWS */}
               <div
-                className="bg-white rounded-3xl p-5 border-2 shadow-sm space-y-4"
+                className="bg-white rounded-2xl p-4 border-2 shadow-xs space-y-3"
                 style={{ borderColor: activeTestPass.dayTheme?.secondaryColor || '#C59B27' }}
               >
-                <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-2">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
                       Active Test Pass Session
                     </span>
-                    <h2 className="text-base font-bold font-cinzel text-ink">
+                    <h2 className="text-sm sm:text-base font-bold font-cinzel text-ink">
                       {activeTestPass.attendeeName} &bull; {activeTestPass.dayTheme?.themeTitle}
                     </h2>
                   </div>
-                  <span className="text-[10px] font-mono bg-stone-100 px-2.5 py-1 rounded-lg text-stone-700">
+                  <span className="text-[10px] font-mono bg-stone-100 px-2 py-0.5 rounded text-stone-700">
                     {activeTestPass.testSessionId}
                   </span>
                 </div>
 
                 {/* Pass Metadata Badges */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="p-2.5 bg-stone-50 rounded-xl">
-                    <span className="text-[10px] text-stone-500 uppercase block">Ticket No</span>
-                    <span className="font-mono font-bold text-stone-800 truncate block">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+                  <div className="p-2 bg-stone-50 rounded-lg">
+                    <span className="text-[9px] text-stone-500 uppercase block">Ticket No</span>
+                    <span className="font-mono font-bold text-stone-800 truncate block text-[11px]">
                       {activeTestPass.ticketNumber}
                     </span>
                   </div>
-                  <div className="p-2.5 bg-stone-50 rounded-xl">
-                    <span className="text-[10px] text-stone-500 uppercase block">Authorized Date</span>
-                    <span className="font-semibold text-stone-800 truncate block">
+                  <div className="p-2 bg-stone-50 rounded-lg">
+                    <span className="text-[9px] text-stone-500 uppercase block">Authorized Date</span>
+                    <span className="font-semibold text-stone-800 truncate block text-[11px]">
                       {activeTestPass.dayTheme?.dayLabel} {activeTestPass.dayTheme?.monthLabel}
                     </span>
                   </div>
-                  <div className="p-2.5 bg-stone-50 rounded-xl">
-                    <span className="text-[10px] text-stone-500 uppercase block">Pass Status</span>
+                  <div className="p-2 bg-stone-50 rounded-lg">
+                    <span className="text-[9px] text-stone-500 uppercase block">Pass Status</span>
                     <span
                       className={`font-bold uppercase text-[11px] ${
                         activeTestPass.status === 'ACTIVE'
@@ -806,8 +808,8 @@ export default function EmployeeDailyPassTestLabPage() {
                       {activeTestPass.status}
                     </span>
                   </div>
-                  <div className="p-2.5 bg-stone-50 rounded-xl">
-                    <span className="text-[10px] text-stone-500 uppercase block">Email Status</span>
+                  <div className="p-2 bg-stone-50 rounded-lg">
+                    <span className="text-[9px] text-stone-500 uppercase block">Email Status</span>
                     <span className="font-bold uppercase text-[11px] text-stone-700">
                       {emailStatus}
                     </span>
@@ -815,11 +817,11 @@ export default function EmployeeDailyPassTestLabPage() {
                 </div>
 
                 {/* Action Buttons: View Ticket, Download PDF, Preview Email */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   <Link
                     href={`/employee/daily-pass/${activeTestPass.qrToken}`}
                     target="_blank"
-                    className="py-2.5 px-3 rounded-xl bg-white border border-stone-300 text-stone-800 text-xs font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1.5 shadow-xs"
+                    className="py-2 px-3 rounded-xl bg-white border border-stone-300 text-stone-800 text-xs font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1.5 shadow-xs"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     <span>View Ticket</span>
@@ -829,7 +831,7 @@ export default function EmployeeDailyPassTestLabPage() {
                     href={`${apiBaseUrl}/public/employee/daily-pass/${activeTestPass.qrToken}/pdf`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="py-2.5 px-3 rounded-xl bg-white border border-stone-300 text-stone-800 text-xs font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1.5 shadow-xs"
+                    className="py-2 px-3 rounded-xl bg-white border border-stone-300 text-stone-800 text-xs font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1.5 shadow-xs"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download PDF</span>
@@ -838,7 +840,7 @@ export default function EmployeeDailyPassTestLabPage() {
                   <button
                     onClick={handleOpenEmailPreview}
                     type="button"
-                    className="py-2.5 px-3 rounded-xl bg-maroon-soft text-maroon-dark border border-maroon/20 text-xs font-bold hover:bg-maroon-soft/80 transition-all flex items-center justify-center gap-1.5"
+                    className="py-2 px-3 rounded-xl bg-maroon-soft text-maroon-dark border border-maroon/20 text-xs font-bold hover:bg-maroon-soft/80 transition-all flex items-center justify-center gap-1.5"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span>Preview Email</span>
@@ -847,10 +849,10 @@ export default function EmployeeDailyPassTestLabPage() {
               </div>
 
               {/* STEP 5: TEST EMAIL DISPATCH */}
-              <div className="bg-white rounded-3xl p-5 border border-stone-200 shadow-xs space-y-3">
+              <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                    <Mail className="w-4 h-4 text-maroon" />
+                    <Mail className="w-3.5 h-3.5 text-maroon" />
                     Step 5: Test Email Dispatch
                   </span>
                   <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-full">
@@ -858,7 +860,7 @@ export default function EmployeeDailyPassTestLabPage() {
                   </span>
                 </div>
 
-                <p className="text-[11px] text-stone-500 leading-relaxed">
+                <p className="text-[11px] text-stone-500 leading-tight">
                   Enter an address where you want to receive the test pass. The email will <strong>never</strong> be sent to the employee&apos;s real address.
                 </p>
 
@@ -868,12 +870,12 @@ export default function EmployeeDailyPassTestLabPage() {
                     placeholder="Enter test recipient (e.g. test@example.com)"
                     value={testEmailRecipient}
                     onChange={(e) => setTestEmailRecipient(e.target.value)}
-                    className="flex-1 p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
+                    className="flex-1 p-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
                   />
                   <button
                     onClick={handleSendTestEmail}
                     disabled={sendingEmail || !testEmailRecipient}
-                    className="px-4 py-2.5 bg-maroon text-white text-xs font-bold rounded-xl hover:bg-maroon-dark transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
+                    className="px-3.5 py-2 bg-maroon text-white text-xs font-bold rounded-xl hover:bg-maroon-dark transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
                   >
                     {sendingEmail ? (
                       <>
@@ -891,7 +893,7 @@ export default function EmployeeDailyPassTestLabPage() {
 
                 {emailMessage && (
                   <div
-                    className={`p-2.5 rounded-xl text-xs flex items-center justify-between ${
+                    className={`p-2 rounded-xl text-xs flex items-center justify-between ${
                       emailStatus === 'SENT'
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                         : 'bg-red-50 text-red-800 border border-red-200'
@@ -911,10 +913,10 @@ export default function EmployeeDailyPassTestLabPage() {
               </div>
 
               {/* STEP 6: SCANNER TESTING SUITE */}
-              <div className="bg-white rounded-3xl p-5 border border-stone-200 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                    <ScanLine className="w-4 h-4 text-maroon" />
+                    <ScanLine className="w-3.5 h-3.5 text-maroon" />
                     Step 6: Scanner Turnstile Validation Suite
                   </span>
                   <span className="text-[10px] text-stone-500 font-mono">
@@ -927,38 +929,38 @@ export default function EmployeeDailyPassTestLabPage() {
                 </p>
 
                 {/* 4 Test Buttons */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {/* VALID SCAN */}
                   <button
                     onClick={() => handleScan()}
                     disabled={scanning}
-                    className="p-3 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-2xl text-center transition-colors group"
+                    className="p-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-center transition-colors group"
                   >
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                     <div className="text-xs font-bold text-emerald-900">Valid Scan</div>
-                    <div className="text-[10px] text-emerald-700">Expects SUCCESS</div>
+                    <div className="text-[9px] text-emerald-700">Expects SUCCESS</div>
                   </button>
 
                   {/* DUPLICATE SCAN */}
                   <button
                     onClick={() => handleScan()}
                     disabled={scanning}
-                    className="p-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-2xl text-center transition-colors group"
+                    className="p-2.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-xl text-center transition-colors group"
                   >
-                    <RotateCcw className="w-5 h-5 text-blue-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                    <RotateCcw className="w-4 h-4 text-blue-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                     <div className="text-xs font-bold text-blue-900">Duplicate Scan</div>
-                    <div className="text-[10px] text-blue-700">ALREADY_CHECKED_IN</div>
+                    <div className="text-[9px] text-blue-700">ALREADY_CHECKED_IN</div>
                   </button>
 
                   {/* WRONG DATE SCAN */}
                   <button
                     onClick={() => handleScan(wrongDateTarget)}
                     disabled={scanning}
-                    className="p-3 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-2xl text-center transition-colors group"
+                    className="p-2.5 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-xl text-center transition-colors group"
                   >
-                    <Calendar className="w-5 h-5 text-amber-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                    <Calendar className="w-4 h-4 text-amber-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                     <div className="text-xs font-bold text-amber-900">Wrong Date</div>
-                    <div className="text-[10px] text-amber-700">NOT_BOOKED_TODAY</div>
+                    <div className="text-[9px] text-amber-700">NOT_BOOKED_TODAY</div>
                   </button>
 
                   {/* REVOKE / REVOKED SCAN */}
@@ -966,32 +968,32 @@ export default function EmployeeDailyPassTestLabPage() {
                     <button
                       onClick={() => handleScan()}
                       disabled={scanning}
-                      className="p-3 bg-red-50 border border-red-200 hover:bg-red-100 rounded-2xl text-center transition-colors group"
+                      className="p-2.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-xl text-center transition-colors group"
                     >
-                      <XCircle className="w-5 h-5 text-red-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                      <XCircle className="w-4 h-4 text-red-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                       <div className="text-xs font-bold text-red-900">Scan Revoked</div>
-                      <div className="text-[10px] text-red-700">ATTENDEE_INACTIVE</div>
+                      <div className="text-[9px] text-red-700">ATTENDEE_INACTIVE</div>
                     </button>
                   ) : (
                     <button
                       onClick={handleRevokePass}
                       disabled={scanning}
-                      className="p-3 bg-stone-100 border border-stone-300 hover:bg-red-50 hover:border-red-200 rounded-2xl text-center transition-colors group"
+                      className="p-2.5 bg-stone-100 border border-stone-300 hover:bg-red-50 hover:border-red-200 rounded-xl text-center transition-colors group"
                     >
-                      <XCircle className="w-5 h-5 text-stone-500 group-hover:text-red-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
+                      <XCircle className="w-4 h-4 text-stone-500 group-hover:text-red-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
                       <div className="text-xs font-bold text-stone-800 group-hover:text-red-900">Revoke Pass</div>
-                      <div className="text-[10px] text-stone-500">Sets status REVOKED</div>
+                      <div className="text-[9px] text-stone-500">Sets status REVOKED</div>
                     </button>
                   )}
                 </div>
 
                 {/* Wrong Date Selector for test customization */}
-                <div className="flex items-center gap-2 pt-1 text-xs">
-                  <span className="text-stone-500 text-[11px]">Simulated Wrong Date:</span>
+                <div className="flex items-center gap-2 pt-0.5 text-xs">
+                  <span className="text-stone-500 text-[10px]">Simulated Wrong Date:</span>
                   <select
                     value={wrongDateTarget}
                     onChange={(e) => setWrongDateTarget(e.target.value)}
-                    className="p-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs text-ink"
+                    className="p-1 bg-stone-50 border border-stone-200 rounded-lg text-xs text-ink"
                   >
                     {OFFICIAL_EVENT_DATES.filter((d) => d !== activeTestPass.eventDate).map((d) => (
                       <option key={d} value={d}>
@@ -1003,13 +1005,13 @@ export default function EmployeeDailyPassTestLabPage() {
 
                 {/* Scanner Test Result Card */}
                 {scannerResult && (
-                  <div className="p-4 rounded-2xl bg-stone-900 text-white text-xs space-y-2">
-                    <div className="flex items-center justify-between border-b border-stone-800 pb-2">
-                      <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                  <div className="p-3 rounded-xl bg-stone-900 text-white text-xs space-y-1.5">
+                    <div className="flex items-center justify-between border-b border-stone-800 pb-1.5">
+                      <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wider">
                         Turnstile Scanner API Response
                       </span>
                       <span
-                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                        className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
                           scannerResult.scannerResponse?.result === 'SUCCESS'
                             ? 'bg-emerald-900 text-emerald-300'
                             : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN'
@@ -1021,7 +1023,7 @@ export default function EmployeeDailyPassTestLabPage() {
                       </span>
                     </div>
 
-                    <div className="space-y-1 text-[11px]">
+                    <div className="space-y-0.5 text-[10px]">
                       <p>
                         Status Code:{' '}
                         <strong className="text-stone-300">
@@ -1044,7 +1046,7 @@ export default function EmployeeDailyPassTestLabPage() {
                           {scannerResult.passEventDate}
                         </span>
                       </p>
-                      <p className="text-[10px] text-stone-400 pt-1">
+                      <p className="text-[9px] text-stone-400 pt-0.5">
                         Isolated Test Scan Log Recorded &bull; Operational Metrics Unchanged
                       </p>
                     </div>
@@ -1053,19 +1055,19 @@ export default function EmployeeDailyPassTestLabPage() {
               </div>
 
               {/* CLEANUP THIS TEST SESSION */}
-              <div className="flex items-center justify-between p-4 bg-stone-50 rounded-2xl border border-stone-200">
+              <div className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-200">
                 <div>
                   <span className="text-xs font-bold text-stone-800 block">
                     Cleanup Session {activeTestPass.testSessionId}
                   </span>
-                  <span className="text-[11px] text-stone-500">
+                  <span className="text-[10px] text-stone-500">
                     Deletes only this session&apos;s test pass, simulated checkins, and scan logs.
                   </span>
                 </div>
                 <button
                   onClick={handleCleanupSession}
                   disabled={cleaningUp}
-                  className="px-3 py-2 bg-white border border-stone-300 text-stone-700 text-xs font-semibold rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors shadow-xs"
+                  className="px-3 py-1.5 bg-white border border-stone-300 text-stone-700 text-xs font-semibold rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors shadow-xs"
                 >
                   {cleaningUp ? 'Cleaning...' : 'Cleanup This Test'}
                 </button>
@@ -1073,11 +1075,11 @@ export default function EmployeeDailyPassTestLabPage() {
             </>
           ) : (
             /* Empty State */
-            <div className="bg-white rounded-3xl p-12 border border-stone-200 shadow-xs text-center space-y-4">
-              <div className="w-16 h-16 bg-cream text-maroon rounded-full flex items-center justify-center mx-auto border border-gold/30">
-                <QrCode className="w-8 h-8" />
+            <div className="bg-white rounded-2xl p-8 border border-stone-200 shadow-xs text-center space-y-3">
+              <div className="w-12 h-12 bg-cream text-maroon rounded-full flex items-center justify-center mx-auto border border-gold/30">
+                <QrCode className="w-6 h-6" />
               </div>
-              <h3 className="font-cinzel font-bold text-lg text-ink">
+              <h3 className="font-cinzel font-bold text-base text-ink">
                 No Active Test Pass Session
               </h3>
               <p className="text-xs text-stone-500 max-w-sm mx-auto">
@@ -1087,6 +1089,7 @@ export default function EmployeeDailyPassTestLabPage() {
           )}
         </div>
       </div>
+    </div>
 
       {/* ================= EMAIL PREVIEW MODAL ================= */}
       {previewModalOpen && (
