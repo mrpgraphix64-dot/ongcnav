@@ -1,24 +1,32 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RegistrationController } from './registration.controller';
 import { RegistrationService } from './registration.service';
+import { DailyPassPdfService } from './daily-pass-pdf.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 describe('RegistrationController', () => {
   let controller: RegistrationController;
   let service: any;
+  let pdfService: any;
 
   beforeEach(async () => {
     service = {
       register: jest.fn().mockResolvedValue({ success: true }),
       findTicketByToken: jest.fn(),
+      findDailyPassByToken: jest.fn(),
       findByCpf: jest.fn(),
       getMaintenanceStatus: jest.fn().mockResolvedValue({ maintenance: false }),
+    };
+
+    pdfService = {
+      generateDailyPassPdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 test')),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RegistrationController],
       providers: [
         { provide: RegistrationService, useValue: service },
+        { provide: DailyPassPdfService, useValue: pdfService },
         {
           provide: PrismaService,
           useValue: {
@@ -105,6 +113,32 @@ describe('RegistrationController', () => {
     const result = await controller.getMyRegistration('123456', '3210');
     expect(result.employee.cpf).toBe('123456');
     expect(service.findByCpf).toHaveBeenCalledWith('123456', '3210');
+  });
+
+  it('getDailyPass delegates to findDailyPassByToken with token and IP', async () => {
+    service.findDailyPassByToken.mockResolvedValue({ token: 'daily-tok-1', ticketNumber: 'TK-DAILY-1' });
+    const mockReq = { headers: { 'x-forwarded-for': '1.2.3.4' } } as any;
+
+    const result = await controller.getDailyPass('daily-tok-1', mockReq);
+    expect(result.ticketNumber).toBe('TK-DAILY-1');
+    expect(service.findDailyPassByToken).toHaveBeenCalledWith('daily-tok-1', '1.2.3.4');
+  });
+
+  it('downloadDailyPassPdf streams generated PDF buffer with correct headers', async () => {
+    const mockRes = {
+      setHeader: jest.fn(),
+      end: jest.fn(),
+    } as any;
+
+    await controller.downloadDailyPassPdf('daily-tok-12345678', mockRes);
+
+    expect(pdfService.generateDailyPassPdf).toHaveBeenCalledWith('daily-tok-12345678');
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'application/pdf');
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Content-Disposition',
+      expect.stringContaining('ONGC-Pass-daily-to.pdf'),
+    );
+    expect(mockRes.end).toHaveBeenCalledWith(expect.any(Buffer));
   });
 
   it('does not expose a direct commercial registration route (payment bypass removed)', () => {

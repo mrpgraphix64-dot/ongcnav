@@ -36,6 +36,22 @@ export interface CommercialTicketEmailData {
   subject?: string;
 }
 
+export interface EmployeeDailyPassEmailData {
+  recipientEmail: string;
+  employeeName: string;
+  attendeeName: string;
+  relation: string;
+  eventDate: string; // YYYY-MM-DD
+  ticketNumber: string;
+  qrToken: string;
+  cpf?: string;
+  department?: string;
+  pdfBuffer?: Buffer;
+  viewTicketUrl?: string;
+  downloadPdfUrl?: string;
+  subjectOverride?: string;
+}
+
 export interface MailSendResult {
   success: boolean;
   messageId?: string;

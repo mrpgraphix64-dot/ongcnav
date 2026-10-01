@@ -44,6 +44,9 @@ interface EmployeeItem {
   mobile: string;
   email: string;
   employeeCategory?: string;
+  registrationStatus?: string;
+  photoPath?: string | null;
+  hasPhoto?: boolean;
   bookingDays?: string[];
   registrationDate: string;
   ticketNumber: string;
@@ -59,6 +62,41 @@ interface EmployeeItem {
     gateName: string;
     checkinTime: string;
   } | null;
+}
+
+interface EmployeeDetailData {
+  id: string;
+  cpf: string;
+  name: string;
+  designation: string;
+  department: string;
+  phone: string;
+  email: string;
+  employeeCategory: string;
+  registrationStatus: string;
+  photoPath: string | null;
+  hasPhoto: boolean;
+  bookingDays: string[];
+  createdAt: string;
+  familyMembers: Array<{
+    id: string;
+    name: string;
+    relation: string;
+    age?: number;
+    gender?: string;
+    phone: string;
+    photoPath: string | null;
+    hasPhoto: boolean;
+  }>;
+  attendees: Array<{
+    id: string;
+    ticketNumber: string;
+    status: string;
+    attendeeName: string;
+    relation: string;
+    bookingDays: string[];
+    photoPath: string | null;
+  }>;
 }
 
 interface PassSummary {
@@ -137,6 +175,67 @@ export default function AdminEmployeesPage() {
   const [passData, setPassData] = useState<EmployeePassData | null>(null);
   const [passLoading, setPassLoading] = useState(false);
   const [selectedPassIndex, setSelectedPassIndex] = useState<number>(0); // 0 = primary, 1..n = family
+
+  // Details Modal & Actions
+  const [detailEmployee, setDetailEmployee] = useState<EmployeeDetailData | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  const handleViewDetails = async (id: string) => {
+    setDetailLoading(true);
+    try {
+      const data = await fetchApi<EmployeeDetailData>(`/admin/employees/${id}`);
+      setDetailEmployee(data);
+    } catch (err: any) {
+      alert(err.message || 'Failed to load employee details');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    setProcessingId(id);
+    setActionSuccess(null);
+    try {
+      const res = await fetchApi<{ success: boolean; message: string }>(`/admin/employees/${id}/approve`, {
+        method: 'POST',
+      });
+      setActionSuccess(res.message || 'Registration approved.');
+      if (detailEmployee && detailEmployee.id === id) {
+        setDetailEmployee((prev) => (prev ? { ...prev, registrationStatus: 'APPROVED' } : null));
+      }
+      await loadEmployees();
+      await loadSummary();
+    } catch (err: any) {
+      alert(err.message || 'Failed to approve registration');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    if (!confirm('Are you sure you want to reject this employee registration? Linked passes will be revoked.')) {
+      return;
+    }
+    setProcessingId(id);
+    setActionSuccess(null);
+    try {
+      const res = await fetchApi<{ success: boolean; message: string }>(`/admin/employees/${id}/reject`, {
+        method: 'POST',
+      });
+      setActionSuccess(res.message || 'Registration rejected.');
+      if (detailEmployee && detailEmployee.id === id) {
+        setDetailEmployee((prev) => (prev ? { ...prev, registrationStatus: 'REJECTED' } : null));
+      }
+      await loadEmployees();
+      await loadSummary();
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject registration');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   // Load Pass Summary
   const loadSummary = useCallback(async () => {
@@ -394,9 +493,12 @@ export default function AdminEmployeesPage() {
                 className="bg-transparent border-none text-xs font-bold text-ink focus:outline-none cursor-pointer"
               >
                 <option value="ALL">All Status</option>
-                <option value="ACTIVE">Active</option>
-                <option value="SUSPENDED">Suspended</option>
-                <option value="REVOKED">Revoked</option>
+                <option value="PENDING">Pending Review</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="ACTIVE">Pass Active</option>
+                <option value="SUSPENDED">Pass Suspended</option>
+                <option value="REVOKED">Pass Revoked</option>
               </select>
             </div>
 
@@ -442,6 +544,7 @@ export default function AdminEmployeesPage() {
                 <th className="py-3.5 px-4 font-bold">CPF / ID</th>
                 <th className="py-3.5 px-4 font-bold">Mobile &amp; Email</th>
                 <th className="py-3.5 px-4 font-bold">Department</th>
+                <th className="py-3.5 px-4 font-bold">Registration</th>
                 <th className="py-3.5 px-4 font-bold">Pass Type</th>
                 <th className="py-3.5 px-4 font-bold">Pass Status</th>
                 <th className="py-3.5 px-4 font-bold">Check-in Status</th>
@@ -452,14 +555,14 @@ export default function AdminEmployeesPage() {
             <tbody className="divide-y divide-stone-100">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-ink-soft">
+                  <td colSpan={10} className="py-12 text-center text-ink-soft">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto text-maroon mb-2" />
                     <span>Loading employee passes...</span>
                   </td>
                 </tr>
               ) : employees.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-ink-soft">
+                  <td colSpan={10} className="py-12 text-center text-ink-soft">
                     <Users className="w-8 h-8 text-stone-300 mx-auto mb-2" />
                     <p className="font-semibold text-ink text-sm">No employee records found</p>
                     <p className="text-xs text-ink-soft mt-1">
@@ -510,6 +613,25 @@ export default function AdminEmployeesPage() {
                     {/* Department */}
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-ink">{emp.department || 'ONGC'}</div>
+                    </td>
+
+                    {/* Registration Status */}
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border ${
+                          emp.registrationStatus === 'APPROVED'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : emp.registrationStatus === 'REJECTED'
+                            ? 'bg-rose-50 text-rose-800 border-rose-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}
+                      >
+                        {emp.registrationStatus === 'APPROVED'
+                          ? 'Approved'
+                          : emp.registrationStatus === 'REJECTED'
+                          ? 'Rejected'
+                          : 'Pending Review'}
+                      </span>
                     </td>
 
                     {/* Pass Type */}
@@ -577,15 +699,50 @@ export default function AdminEmployeesPage() {
 
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenPass(emp.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-maroon/10 text-maroon hover:bg-maroon hover:text-white font-bold text-xs transition-colors cursor-pointer"
-                        title="View Official E-Pass"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View E-Pass</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {emp.registrationStatus === 'PENDING' && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={processingId === emp.id}
+                              onClick={() => handleApprove(emp.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-600 hover:text-white border border-emerald-300 font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                              title="Approve Employee Registration"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Approve</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={processingId === emp.id}
+                              onClick={() => handleReject(emp.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 text-rose-800 hover:bg-rose-600 hover:text-white border border-rose-300 font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                              title="Reject Employee Registration"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>Reject</span>
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleViewDetails(emp.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700 hover:bg-stone-200 font-bold text-[11px] transition-colors cursor-pointer"
+                          title="View Registration Details"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>Details</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPass(emp.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-maroon/10 text-maroon hover:bg-maroon hover:text-white font-bold text-[11px] transition-colors cursor-pointer"
+                          title="View Official E-Pass"
+                        >
+                          <Ticket className="w-3 h-3" />
+                          <span>Pass</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -703,6 +860,176 @@ export default function AdminEmployeesPage() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        ) : null}
+      </AdminModal>
+
+      {/* REGISTRATION REVIEW DETAILS MODAL */}
+      <AdminModal
+        isOpen={Boolean(detailEmployee)}
+        onClose={() => setDetailEmployee(null)}
+        title="Employee Registration Review"
+        subtitle={detailEmployee ? `${detailEmployee.name} (CPF: ${detailEmployee.cpf})` : 'Loading...'}
+        icon={<Users className="w-5 h-5 text-maroon" />}
+        maxWidth="2xl"
+      >
+        {detailLoading ? (
+          <div className="py-16 text-center text-ink-soft space-y-3">
+            <RefreshCw className="w-8 h-8 animate-spin text-maroon mx-auto" />
+            <p className="text-sm font-semibold">Loading registration details...</p>
+          </div>
+        ) : detailEmployee ? (
+          <div className="space-y-6">
+            {/* Status & Review Action Bar */}
+            <div className="p-4 rounded-2xl bg-cream-light border border-stone-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-ink">Status:</span>
+                <span
+                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide border ${
+                    detailEmployee.registrationStatus === 'APPROVED'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : detailEmployee.registrationStatus === 'REJECTED'
+                      ? 'bg-rose-50 text-rose-800 border-rose-300'
+                      : 'bg-amber-50 text-amber-800 border-amber-300'
+                  }`}
+                >
+                  {detailEmployee.registrationStatus === 'APPROVED'
+                    ? 'Approved'
+                    : detailEmployee.registrationStatus === 'REJECTED'
+                    ? 'Rejected'
+                    : 'Pending Admin Review'}
+                </span>
+              </div>
+
+              {detailEmployee.registrationStatus === 'PENDING' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={processingId === detailEmployee.id}
+                    onClick={() => handleApprove(detailEmployee.id)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Approve Registration</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={processingId === detailEmployee.id}
+                    onClick={() => handleReject(detailEmployee.id)}
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Reject</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Employee Information Card */}
+            <div className="p-5 rounded-2xl bg-white border border-stone-200/80 shadow-xs flex flex-col sm:flex-row gap-4 items-start">
+              {detailEmployee.photoPath ? (
+                <img
+                  src={detailEmployee.photoPath}
+                  alt={detailEmployee.name}
+                  className="w-24 h-24 rounded-2xl object-cover border-2 border-gold/40 shadow-sm shrink-0"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-2xl bg-maroon-soft text-maroon flex items-center justify-center border border-maroon/20 shrink-0">
+                  <User className="w-10 h-10" />
+                </div>
+              )}
+
+              <div className="flex-1 space-y-1.5 text-xs text-ink">
+                <div className="font-outfit font-black text-lg text-ink">{detailEmployee.name}</div>
+                <div className="text-ink-soft">
+                  CPF: <strong className="font-mono text-maroon font-bold text-sm">{detailEmployee.cpf}</strong> &bull; {detailEmployee.designation} &bull; {detailEmployee.department}
+                </div>
+                <div className="text-ink-soft">
+                  Mobile: <strong>{detailEmployee.phone}</strong> &bull; Email: <strong>{detailEmployee.email}</strong>
+                </div>
+                <div className="text-[11px] text-stone-500 pt-1">
+                  Category: <span className="font-semibold text-ink">{detailEmployee.employeeCategory}</span> &bull; Submitted: {new Date(detailEmployee.createdAt).toLocaleString('en-IN')}
+                </div>
+
+                {/* Selected Dates */}
+                <div className="pt-2">
+                  <div className="text-[11px] font-bold text-ink-soft uppercase tracking-wider mb-1">
+                    Employee Attendance Dates ({detailEmployee.bookingDays.length}):
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detailEmployee.bookingDays.map((d) => (
+                      <span key={d} className="px-2 py-0.5 rounded-md bg-stone-100 border border-stone-200 text-[11px] font-mono font-semibold">
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Family Members Section */}
+            <div className="space-y-3">
+              <h3 className="font-outfit font-bold text-sm text-ink flex items-center gap-2">
+                <Users className="w-4 h-4 text-maroon" />
+                <span>Registered Family Members ({detailEmployee.familyMembers.length})</span>
+              </h3>
+
+              {detailEmployee.familyMembers.length === 0 ? (
+                <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 text-xs text-ink-soft text-center">
+                  No family members registered. Attending as a single attendee.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {detailEmployee.familyMembers.map((fam) => {
+                    const famAttendee = detailEmployee.attendees.find((a) => a.attendeeName === fam.name);
+                    const famDates = famAttendee?.bookingDays || detailEmployee.bookingDays;
+                    return (
+                      <div key={fam.id} className="p-4 rounded-xl bg-cream-light/60 border border-stone-200 flex gap-3 items-start">
+                        {fam.photoPath ? (
+                          <img
+                            src={fam.photoPath}
+                            alt={fam.name}
+                            className="w-14 h-14 rounded-xl object-cover border border-gold/40 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-xl bg-maroon-soft text-maroon flex items-center justify-center shrink-0">
+                            <User className="w-6 h-6" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0 text-xs space-y-1">
+                          <div className="font-bold text-ink truncate">{fam.name}</div>
+                          <div className="text-[11px] text-maroon font-semibold">
+                            {fam.relation} {fam.age ? `• ${fam.age} yrs` : ''} {fam.gender ? `• ${fam.gender}` : ''}
+                          </div>
+                          <div className="text-[11px] text-ink-soft">Mobile: {fam.phone}</div>
+                          <div className="pt-1">
+                            <span className="text-[10px] text-stone-500 font-bold block mb-0.5">Dates:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {famDates.map((d) => (
+                                <span key={d} className="px-1.5 py-0.5 bg-white border border-stone-200 rounded text-[10px] font-mono">
+                                  {d.slice(5)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Close Button */}
+            <div className="pt-3 border-t border-stone-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDetailEmployee(null)}
+                className="px-5 py-2 rounded-xl bg-stone-200 text-stone-800 text-xs font-bold hover:bg-stone-300 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         ) : null}

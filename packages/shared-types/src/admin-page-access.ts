@@ -125,6 +125,13 @@ export const EMPLOYEE_ADMIN_PAGE_PERMISSIONS: PagePermissionDefinition[] = [
     domain: 'employee',
     routes: ['/admin/helpdesk', '/admin/help-desk', '/admin/daily-closing'],
   },
+  {
+    key: 'employee.qr_delivery',
+    label: 'QR Pass Delivery',
+    description: 'Trigger and monitor date-wise daily employee QR pass generation and email delivery',
+    domain: 'employee',
+    routes: ['/admin/employees/qr-delivery'],
+  },
 ];
 
 export const E_PASS_ADMIN_PAGE_KEYS = E_PASS_ADMIN_PAGE_PERMISSIONS.map((p) => p.key);
@@ -196,6 +203,7 @@ export const DOMAIN_PAGE_ROUTES: Record<AdminDomain, string[]> = {
   ],
   employee: [
     '/admin/employees',
+    '/admin/employees/qr-delivery',
     '/admin/attendees',
     '/admin/bulk-upload',
     '/admin/employee',
@@ -213,6 +221,7 @@ export const DOMAIN_PAGE_ROUTES: Record<AdminDomain, string[]> = {
     '/admin/staff',
     '/admin/settings',
     '/admin/traffic-test',
+    '/admin/test-lab/employee-daily-pass',
   ],
 };
 
@@ -257,7 +266,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/event-control') ||
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
-      cleanPath.startsWith('/admin/traffic-test')
+      cleanPath.startsWith('/admin/traffic-test') ||
+      cleanPath.startsWith('/admin/test-lab')
     ) {
       return false;
     }
@@ -305,7 +315,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/event-control') ||
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
-      cleanPath.startsWith('/admin/traffic-test')
+      cleanPath.startsWith('/admin/traffic-test') ||
+      cleanPath.startsWith('/admin/test-lab')
     ) {
       return false;
     }
@@ -315,6 +326,9 @@ export function isRoutePermittedForRole(
 
     if (cleanPath === '/admin' || cleanPath === '/admin/employee') {
       return perms.includes('employee.dashboard');
+    }
+    if (cleanPath.startsWith('/admin/employees/qr-delivery')) {
+      return perms.includes('employee.qr_delivery') || perms.includes('employee.attendees');
     }
     if (cleanPath.startsWith('/admin/attendees') || cleanPath.startsWith('/admin/employees')) {
       return perms.includes('employee.attendees') || perms.includes('employee.family_passes');
@@ -338,7 +352,11 @@ export function isRoutePermittedForRole(
 
   // 4. EVENT_ADMIN / ADMIN
   if (role === 'EVENT_ADMIN' || role === 'ADMIN') {
-    if (cleanPath.startsWith('/admin/commercial') || cleanPath.startsWith('/agent')) {
+    if (
+      cleanPath.startsWith('/admin/commercial') ||
+      cleanPath.startsWith('/agent') ||
+      cleanPath.startsWith('/admin/test-lab')
+    ) {
       return false;
     }
     return (

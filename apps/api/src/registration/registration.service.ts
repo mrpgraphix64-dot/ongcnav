@@ -12,9 +12,14 @@ import { RedisService } from '../redis/redis.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
 import {
   AttendeeStatus,
+  RegistrationStatus,
   RegistrationType,
   SETTING_MAINTENANCE_MODE,
   isMaintenanceModeActive,
+  isOfficialEventDate,
+  getEventDayTheme,
+  EventDayTheme,
+  PublicDailyPassResponseDto,
 } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
@@ -63,6 +68,31 @@ export class RegistrationService {
       throw new BadRequestException('Cannot register as non-employee via employee registration.');
     }
 
+    if (!Array.isArray(dto.bookingDays) || dto.bookingDays.length === 0) {
+      throw new BadRequestException('Please select at least one attendance date.');
+    }
+    for (const d of dto.bookingDays) {
+      if (!isOfficialEventDate(d)) {
+        throw new BadRequestException(`Invalid event date selected: ${d}`);
+      }
+    }
+
+    if (dto.familyMembers && dto.familyMembers.length > 6) {
+      throw new BadRequestException('A maximum of 6 family members can be registered.');
+    }
+
+    if (dto.familyMembers) {
+      for (const fam of dto.familyMembers) {
+        if (fam.bookingDays && Array.isArray(fam.bookingDays) && fam.bookingDays.length > 0) {
+          for (const d of fam.bookingDays) {
+            if (!isOfficialEventDate(d)) {
+              throw new BadRequestException(`Invalid event date selected for family member ${fam.name}: ${d}`);
+            }
+          }
+        }
+      }
+    }
+
     const cleanCpf = dto.cpf.trim().toUpperCase();
 
     // Check if employee already registered
@@ -99,6 +129,7 @@ export class RegistrationService {
           email: dto.email.trim().toLowerCase(),
           photoPath: photoPath || null,
           employeeCategory: dto.employeeCategory as any,
+          registrationStatus: RegistrationStatus.PENDING as any,
           // Legacy/summary value — the employee's OWN dates only, kept for
           // backward-compatible reads that haven't moved to
           // resolveBookingDays() yet. Not used for check-in gating anymore.
@@ -106,8 +137,7 @@ export class RegistrationService {
         },
       });
 
-      // Create attendee for employee, with their own bookingDays — this is
-      // the real, authoritative source check-in reads from.
+      // Create attendee for employee, with their own bookingDays and PENDING status
       const employeeAttendee = await tx.attendee.create({
         data: {
           registrationType: RegistrationType.EMPLOYEE as any,
@@ -115,7 +145,7 @@ export class RegistrationService {
           email: dto.email.trim().toLowerCase(),
           ticketNumber: employeeTicketNumber,
           qrCodeToken: employeeQrToken,
-          status: AttendeeStatus.ACTIVE as any,
+          status: AttendeeStatus.PENDING as any,
           bookingDays: dto.bookingDays,
         },
       });
@@ -128,6 +158,11 @@ export class RegistrationService {
           const famToken = this.generateSecureQrToken();
           const famTicketNumber = this.generateTicketNumber(cleanCpf, i);
           const famPhotoPath = familyPhotoPaths?.[i];
+
+          const famBookingDays =
+            Array.isArray(famDto.bookingDays) && famDto.bookingDays.length > 0
+              ? famDto.bookingDays
+              : dto.bookingDays;
 
           const familyMember = await tx.familyMember.create({
             data: {
@@ -148,10 +183,10 @@ export class RegistrationService {
               familyMemberId: familyMember.id,
               ticketNumber: famTicketNumber,
               qrCodeToken: famToken,
-              status: AttendeeStatus.ACTIVE as any,
+              status: AttendeeStatus.PENDING as any,
               // This family member's OWN dates — independent of the
               // employee and every other family member.
-              bookingDays: Array.isArray(famDto.bookingDays) ? famDto.bookingDays : [],
+              bookingDays: famBookingDays,
             },
           });
 
@@ -185,7 +220,8 @@ export class RegistrationService {
 
     return {
       success: true,
-      message: 'Registration successful',
+      message:
+        'Registration submitted successfully and is pending admin approval. Your QR pass will be sent to your registered email for each selected event date when released by the administration.',
       data: result,
     };
   }
@@ -327,6 +363,91 @@ export class RegistrationService {
         bookingDays: resolveBookingDays({ bookingDays: att.bookingDays, employee }),
         hasPhoto: att.familyMember ? !!att.familyMember.photoPath : !!employee.photoPath,
       })),
+    };
+  }
+
+  async findDailyPassByToken(token: string, ip?: string): Promise<PublicDailyPassResponseDto> {
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      throw new NotFoundException('Daily pass not found');
+    }
+    const cleanToken = token.trim();
+
+    // Rate limiting: max 60 public ticket lookups per minute per IP
+    if (ip && this.redis) {
+      const rateLimitKey = `rl:daily_pass:${ip}`;
+      const requestCount = await this.redis.incrementCounter(rateLimitKey, 60);
+      if (requestCount !== null && requestCount > 60) {
+        throw new HttpException('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
+      }
+    }
+
+    const pass = await this.prisma.dailyEmployeePass.findUnique({
+      where: { qrToken: cleanToken },
+      include: {
+        attendee: {
+          include: {
+            employee: true,
+            familyMember: true,
+          },
+        },
+      },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Daily pass not found');
+    }
+
+    const attendee = pass.attendee;
+    const employee = attendee.employee;
+    const familyMember = attendee.familyMember;
+
+    const attendeeName = familyMember ? familyMember.name : (employee?.name || attendee.name || 'Attendee');
+    const isFamily = !!familyMember;
+    const relation = familyMember ? familyMember.relation : 'Self';
+    const employeeName = employee?.name || attendeeName;
+    const employeeCpf = employee?.cpf || 'N/A';
+    const department = employee?.department || 'EWC Ahmedabad';
+    const passType = isFamily ? `Family Member Pass (${relation})` : 'ONGC Employee Pass';
+    const ticketNumber = attendee.ticketNumber || `TK-${cleanToken.substring(0, 10).toUpperCase()}`;
+    const dayTheme: EventDayTheme = getEventDayTheme(pass.eventDate);
+
+    let qrSvg: string = '';
+    try {
+      qrSvg = await QRCode.toString(pass.qrToken, {
+        type: 'svg',
+        margin: 1,
+        width: 256,
+        color: {
+          dark: '#1A1A1A',
+          light: '#FFFFFF',
+        },
+      });
+    } catch {
+      qrSvg = '';
+    }
+
+    return {
+      token: pass.qrToken,
+      ticketNumber,
+      eventDate: pass.eventDate,
+      attendeeName,
+      isFamily,
+      relation,
+      employeeName,
+      employeeCpf,
+      department,
+      passType,
+      category: attendee.category || (isFamily ? 'FAMILY MEMBER' : 'ONGC STAFF'),
+      status: pass.status,
+      qrSvg,
+      dayTheme,
+      venue: {
+        name: 'Malaviya Cricket Ground ONGC',
+        address: 'Mahavirnagar, ONGC Colony, Chandkheda, Ahmedabad, Gujarat 382424',
+        gatesOpen: 'From 7:00 PM',
+      },
+      organizer: 'Digant Art',
+      eventTitle: 'ONGC NAVRATRI 2026',
     };
   }
 }

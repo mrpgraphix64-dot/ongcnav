@@ -6,15 +6,19 @@ import { AttendeesController } from './attendees.controller';
 import { BulkUploadController } from './bulk-upload.controller';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
+import { DailyPassPdfService } from './daily-pass-pdf.service';
+
+import { MailModule } from '../mail/mail.module';
 
 @Module({
-  providers: [RegistrationService, AttendeesService, EmployeesService],
+  imports: [MailModule],
+  providers: [RegistrationService, AttendeesService, EmployeesService, DailyPassPdfService],
   controllers: [
     RegistrationController,
     AttendeesController,
     BulkUploadController,
     EmployeesController,
   ],
-  exports: [RegistrationService, AttendeesService, EmployeesService],
+  exports: [RegistrationService, AttendeesService, EmployeesService, DailyPassPdfService],
 })
 export class RegistrationModule {}

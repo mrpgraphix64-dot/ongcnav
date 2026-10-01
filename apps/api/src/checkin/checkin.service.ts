@@ -13,6 +13,7 @@ import {
   CheckinResult,
   CheckinStatus,
   AttendeeStatus,
+  RegistrationType,
   GateType,
   UserRole,
   isOfficialEventDate,
@@ -62,7 +63,7 @@ export class CheckinService {
     const startTime = Date.now();
     const token = dto.token.trim();
     const gateId = BigInt(dto.gateId);
-    const isLoadTest = !!dto.isLoadTest;
+    let isLoadTest = !!dto.isLoadTest;
     const loadTestRunId = dto.loadTestRunId ? BigInt(dto.loadTestRunId) : null;
 
     // 0. Test Date Resolution & Strict RBAC Enforcement
@@ -311,36 +312,169 @@ export class CheckinService {
       }
     }
 
-    // 6. Token Lookup
-    const attendee = await this.prisma.attendee.findFirst({
-      where: {
-        OR: [{ qrCodeToken: token }, { ticketNumber: token }],
-      },
-      include: {
-        employee: true,
-        familyMember: true,
-        order: true,
-      },
-    });
+    // 6. Token Lookup (DailyEmployeePass first, then Attendee)
+    let dailyEmployeePass: any = null;
+    if (this.prisma.dailyEmployeePass) {
+      dailyEmployeePass = await this.prisma.dailyEmployeePass.findUnique({
+        where: { qrToken: token },
+        include: {
+          attendee: {
+            include: {
+              employee: true,
+              familyMember: true,
+              order: true,
+            },
+          },
+        },
+      });
+    }
 
-    if (!attendee) {
-      await this.recordScanLog({
-        gateId,
-        scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
-        result: CheckinResult.INVALID_QR,
-        responseTimeMs: Date.now() - startTime,
-        isLoadTest,
-        loadTestRunId,
-        ipAddress: effectiveReqMeta.ip,
-        userAgent: effectiveReqMeta.userAgent,
+    let attendee: any = null;
+
+    if (dailyEmployeePass) {
+      attendee = dailyEmployeePass.attendee;
+
+      if (dailyEmployeePass.isTest) {
+        isLoadTest = true;
+      }
+
+      // Validate daily pass status
+      if (dailyEmployeePass.status === 'REVOKED') {
+        await this.recordScanLog({
+          attendeeId: attendee.id,
+          gateId,
+          scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+          result: CheckinResult.ATTENDEE_INACTIVE,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
+        });
+
+        return {
+          success: false,
+          result: CheckinResult.ATTENDEE_INACTIVE,
+          message: 'This daily pass has been revoked',
+          statusCode: 403,
+        };
+      }
+
+      // Validate daily pass date against active event date
+      if (dailyEmployeePass.eventDate !== activeDate) {
+        await this.recordScanLog({
+          attendeeId: attendee.id,
+          gateId,
+          scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+          result: CheckinResult.NOT_BOOKED_TODAY,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
+        });
+
+        const attendeeName = attendee.familyMember
+          ? attendee.familyMember.name
+          : (attendee.employee?.name || attendee.name || 'Attendee');
+
+        return {
+          success: false,
+          result: CheckinResult.NOT_BOOKED_TODAY,
+          message: `Pass is not valid for today (${activeDate}). This pass was issued for ${dailyEmployeePass.eventDate}.`,
+          statusCode: 403,
+          attendeeName,
+        };
+      }
+    } else {
+      // Lookup attendee by permanent qrCodeToken or ticketNumber
+      attendee = await this.prisma.attendee.findFirst({
+        where: {
+          OR: [{ qrCodeToken: token }, { ticketNumber: token }],
+        },
+        include: {
+          employee: true,
+          familyMember: true,
+          order: true,
+        },
       });
 
-      return {
-        success: false,
-        result: CheckinResult.INVALID_QR,
-        message: 'Invalid or unrecognized QR Code ticket',
-        statusCode: 400,
-      };
+      if (!attendee) {
+        await this.recordScanLog({
+          gateId,
+          scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+          result: CheckinResult.INVALID_QR,
+          responseTimeMs: Date.now() - startTime,
+          isLoadTest,
+          loadTestRunId,
+          ipAddress: effectiveReqMeta.ip,
+          userAgent: effectiveReqMeta.userAgent,
+        });
+
+        return {
+          success: false,
+          result: CheckinResult.INVALID_QR,
+          message: 'Invalid or unrecognized QR Code ticket',
+          statusCode: 400,
+        };
+      }
+
+      const isEmployeeAttendee =
+        attendee.registrationType === RegistrationType.EMPLOYEE ||
+        attendee.employeeId !== null ||
+        attendee.category === 'ONGC STAFF' ||
+        attendee.category === 'FAMILY MEMBER';
+
+      // For employee passes enrolled in daily QR delivery, turnstile scanning requires the daily pass QR credential
+      if (isEmployeeAttendee && !isLoadTest && this.prisma.dailyEmployeePass) {
+        const attendeeHasDailyPasses = await this.prisma.dailyEmployeePass.findFirst({
+          where: { attendeeId: attendee.id },
+        });
+
+        if (attendeeHasDailyPasses) {
+          if ((dto as any).isManual || isSuperAdminTest) {
+            // Manual help desk or test simulation fallback: link to today's daily pass if one exists
+            dailyEmployeePass = (await this.prisma.dailyEmployeePass.findUnique({
+              where: {
+                unique_attendee_daily_pass: {
+                  attendeeId: attendee.id,
+                  eventDate: activeDate,
+                  isTest: false,
+                },
+              },
+              include: {
+                attendee: {
+                  include: {
+                    employee: true,
+                    familyMember: true,
+                    order: true,
+                  },
+                },
+              },
+            })) as any;
+          } else {
+            // Reject raw permanent token at turnstiles
+            await this.recordScanLog({
+              attendeeId: attendee.id,
+              gateId,
+              scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
+              result: CheckinResult.INVALID_QR,
+              responseTimeMs: Date.now() - startTime,
+              isLoadTest,
+              loadTestRunId,
+              ipAddress: effectiveReqMeta.ip,
+              userAgent: effectiveReqMeta.userAgent,
+            });
+
+            return {
+              success: false,
+              result: CheckinResult.INVALID_QR,
+              message: 'Daily QR pass required. Please present today’s date-specific QR pass sent to your registered email.',
+              statusCode: 400,
+            };
+          }
+        }
+      }
     }
 
     // 7. Attendee Status Check
@@ -567,6 +701,16 @@ export class CheckinService {
                   loadTestRunId,
                 },
               });
+
+          if (dailyEmployeePass && (tx as any).dailyEmployeePass) {
+            await (tx as any).dailyEmployeePass.update({
+              where: { id: dailyEmployeePass.id },
+              data: {
+                status: 'USED' as any,
+                checkedInAt: new Date(),
+              },
+            });
+          }
 
           return {
             isDuplicate: false,

@@ -6,11 +6,12 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseInterceptors,
   UploadedFiles,
   UseGuards,
 } from '@nestjs/common';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
@@ -18,6 +19,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { RegistrationService } from './registration.service';
 import { RegisterEmployeeDto } from './dto/register-employee.dto';
+import { DailyPassPdfService } from './daily-pass-pdf.service';
 import { PublicMaintenanceGuard } from '../common/guards/public-maintenance.guard';
 
 // Same private, non-web-served storage model as before — just two
@@ -55,7 +57,10 @@ function photoFilename(req: any, file: Express.Multer.File, cb: (error: Error | 
 @ApiTags('Public Registration')
 @Controller('public')
 export class RegistrationController {
-  constructor(private readonly registrationService: RegistrationService) {}
+  constructor(
+    private readonly registrationService: RegistrationService,
+    private readonly dailyPassPdfService: DailyPassPdfService,
+  ) {}
 
   @Get('maintenance-status')
   @ApiOperation({ summary: 'Get current event public maintenance mode status' })
@@ -147,6 +152,27 @@ export class RegistrationController {
     return ip !== undefined
       ? this.registrationService.findTicketByToken(token, ip)
       : this.registrationService.findTicketByToken(token);
+  }
+
+  @Get(['employee/daily-pass/:token', 'daily-pass/:token'])
+  @ApiOperation({ summary: 'Lookup Daily Employee Pass by secure token' })
+  async getDailyPass(@Param('token') token: string, @Req() req?: Request) {
+    const ip = req
+      ? ((req.headers?.['x-forwarded-for'] as string) || req.socket?.remoteAddress || '127.0.0.1')
+      : undefined;
+    return ip !== undefined
+      ? this.registrationService.findDailyPassByToken(token, ip)
+      : this.registrationService.findDailyPassByToken(token);
+  }
+
+  @Get(['employee/daily-pass/:token/pdf', 'daily-pass/:token/pdf'])
+  @ApiOperation({ summary: 'Download A4 PDF of Daily Employee Pass by secure token' })
+  async downloadDailyPassPdf(@Param('token') token: string, @Res() res: Response) {
+    const pdfBuffer = await this.dailyPassPdfService.generateDailyPassPdf(token);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="ONGC-Pass-${token.substring(0, 8)}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.end(pdfBuffer);
   }
 
   @Get('my-registration/:cpf')

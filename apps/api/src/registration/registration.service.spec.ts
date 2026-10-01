@@ -14,6 +14,7 @@ describe('RegistrationService', () => {
       setting: { findUnique: jest.fn().mockResolvedValue(null) },
       attendee: { create: jest.fn(), findFirst: jest.fn() },
       familyMember: { create: jest.fn() },
+      dailyEmployeePass: { findUnique: jest.fn() },
       $transaction: jest.fn().mockImplementation(async (callback: any) => callback(prisma)),
     };
 
@@ -376,6 +377,84 @@ describe('RegistrationService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('findDailyPassByToken', () => {
+    const mockDailyPass = {
+      id: BigInt(1),
+      attendeeId: BigInt(10),
+      eventDate: '2026-10-11',
+      qrToken: 'test-daily-qr-token-abc123',
+      status: 'ISSUED',
+      attendee: {
+        name: 'Amit Sharma',
+        ticketNumber: 'TK-EMP-001',
+        category: 'ONGC STAFF',
+        employee: {
+          name: 'Amit Sharma',
+          cpf: '123456',
+          department: 'EWC Ahmedabad',
+        },
+        familyMember: null,
+      },
+    };
+
+    it('rejects when token is empty or whitespace', async () => {
+      await expect(service.findDailyPassByToken('')).rejects.toThrow(NotFoundException);
+      await expect(service.findDailyPassByToken('   ')).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when daily pass is not found in database', async () => {
+      prisma.dailyEmployeePass.findUnique.mockResolvedValue(null);
+      await expect(service.findDailyPassByToken('non-existent-token')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('returns formatted public daily pass with correct dayTheme and attendee details', async () => {
+      prisma.dailyEmployeePass.findUnique.mockResolvedValue(mockDailyPass);
+
+      const result = await service.findDailyPassByToken('test-daily-qr-token-abc123');
+
+      expect(result.token).toBe('test-daily-qr-token-abc123');
+      expect(result.ticketNumber).toBe('TK-EMP-001');
+      expect(result.attendeeName).toBe('Amit Sharma');
+      expect(result.eventDate).toBe('2026-10-11');
+      expect(result.isFamily).toBe(false);
+      expect(result.employeeName).toBe('Amit Sharma');
+      expect(result.employeeCpf).toBe('123456');
+      expect(result.dayTheme).toBeDefined();
+      expect(result.dayTheme.dayNumber).toBe(1);
+      expect(result.dayTheme.themeTitle).toBe('SHUBH AARAMBH');
+      expect(result.qrSvg).toContain('<svg');
+      expect(result.venue.name).toBe('Malaviya Cricket Ground ONGC');
+      expect(result.organizer).toBe('Digant Art');
+    });
+
+    it('returns formatted family member daily pass when attendee is a family member', async () => {
+      const mockFamilyPass = {
+        ...mockDailyPass,
+        attendee: {
+          ...mockDailyPass.attendee,
+          name: 'Sunita Sharma',
+          ticketNumber: 'TK-EMP-F1-001',
+          familyMember: {
+            name: 'Sunita Sharma',
+            relation: 'Spouse',
+          },
+        },
+      };
+      prisma.dailyEmployeePass.findUnique.mockResolvedValue(mockFamilyPass);
+
+      const result = await service.findDailyPassByToken('test-daily-qr-token-abc123');
+
+      expect(result.attendeeName).toBe('Sunita Sharma');
+      expect(result.isFamily).toBe(true);
+      expect(result.relation).toBe('Spouse');
+      expect(result.passType).toBe('Family Member Pass (Spouse)');
+      expect(result.employeeName).toBe('Amit Sharma');
+      expect(result.employeeCpf).toBe('123456');
     });
   });
 });

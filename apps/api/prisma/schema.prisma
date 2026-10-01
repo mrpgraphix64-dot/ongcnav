@@ -41,8 +41,28 @@ enum GateStatus {
 
 enum AttendeeStatus {
   ACTIVE
+  PENDING
   SUSPENDED
   REVOKED
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DailyPassStatus {
+  ACTIVE
+  REVOKED
+  USED
+}
+
+enum DailyPassEmailStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
 }
 
 enum CheckinStatus {
@@ -210,7 +230,8 @@ model Employee {
   // the real per-person value. Kept for backward compatibility with
   // existing data/reads that haven't been migrated to the resolver yet.
   bookingDays      Json             @map("booking_days")
-  employeeCategory EmployeeCategory @default(REGULAR) @map("employee_category")
+  employeeCategory   EmployeeCategory   @default(REGULAR) @map("employee_category")
+  registrationStatus RegistrationStatus @default(PENDING) @map("registration_status")
   // Reserved for future category-specific fields (e.g. retirement date for
   // RETIRED, contract end date for CONTRACT). Deliberately unstructured and
   // unused today — no category currently has any fields that differ from
@@ -226,6 +247,7 @@ model Employee {
 
   @@index([cpf])
   @@index([phone])
+  @@index([registrationStatus])
   @@map("employees")
 }
 
@@ -272,13 +294,14 @@ model Attendee {
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
-  employee      Employee?        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  familyMember  FamilyMember?    @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
-  order         CommercialOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  loadTestRun   LoadTestRun?     @relation(fields: [loadTestRunId], references: [id], onDelete: Cascade)
-  dailyCheckins DailyCheckin[]
-  scanLogs      ScanLog[]
-  incidents     Incident[]
+  employee          Employee?           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  familyMember      FamilyMember?       @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+  order             CommercialOrder?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  loadTestRun       LoadTestRun?        @relation(fields: [loadTestRunId], references: [id], onDelete: Cascade)
+  dailyCheckins     DailyCheckin[]
+  scanLogs          ScanLog[]
+  incidents         Incident[]
+  dailyEmployeePasses DailyEmployeePass[]
 
   @@index([registrationType])
   @@index([orderId])
@@ -288,6 +311,32 @@ model Attendee {
   @@index([isLoadTest])
   @@index([loadTestRunId])
   @@map("attendees")
+}
+
+model DailyEmployeePass {
+  id          BigInt               @id @default(autoincrement())
+  attendeeId  BigInt               @map("attendee_id")
+  eventDate   String               @map("event_date") @db.VarChar(20)
+  qrToken     String               @unique @map("qr_token") @db.VarChar(100)
+  status      DailyPassStatus      @default(ACTIVE)
+  generatedAt DateTime             @default(now()) @map("generated_at")
+  emailSentAt DateTime?            @map("email_sent_at")
+  emailStatus DailyPassEmailStatus @default(PENDING) @map("email_status")
+  emailError  String?              @map("email_error") @db.Text
+  checkedInAt   DateTime?            @map("checked_in_at")
+  isTest        Boolean              @default(false) @map("is_test")
+  testSessionId String?              @map("test_session_id") @db.VarChar(100)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  attendee Attendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+
+  @@unique([attendeeId, eventDate, isTest], name: "unique_attendee_daily_pass")
+  @@index([eventDate, emailStatus])
+  @@index([qrToken])
+  @@index([isTest])
+  @@index([testSessionId])
+  @@map("daily_employee_passes")
 }
 
 model CommercialOrder {

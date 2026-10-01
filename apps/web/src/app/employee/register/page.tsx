@@ -631,39 +631,67 @@ export default function EmployeeRegisterPage() {
       </div>
 
       {submitted ? (
-        /* SUCCESS STATE CARD */
-        <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/30 shadow-xl text-center space-y-6">
-          <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner border border-emerald-200">
+        /* SUCCESS STATE CARD — PENDING ADMIN REVIEW & DAILY QR DELIVERY */
+        <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-amber-500/40 shadow-xl text-center space-y-6">
+          <div className="w-20 h-20 rounded-full bg-amber-50 text-amber-600 mx-auto flex items-center justify-center shadow-inner border border-amber-200">
             <CheckCircle2 className="w-10 h-10" />
           </div>
 
           <div className="space-y-2">
+            <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider">
+              Pending Admin Review
+            </div>
             <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink">
-              Pass Registration Completed
+              Registration Submitted Successfully
             </h2>
-            <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full" />
+            <div className="w-16 h-1 bg-amber-500 mx-auto rounded-full" />
           </div>
 
-          <p className="text-ink-soft text-sm sm:text-base leading-relaxed max-w-md mx-auto">
-            Your ONGC employee and family pass details have been recorded. You can view, print, or download your digital entry passes.
+          <p className="text-ink-soft text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
+            Your registration for <strong>{common.name}</strong> (CPF: <span className="font-mono font-bold text-ink">{common.cpf}</span>) has been received and will be reviewed by the event organizing team.
           </p>
 
-          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-            {registeredToken ? (
-              <Link
-                href={`/ticket/${registeredToken}`}
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gold text-maroon-deep font-bold text-sm hover:bg-gold-light transition-all shadow-md inline-flex items-center justify-center gap-2 border border-maroon/20"
-              >
-                <span>View &amp; Download Digital Pass</span>
-              </Link>
-            ) : (
-              <Link
-                href="/employee/my-tickets"
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gold text-maroon-deep font-bold text-sm hover:bg-gold-light transition-all shadow-md inline-flex items-center justify-center gap-2 border border-maroon/20"
-              >
-                <span>View All Passes</span>
-              </Link>
-            )}
+          {/* Daily QR Delivery Information Banner */}
+          <div className="text-left bg-cream-light border border-amber-300/80 rounded-2xl p-5 space-y-3 max-w-lg mx-auto">
+            <h3 className="font-outfit font-extrabold text-sm text-maroon flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>How You Will Receive Your Entry Passes</span>
+            </h3>
+            <ul className="text-xs text-ink-soft space-y-2 leading-relaxed">
+              <li className="flex items-start gap-2">
+                <span className="text-amber-600 font-bold">•</span>
+                <span>
+                  <strong>No entry pass is needed today.</strong> Your registration is currently awaiting admin confirmation.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-600 font-bold">•</span>
+                <span>
+                  <strong>Daily QR Passes:</strong> Your QR pass will be sent to your registered email for each selected event date when released by the administration.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-600 font-bold">•</span>
+                <span>
+                  <strong>Family Passes:</strong> Each registered family member will receive their own date-specific pass for their selected attendance dates.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-600 font-bold">•</span>
+                <span>
+                  <strong>Single-Day Validity:</strong> Each daily QR pass is valid strictly for entry on that specific event day and allows one entry scan.
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gold text-maroon-deep font-bold text-sm hover:bg-gold-light transition-all shadow-md inline-flex items-center justify-center gap-2 border border-maroon/20"
+            >
+              <span>Back to Home</span>
+            </Link>
 
             <button
               onClick={resetForm}
@@ -671,7 +699,7 @@ export default function EmployeeRegisterPage() {
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-maroon text-white font-bold text-sm hover:bg-maroon-dark transition-all shadow-md inline-flex items-center justify-center gap-2 border border-gold/40"
             >
               <PlusCircle className="w-4 h-4 text-gold-light" />
-              <span>Register Another Pass</span>
+              <span>Register Another Employee</span>
             </button>
           </div>
         </div>
@@ -1097,6 +1125,13 @@ export default function EmployeeRegisterPage() {
                     </div>
                   </div>
                 )}
+
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+                  <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    <strong>Pass Delivery Notice:</strong> Your QR pass will be sent to your registered email for each selected event date when released by the administration.
+                  </p>
+                </div>
               </div>
             )}
 

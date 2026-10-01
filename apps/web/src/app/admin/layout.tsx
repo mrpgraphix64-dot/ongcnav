@@ -32,6 +32,8 @@ import {
   Layers,
   Zap,
   Eye,
+  Mail,
+  QrCode,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
@@ -168,6 +170,13 @@ const EMPLOYEE_ADMIN_NAV_ITEMS: NavItem[] = [
     section: 'EMPLOYEES',
   },
   {
+    label: 'QR Pass Delivery',
+    href: '/admin/employees/qr-delivery',
+    icon: Mail,
+    roles: ['EMPLOYEE_ADMIN'],
+    section: 'EMPLOYEES',
+  },
+  {
     label: 'Bulk Upload',
     href: '/admin/bulk-upload',
     icon: UploadCloud,
@@ -268,6 +277,13 @@ const ALL_NAV_ITEMS: NavItem[] = [
     section: 'EMPLOYEES',
   },
   {
+    label: 'QR Pass Delivery',
+    href: '/admin/employees/qr-delivery',
+    icon: Mail,
+    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN'],
+    section: 'EMPLOYEES',
+  },
+  {
     label: 'Bulk Upload',
     href: '/admin/bulk-upload',
     icon: UploadCloud,
@@ -328,6 +344,13 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
   // TEST LAB
   {
+    label: 'Employee Daily Pass',
+    href: '/admin/test-lab/employee-daily-pass',
+    icon: QrCode,
+    roles: ['SUPER_ADMIN'],
+    section: 'TEST LAB',
+  },
+  {
     label: 'Traffic Test Lab',
     href: '/admin/traffic-test',
     icon: FlaskConical,
@@ -345,12 +368,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
 // Dedicated navigation for Scanner Staff
 const SCANNER_STAFF_NAV_ITEMS: NavItem[] = [
-  {
-    label: 'My Gate',
-    href: '/admin/my-gate',
-    icon: DoorOpen,
-    roles: ['SCANNER_STAFF'],
-  },
   {
     label: 'Turnstile Scanner',
     href: '/scanner',

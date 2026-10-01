@@ -1,0 +1,345 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { EmployeeDailyPassTestService } from './employee-daily-pass-test.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../../mail/mail.service';
+import { DailyPassPdfService } from '../../registration/daily-pass-pdf.service';
+import { CheckinService } from '../../checkin/checkin.service';
+import {
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { UserRole, CheckinResult } from '@ongc/shared-types';
+
+describe('EmployeeDailyPassTestService', () => {
+  let service: EmployeeDailyPassTestService;
+  let prisma: any;
+  let mailService: any;
+  let pdfService: any;
+  let checkinService: any;
+
+  const mockSuperAdmin = { id: '1', role: UserRole.SUPER_ADMIN, email: 'super@ongc.co.in' };
+  const mockEmployeeAdmin = { id: '2', role: UserRole.EMPLOYEE_ADMIN, email: 'emp_admin@ongc.co.in' };
+
+  const mockEmployee = {
+    id: BigInt(10),
+    cpf: '123456',
+    name: 'Amit Sharma',
+    designation: 'Chief Manager',
+    department: 'EWC Ahmedabad',
+    email: 'amit@ongc.co.in',
+    phone: '9876543210',
+    registrationStatus: 'APPROVED',
+    bookingDays: ['2026-10-11', '2026-10-12'],
+    familyMembers: [
+      { id: BigInt(20), name: 'Sunita Sharma', relation: 'Spouse' },
+    ],
+    attendees: [
+      {
+        id: BigInt(100),
+        ticketNumber: 'TK-EMP-001',
+        familyMemberId: null,
+        bookingDays: ['2026-10-11'],
+        employee: { name: 'Amit Sharma', cpf: '123456', department: 'EWC Ahmedabad' },
+        familyMember: null,
+      },
+      {
+        id: BigInt(101),
+        ticketNumber: 'TK-EMP-F1-001',
+        familyMemberId: BigInt(20),
+        bookingDays: ['2026-10-13'],
+        employee: { name: 'Amit Sharma', cpf: '123456', department: 'EWC Ahmedabad' },
+        familyMember: { id: BigInt(20), name: 'Sunita Sharma', relation: 'Spouse' },
+      },
+    ],
+  };
+
+  const mockTestPass = {
+    id: BigInt(500),
+    attendeeId: BigInt(100),
+    eventDate: '2026-10-11',
+    qrToken: 'test-qr-token-superadmin-12345',
+    status: 'ACTIVE',
+    emailStatus: 'PENDING',
+    isTest: true,
+    testSessionId: 'EMP-TEST-20261001-001',
+    createdAt: new Date(),
+    attendee: mockEmployee.attendees[0],
+  };
+
+  beforeEach(async () => {
+    prisma = {
+      employee: {
+        findMany: jest.fn().mockResolvedValue([mockEmployee]),
+      },
+      attendee: {
+        findUnique: jest.fn().mockResolvedValue(mockEmployee.attendees[0]),
+      },
+      gate: {
+        findFirst: jest.fn().mockResolvedValue({ id: BigInt(1), name: 'Gate 1' }),
+      },
+      dailyEmployeePass: {
+        create: jest.fn().mockResolvedValue(mockTestPass),
+        findUnique: jest.fn().mockResolvedValue(mockTestPass),
+        findMany: jest.fn().mockResolvedValue([mockTestPass]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ ...mockTestPass, ...data })),
+      },
+      dailyCheckin: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
+      scanLog: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 3 }),
+      },
+    };
+
+    mailService = {
+      previewEmployeeDailyPassEmail: jest.fn().mockResolvedValue({
+        subject: 'Preview Subject',
+        html: '<div>Preview Email Content</div>',
+      }),
+      sendEmployeeDailyPassEmail: jest.fn().mockResolvedValue({
+        success: true,
+        messageId: 'msg-test-123',
+      }),
+    };
+
+    pdfService = {
+      generateDailyPassPdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 test ticket')),
+    };
+
+    checkinService = {
+      processCheckin: jest.fn().mockResolvedValue({
+        success: true,
+        result: CheckinResult.SUCCESS,
+        message: 'CHECK-IN ACCEPTED',
+        statusCode: 200,
+      }),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EmployeeDailyPassTestService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: MailService, useValue: mailService },
+        { provide: DailyPassPdfService, useValue: pdfService },
+        { provide: CheckinService, useValue: checkinService },
+      ],
+    }).compile();
+
+    service = module.get<EmployeeDailyPassTestService>(EmployeeDailyPassTestService);
+  });
+
+  describe('Authorization checks', () => {
+    it('SUPER_ADMIN can generate test passes', async () => {
+      const res = await service.generateTestPass(
+        { attendeeId: '100', eventDate: '2026-10-11' },
+        mockSuperAdmin,
+      );
+      expect(res.qrToken).toBe('test-qr-token-superadmin-12345');
+      expect(res.isFamily).toBe(false);
+    });
+
+    it('EMPLOYEE_ADMIN is rejected with ForbiddenException', async () => {
+      await expect(
+        service.generateTestPass(
+          { attendeeId: '100', eventDate: '2026-10-11' },
+          mockEmployeeAdmin,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('EMPLOYEE_ADMIN cannot send test emails', async () => {
+      await expect(
+        service.sendTestEmail(
+          { token: 'tok', recipientEmail: 'test@example.com' },
+          mockEmployeeAdmin,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('EMPLOYEE_ADMIN cannot execute scanner tests', async () => {
+      await expect(
+        service.testScan({ token: 'tok' }, mockEmployeeAdmin),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('EMPLOYEE_ADMIN cannot cleanup test data', async () => {
+      await expect(
+        service.cleanupTestSession('EMP-TEST-001', mockEmployeeAdmin),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        service.cleanupAllTestData(true, mockEmployeeAdmin),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('Generation and Isolation', () => {
+    it('rejects invalid event date', async () => {
+      await expect(
+        service.generateTestPass(
+          { attendeeId: '100', eventDate: '2026-10-25' },
+          mockSuperAdmin,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('creates test pass with isTest: true and explicit testSessionId', async () => {
+      await service.generateTestPass(
+        { attendeeId: '100', eventDate: '2026-10-11', testSessionId: 'EMP-CUSTOM-SESSION' },
+        mockSuperAdmin,
+      );
+
+      expect(prisma.dailyEmployeePass.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            isTest: true,
+            testSessionId: 'EMP-CUSTOM-SESSION',
+            eventDate: '2026-10-11',
+          }),
+        }),
+      );
+    });
+
+    it('generates test pass for family member when family attendee is selected', async () => {
+      prisma.attendee.findUnique.mockResolvedValue(mockEmployee.attendees[1]);
+
+      const res = await service.generateTestPass(
+        { attendeeId: '101', eventDate: '2026-10-13' },
+        mockSuperAdmin,
+      );
+
+      expect(res.attendeeName).toBe('Sunita Sharma');
+      expect(res.isFamily).toBe(true);
+      expect(res.passType).toBe('Family Member Pass (Spouse)');
+    });
+  });
+
+  describe('Email Preview and Dispatch', () => {
+    it('previewEmail renders template without sending', async () => {
+      const res = await service.previewEmail('test-qr-token-superadmin-12345');
+      expect(res.subject).toBe('Preview Subject');
+      expect(res.html).toContain('Preview Email Content');
+      expect(mailService.previewEmployeeDailyPassEmail).toHaveBeenCalled();
+    });
+
+    it('sendTestEmail sends strictly to explicitly entered recipient with [TEST] prefix', async () => {
+      const res = await service.sendTestEmail(
+        { token: 'test-qr-token-superadmin-12345', recipientEmail: 'tester@customdomain.com' },
+        mockSuperAdmin,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.sentTo).toBe('tester@customdomain.com');
+      expect(pdfService.generateDailyPassPdf).toHaveBeenCalledWith('test-qr-token-superadmin-12345');
+      expect(mailService.sendEmployeeDailyPassEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientEmail: 'tester@customdomain.com',
+          subjectOverride: expect.stringContaining('[TEST]'),
+          pdfBuffer: expect.any(Buffer),
+        }),
+      );
+    });
+
+    it('rejects sending test email without valid email recipient', async () => {
+      await expect(
+        service.sendTestEmail(
+          { token: 'test-qr-token-superadmin-12345', recipientEmail: 'invalid-email' },
+          mockSuperAdmin,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('Scanner Testing', () => {
+    it('executes valid scan with isLoadTest: true and returns SUCCESS', async () => {
+      const res = await service.testScan(
+        { token: 'test-qr-token-superadmin-12345' },
+        mockSuperAdmin,
+      );
+
+      expect(checkinService.processCheckin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token: 'test-qr-token-superadmin-12345',
+          isLoadTest: true,
+          testDate: '2026-10-11',
+        }),
+        expect.objectContaining({ role: UserRole.SUPER_ADMIN }),
+        expect.any(Object),
+      );
+      expect(res.scannerResponse.result).toBe(CheckinResult.SUCCESS);
+    });
+
+    it('passes simulated wrong date to checkinService', async () => {
+      checkinService.processCheckin.mockResolvedValue({
+        success: false,
+        result: CheckinResult.NOT_BOOKED_TODAY,
+        message: 'Pass is not valid for today',
+        statusCode: 403,
+      });
+
+      const res = await service.testScan(
+        { token: 'test-qr-token-superadmin-12345', scanDate: '2026-10-12' },
+        mockSuperAdmin,
+      );
+
+      expect(checkinService.processCheckin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          testDate: '2026-10-12',
+          isLoadTest: true,
+        }),
+        expect.any(Object),
+        expect.any(Object),
+      );
+      expect(res.scannerResponse.result).toBe(CheckinResult.NOT_BOOKED_TODAY);
+    });
+
+    it('revokes test pass so scanner returns ATTENDEE_INACTIVE', async () => {
+      const res = await service.revokeTestPass('test-qr-token-superadmin-12345', mockSuperAdmin);
+      expect(res.status).toBe('REVOKED');
+      expect(prisma.dailyEmployeePass.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: 'REVOKED' },
+        }),
+      );
+    });
+  });
+
+  describe('Cleanup Isolation', () => {
+    it('cleanupTestSession deletes only passes with testSessionId and isTest: true', async () => {
+      const res = await service.cleanupTestSession('EMP-TEST-20261001-001', mockSuperAdmin);
+      expect(res.success).toBe(true);
+      expect(prisma.dailyEmployeePass.deleteMany).toHaveBeenCalledWith({
+        where: {
+          testSessionId: 'EMP-TEST-20261001-001',
+          isTest: true,
+        },
+      });
+      expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+        where: {
+          attendeeId: { in: [BigInt(100)] },
+          isLoadTest: true,
+        },
+      });
+    });
+
+    it('cleanupAllTestData requires confirm: true and deletes all isTest: true records', async () => {
+      await expect(
+        service.cleanupAllTestData(false, mockSuperAdmin),
+      ).rejects.toThrow(BadRequestException);
+
+      const res = await service.cleanupAllTestData(true, mockSuperAdmin);
+      expect(res.success).toBe(true);
+      expect(prisma.dailyEmployeePass.deleteMany).toHaveBeenCalledWith({
+        where: { isTest: true },
+      });
+      expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+        where: { isLoadTest: true },
+      });
+      expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({
+        where: { isLoadTest: true },
+      });
+    });
+  });
+});

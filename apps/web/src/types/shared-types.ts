@@ -53,6 +53,25 @@ export enum AttendeeStatus {
   REVOKED = 'revoked',
 }
 
+export enum RegistrationStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+export enum DailyPassStatus {
+  ACTIVE = 'ACTIVE',
+  REVOKED = 'REVOKED',
+  USED = 'USED',
+}
+
+export enum DailyPassEmailStatus {
+  PENDING = 'PENDING',
+  SENDING = 'SENDING',
+  SENT = 'SENT',
+  FAILED = 'FAILED',
+}
+
 export enum RegistrationType {
   EMPLOYEE = 'EMPLOYEE',
   COMMERCIAL = 'COMMERCIAL',
@@ -522,7 +541,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/event-control') ||
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
-      cleanPath.startsWith('/admin/traffic-test')
+      cleanPath.startsWith('/admin/traffic-test') ||
+      cleanPath.startsWith('/admin/test-lab')
     ) {
       return false;
     }
@@ -570,7 +590,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/event-control') ||
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
-      cleanPath.startsWith('/admin/traffic-test')
+      cleanPath.startsWith('/admin/traffic-test') ||
+      cleanPath.startsWith('/admin/test-lab')
     ) {
       return false;
     }
@@ -603,7 +624,11 @@ export function isRoutePermittedForRole(
 
   // 4. EVENT_ADMIN / ADMIN
   if (role === 'EVENT_ADMIN' || role === 'ADMIN') {
-    if (cleanPath.startsWith('/admin/commercial') || cleanPath.startsWith('/agent')) {
+    if (
+      cleanPath.startsWith('/admin/commercial') ||
+      cleanPath.startsWith('/agent') ||
+      cleanPath.startsWith('/admin/test-lab')
+    ) {
       return false;
     }
     return (
@@ -760,4 +785,250 @@ export function isBookPassOpen(isSettingEnabled?: boolean | string | null): bool
     return false;
   }
   return true;
+}
+
+export interface EmployeeRegistrationDto {
+  name: string;
+  mobileNo: string;
+  cpfNo: string;
+  email: string;
+  designation?: string;
+  department?: string;
+  category?: EmployeeCategory;
+  bookingDays: string[];
+  photoUrl?: string;
+  familyMembers?: Array<{
+    name: string;
+    relationship?: string;
+    mobileNo?: string;
+    photoUrl?: string;
+    bookingDays: string[];
+  }>;
+}
+
+export interface DailyPassDeliveryStatsDto {
+  eventDate: string;
+  eligibleCount: number;
+  generatedCount: number;
+  sentCount: number;
+  failedCount: number;
+  pendingCount: number;
+  checkedInCount: number;
+}
+
+export const OFFICIAL_EVENT_DATES = [
+  '2026-10-11',
+  '2026-10-12',
+  '2026-10-13',
+  '2026-10-14',
+  '2026-10-15',
+  '2026-10-16',
+  '2026-10-17',
+  '2026-10-18',
+  '2026-10-19',
+] as const;
+
+export type OfficialEventDate = (typeof OFFICIAL_EVENT_DATES)[number];
+
+export function isOfficialEventDate(date: string): date is OfficialEventDate {
+  return (OFFICIAL_EVENT_DATES as readonly string[]).includes(date);
+}
+
+export interface EventDayTheme {
+  dayNumber: number;
+  eventDate: string;
+  dayLabel: string;
+  monthLabel: string;
+  fullDateLabel: string;
+  dayOfWeek: string;
+  themeTitle: string;
+  motifName: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  bgColor: string;
+  badgeBg: string;
+}
+
+export const EVENT_DAY_THEMES: Record<string, EventDayTheme> = {
+  '2026-10-11': {
+    dayNumber: 1,
+    eventDate: '2026-10-11',
+    dayLabel: '11',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '11 October 2026',
+    dayOfWeek: 'Sunday',
+    themeTitle: 'SHUBH AARAMBH',
+    motifName: 'Diya + Dandiya',
+    primaryColor: '#7A1930', // Deep Maroon
+    secondaryColor: '#C59B27', // Antique Gold
+    accentColor: '#4A0E1C',
+    bgColor: '#FAF5EE',
+    badgeBg: '#F5EBE1',
+  },
+  '2026-10-12': {
+    dayNumber: 2,
+    eventDate: '2026-10-12',
+    dayLabel: '12',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '12 October 2026',
+    dayOfWeek: 'Monday',
+    themeTitle: 'GARBA UTSAV',
+    motifName: 'Circular Garba movement pattern',
+    primaryColor: '#4A154B', // Royal Purple
+    secondaryColor: '#D4AF37', // Gold
+    accentColor: '#2F0830',
+    bgColor: '#FAF5FC',
+    badgeBg: '#F3E5F5',
+  },
+  '2026-10-13': {
+    dayNumber: 3,
+    eventDate: '2026-10-13',
+    dayLabel: '13',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '13 October 2026',
+    dayOfWeek: 'Tuesday',
+    themeTitle: 'RAAS RANG',
+    motifName: 'Peacock feather / elegant Gujarati pattern',
+    primaryColor: '#0D5C5A', // Peacock Teal
+    secondaryColor: '#D4AF37', // Gold
+    accentColor: '#063A39',
+    bgColor: '#F2FAF9',
+    badgeBg: '#E0F2F1',
+  },
+  '2026-10-14': {
+    dayNumber: 4,
+    eventDate: '2026-10-14',
+    dayLabel: '14',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '14 October 2026',
+    dayOfWeek: 'Wednesday',
+    themeTitle: 'SHAKTI',
+    motifName: 'Geometric Shakti / mandala-inspired pattern',
+    primaryColor: '#C84B0A', // Saffron
+    secondaryColor: '#A03E0B', // Terracotta
+    accentColor: '#6B2404',
+    bgColor: '#FCF6F0',
+    badgeBg: '#FBE9E7',
+  },
+  '2026-10-15': {
+    dayNumber: 5,
+    eventDate: '2026-10-15',
+    dayLabel: '15',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '15 October 2026',
+    dayOfWeek: 'Thursday',
+    themeTitle: 'AHMEDABAD HERITAGE',
+    motifName: 'Sidi Saiyyed Jali-inspired geometric pattern',
+    primaryColor: '#1B2E5D', // Indigo
+    secondaryColor: '#C59B27', // Antique Gold
+    accentColor: '#0C1733',
+    bgColor: '#F2F5FB',
+    badgeBg: '#E8EAF6',
+  },
+  '2026-10-16': {
+    dayNumber: 6,
+    eventDate: '2026-10-16',
+    dayLabel: '16',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '16 October 2026',
+    dayOfWeek: 'Friday',
+    themeTitle: 'RANG RAAS',
+    motifName: 'Gujarati textile / Bandhani-inspired pattern',
+    primaryColor: '#6A1A38', // Wine
+    secondaryColor: '#9B2857', // Muted Magenta
+    accentColor: '#420B20',
+    bgColor: '#FAF3F6',
+    badgeBg: '#FCE4EC',
+  },
+  '2026-10-17': {
+    dayNumber: 7,
+    eventDate: '2026-10-17',
+    dayLabel: '17',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '17 October 2026',
+    dayOfWeek: 'Saturday',
+    themeTitle: 'UTSAV',
+    motifName: 'Floral / mandala pattern',
+    primaryColor: '#12573E', // Emerald
+    secondaryColor: '#D4AF37', // Gold
+    accentColor: '#0A3324',
+    bgColor: '#F2F8F4',
+    badgeBg: '#E8F5E9',
+  },
+  '2026-10-18': {
+    dayNumber: 8,
+    eventDate: '2026-10-18',
+    dayLabel: '18',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '18 October 2026',
+    dayOfWeek: 'Sunday',
+    themeTitle: 'DANDIYA NIGHT',
+    motifName: 'Crossed Dandiya sticks',
+    primaryColor: '#0F2445', // Deep Navy
+    secondaryColor: '#C59B27', // Antique Gold
+    accentColor: '#061122',
+    bgColor: '#F2F5FA',
+    badgeBg: '#E1F5FE',
+  },
+  '2026-10-19': {
+    dayNumber: 9,
+    eventDate: '2026-10-19',
+    dayLabel: '19',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: '19 October 2026',
+    dayOfWeek: 'Monday',
+    themeTitle: 'GRAND FINALE',
+    motifName: 'Grand mandala / celebratory radial pattern',
+    primaryColor: '#540D24', // Burgundy
+    secondaryColor: '#C59B27', // Antique Gold
+    accentColor: '#300513',
+    bgColor: '#FAF2F4',
+    badgeBg: '#FFEBEE',
+  },
+};
+
+export function getEventDayTheme(date: string): EventDayTheme {
+  if (EVENT_DAY_THEMES[date]) {
+    return EVENT_DAY_THEMES[date];
+  }
+  return {
+    dayNumber: 1,
+    eventDate: date,
+    dayLabel: date.split('-')[2] || '11',
+    monthLabel: 'OCTOBER',
+    fullDateLabel: `${date} 2026`,
+    dayOfWeek: 'Event Day',
+    themeTitle: 'ONGC NAVRATRI',
+    motifName: 'Traditional Navratri Motif',
+    primaryColor: '#7A1930',
+    secondaryColor: '#C59B27',
+    accentColor: '#4A0E1C',
+    bgColor: '#FAF5EE',
+    badgeBg: '#F5EBE1',
+  };
+}
+
+export interface PublicDailyPassResponseDto {
+  token: string;
+  ticketNumber: string;
+  eventDate: string;
+  attendeeName: string;
+  isFamily: boolean;
+  relation: string;
+  employeeName: string;
+  employeeCpf: string;
+  department: string;
+  passType: string;
+  category: string;
+  status: string;
+  qrSvg: string;
+  dayTheme: EventDayTheme;
+  venue: {
+    name: string;
+    address: string;
+    gatesOpen: string;
+  };
+  organizer: string;
+  eventTitle: string;
 }

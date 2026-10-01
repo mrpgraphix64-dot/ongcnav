@@ -18,6 +18,7 @@ import { SettingsModule } from './settings/settings.module';
 import { CommercialModule } from './commercial/commercial.module';
 import { MailModule } from './mail/mail.module';
 import { SuperAdminTestingModule } from './testing/super-admin-testing.module';
+import { EmployeeDailyPassTestModule } from './testing/employee-daily-pass/employee-daily-pass-test.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { SuperAdminTestingModule } from './testing/super-admin-testing.module';
     SettingsModule,
     CommercialModule,
     SuperAdminTestingModule,
+    EmployeeDailyPassTestModule,
   ],
 })
 export class AppModule {}

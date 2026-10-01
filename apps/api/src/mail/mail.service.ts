@@ -4,10 +4,12 @@ import * as QRCode from 'qrcode';
 import {
   SendEmailOptions,
   CommercialTicketEmailData,
+  EmployeeDailyPassEmailData,
   MailSendResult,
   EmailAttachment,
 } from './mail.types';
 import { getEmailBrandingUrls } from './branding-assets';
+import { getEventDayTheme, EventDayTheme } from '@ongc/shared-types';
 
 @Injectable()
 export class MailService {
@@ -17,6 +19,7 @@ export class MailService {
   private readonly baseUrl: string;
   private readonly mailboxResourceIdOverride?: string;
   private readonly webUrl: string;
+  private readonly apiUrl: string;
   private cachedResourceId: string | null = null;
   private isConfigured: boolean;
 
@@ -37,6 +40,11 @@ export class MailService {
       this.configService.get<string>('WEB_URL') ||
       'https://ongcnavratri.reworkzone.in';
     this.webUrl = rawWebUrl.replace(/\/+$/, '');
+
+    const rawApiUrl =
+      this.configService.get<string>('API_URL') ||
+      (rawWebUrl.includes('localhost') ? 'http://localhost:3001' : 'https://api-ongcnavratri.reworkzone.in');
+    this.apiUrl = rawApiUrl.replace(/\/+$/, '');
 
     this.isConfigured = !!this.apiKey;
 
@@ -783,6 +791,336 @@ Reworkzone.com (https://reworkzone.com)
       displayName: 'ONGC Navratri 2026',
       attachments: built.attachments,
     });
+  }
+
+  /**
+   * Builds the official employee daily pass email HTML and text payload.
+   */
+  async buildEmployeeDailyPassEmail(
+    data: EmployeeDailyPassEmailData,
+    options?: { embedQrAsDataUri?: boolean },
+  ): Promise<{
+    subject: string;
+    html: string;
+    text: string;
+    attachments: EmailAttachment[];
+  }> {
+    const embedAsDataUri = Boolean(options?.embedQrAsDataUri);
+    const brandingUrls = getEmailBrandingUrls(this.webUrl);
+    const attachments: EmailAttachment[] = [];
+
+    const formattedDate = this.formatDates([data.eventDate]);
+    const cid = `qr-daily-${data.ticketNumber.replace(/[^A-Za-z0-9]/g, '')}`;
+
+    let base64Png = '';
+    try {
+      const qrBuffer = await QRCode.toBuffer(data.qrToken, {
+        type: 'png',
+        width: 280,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+      });
+      base64Png = qrBuffer.toString('base64');
+    } catch {
+      this.logger.error(`Failed to generate QR buffer for daily employee pass ${data.ticketNumber}`);
+    }
+
+    if (base64Png && !embedAsDataUri) {
+      attachments.push({
+        filename: `Daily-Pass-${data.eventDate}.png`,
+        content: base64Png,
+        contentType: 'image/png',
+        cid,
+        encoding: 'base64',
+      });
+    }
+
+    const qrImgSrc = base64Png
+      ? embedAsDataUri
+        ? `data:image/png;base64,${base64Png}`
+        : `cid:${cid}`
+      : '';
+
+    const isPrimary =
+      data.relation.toLowerCase().includes('employee') ||
+      data.relation.toLowerCase().includes('primary') ||
+      data.relation.toLowerCase().includes('self');
+    const badgeText = isPrimary ? 'ONGC EMPLOYEE ENTRY PASS' : `FAMILY PASS (${data.relation.toUpperCase()})`;
+
+    const dayTheme: EventDayTheme = getEventDayTheme(data.eventDate);
+    const viewTicketUrl = data.viewTicketUrl || `${this.webUrl}/employee/daily-pass/${data.qrToken}`;
+    const downloadPdfUrl = data.downloadPdfUrl || `${this.apiUrl}/public/employee/daily-pass/${data.qrToken}/pdf`;
+
+    const emailSubject =
+      data.subjectOverride ||
+      `Your ONGC Navratri Entry Pass for ${dayTheme.fullDateLabel} - ${data.attendeeName}`;
+
+    // Optional direct PDF attachment
+    if (data.pdfBuffer && data.pdfBuffer.length > 0) {
+      attachments.push({
+        filename: `ONGC-Pass-${data.eventDate}-${data.attendeeName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+        content: data.pdfBuffer.toString('base64'),
+        contentType: 'application/pdf',
+      });
+    }
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${this.escapeHtml(emailSubject)}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #FAF6EF; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #2A1810;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FAF6EF; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
+          <!-- BRAND HEADER -->
+          <tr>
+            <td style="background-color: #3B0813; background: linear-gradient(180deg, #4A0C1A 0%, #150207 100%); padding: 28px 20px 22px 20px; text-align: center; color: #FFFFFF; border-bottom: 3px solid ${dayTheme.secondaryColor};">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td align="center" style="padding-bottom: 12px;">
+                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="110" style="display: block; width: 110px; max-width: 110px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-bottom: 4px;">
+                    <div style="font-family: 'Cinzel', 'Georgia', serif; font-size: 22px; font-weight: 800; color: ${dayTheme.secondaryColor}; letter-spacing: 4px; text-transform: uppercase; line-height: 1.2;">
+                      ONGC NAVRATRI 2026
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center">
+                    <div style="font-size: 11px; font-weight: 700; color: #F5E6B3; letter-spacing: 2px; text-transform: uppercase;">
+                      Your Daily Entry Pass
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- MAIN BODY -->
+          <tr>
+            <td style="padding: 26px 20px;">
+              <!-- GREETING & STATUS ANNOUNCEMENT -->
+              <div style="font-size: 16px; font-weight: 700; color: #2A1810; margin-bottom: 8px;">
+                Hello ${this.escapeHtml(data.attendeeName)},
+              </div>
+              <div style="font-size: 14px; color: #4A3B32; line-height: 1.6; margin-bottom: 18px;">
+                Your entry pass for:
+                <div style="margin: 8px 0; padding: 12px 16px; background-color: ${dayTheme.bgColor}; border-left: 4px solid ${dayTheme.primaryColor}; border-radius: 8px; border: 1px solid #EADDCF;">
+                  <div style="font-size: 16px; font-weight: 800; color: ${dayTheme.primaryColor};">
+                    ${dayTheme.fullDateLabel} (${dayTheme.dayOfWeek})
+                  </div>
+                  <div style="font-size: 12px; font-weight: 700; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;">
+                    DAY ${dayTheme.dayNumber} OF 9 — ${dayTheme.themeTitle}
+                  </div>
+                  <div style="font-size: 11px; color: #6E5C50; margin-top: 2px;">
+                    Visual Motif: ${dayTheme.motifName}
+                  </div>
+                </div>
+                is ready.
+              </div>
+
+              <!-- ==================== TICKET PREVIEW ==================== -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: linear-gradient(145deg, ${dayTheme.primaryColor} 0%, ${dayTheme.accentColor} 100%); border: 2px solid ${dayTheme.secondaryColor}; border-radius: 16px; margin-bottom: 22px; text-align: center; color: #FFFFFF; box-shadow: 0 4px 16px rgba(0,0,0,0.18);">
+                <tr>
+                  <td style="padding: 22px 18px; text-align: center;">
+                    <!-- TOP TICKET TAG -->
+                    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #F5E6B3; font-weight: bold; margin-bottom: 4px;">
+                      ONGC NAVRATRI 2026 &bull; OFFICIAL ENTRY PASS
+                    </div>
+                    <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.15); border: 1px solid ${dayTheme.secondaryColor}; border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 700; color: #FFF; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                      DAY ${dayTheme.dayNumber} &bull; ${dayTheme.themeTitle}
+                    </div>
+
+                    <!-- ATTENDEE NAME -->
+                    <div style="font-size: 22px; font-weight: 800; color: #FFFFFF; margin: 4px 0 2px 0;">
+                      ${this.escapeHtml(data.attendeeName)}
+                    </div>
+                    <div style="font-size: 12px; font-weight: 700; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">
+                      ${badgeText}
+                    </div>
+                    ${!isPrimary ? `<div style="font-size: 12px; color: #F5E6B3; margin-bottom: 4px;">Employee: ${this.escapeHtml(data.employeeName)}${data.cpf ? ` (CPF: ${this.escapeHtml(data.cpf)})` : ''}</div>` : ''}
+
+                    <!-- QR CODE CONTAINER -->
+                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="background-color: #FFFFFF; border-radius: 14px; margin: 14px auto; border: 2px solid ${dayTheme.secondaryColor};">
+                      <tr>
+                        <td align="center" style="padding: 14px; background-color: #FFFFFF; border-radius: 12px;">
+                          ${base64Png ? `
+                            <img src="${qrImgSrc}" alt="Entry QR - ${data.ticketNumber}" width="200" height="200" style="display: block; width: 200px; height: 200px; margin: 0 auto; border: 0;" />
+                          ` : `
+                            <div style="width: 200px; height: 200px; line-height: 200px; text-align: center; color: #7A1930; font-size: 12px; font-weight: bold;">
+                              QR code loading...
+                            </div>
+                          `}
+                          <div style="font-size: 11px; font-weight: 900; letter-spacing: 2px; color: ${dayTheme.primaryColor}; text-transform: uppercase; margin-top: 8px;">
+                            SCAN AT ENTRY
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- TICKET META -->
+                    <div style="font-size: 13px; font-family: 'Courier New', Courier, monospace; color: #FDE047; font-weight: bold; margin-bottom: 4px;">
+                      Ticket No: ${this.escapeHtml(data.ticketNumber)}
+                    </div>
+                    <div style="font-size: 13px; color: #FFFFFF; font-weight: 600; margin-bottom: 2px;">
+                      Valid Strictly On: ${dayTheme.fullDateLabel}
+                    </div>
+                    <div style="font-size: 11px; color: #F5E6B3;">
+                      Malaviya Cricket Ground ONGC, Ahmedabad &bull; Gates Open: From 7:00 PM
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- ==================== ACTION CTA BUTTONS ==================== -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 18px 0 20px 0;">
+                <tr>
+                  <td align="center">
+                    <table cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+                      <tr>
+                        <td align="center" style="padding: 6px;">
+                          <a href="${viewTicketUrl}" target="_blank" style="display: inline-block; background-color: ${dayTheme.primaryColor}; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 800; text-decoration: none; padding: 13px 24px; border-radius: 12px; letter-spacing: 0.5px; border: 1px solid ${dayTheme.secondaryColor}; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+                            &#x1F39F;&#xFE0F; VIEW TICKET
+                          </a>
+                        </td>
+                        <td align="center" style="padding: 6px;">
+                          <a href="${downloadPdfUrl}" target="_blank" style="display: inline-block; background-color: #FAF5EE; color: ${dayTheme.primaryColor}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 800; text-decoration: none; padding: 13px 24px; border-radius: 12px; letter-spacing: 0.5px; border: 2px solid ${dayTheme.secondaryColor}; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
+                            &#x1F4E5; DOWNLOAD PDF
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- INSTRUCTIONS BELOW BUTTONS -->
+              <div style="text-align: center; margin-bottom: 22px;">
+                <p style="font-size: 13px; color: #4A3B32; margin: 0 0 4px 0;">
+                  Your QR code is also included in the ticket above.
+                </p>
+                <p style="font-size: 13px; font-weight: 700; color: #2A1810; margin: 0 0 4px 0;">
+                  Please show this QR at the entry gate.
+                </p>
+                <p style="font-size: 12px; font-weight: 600; color: #8A2846; margin: 0;">
+                  This QR is valid only for the date shown on the ticket (${dayTheme.fullDateLabel}).
+                </p>
+              </div>
+
+              <!-- GUIDELINES -->
+              <div style="background-color: #FAF5F0; border: 1px solid #D4AF37; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px;">
+                <h4 style="font-size: 12px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">
+                  ENTRY GUIDELINES
+                </h4>
+                <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #4A3B32; line-height: 1.6;">
+                  <li>Keep this digital pass or downloaded PDF ready on your mobile device at the gate.</li>
+                  <li>Each attendee must present their own specific QR pass.</li>
+                  <li>This pass allows <strong>single entry only</strong> on ${dayTheme.fullDateLabel}.</li>
+                  <li>Once scanned, the pass cannot be reused on the same day or any other date.</li>
+                  <li>Passes are strictly non-transferable. Please carry valid photo ID.</li>
+                </ul>
+              </div>
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color: #2A1810; padding: 24px 20px; text-align: center; color: #E5D5BA; font-size: 12px; line-height: 1.6;">
+              <div style="font-weight: 800; font-size: 13px; color: #FFFFFF; letter-spacing: 0.5px; margin-bottom: 6px;">
+                ONGC Navratri 2026 Organizing Committee
+              </div>
+              <div style="font-size: 11px; color: #A69080;">
+                For assistance, contact <a href="mailto:ongcnavratri@gmail.com" style="color: #F5E6B3; text-decoration: underline;">ongcnavratri@gmail.com</a>
+              </div>
+              <div style="font-size: 11px; color: #A69080; border-top: 1px solid rgba(229, 213, 186, 0.15); padding-top: 8px; margin-top: 8px;">
+                Official date-specific pass delivery &bull; Organizer: Digant Art &bull; Venue: Malaviya Cricket Ground ONGC
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim();
+
+    const textContent = `
+ONGC NAVRATRI 2026
+Your Daily Entry Pass
+
+Hello ${data.attendeeName},
+
+Your entry pass for:
+${dayTheme.fullDateLabel} (${dayTheme.dayOfWeek})
+DAY ${dayTheme.dayNumber} — ${dayTheme.themeTitle}
+is ready.
+
+PASS DETAILS:
+Attendee: ${data.attendeeName}
+Pass Type: ${badgeText}
+Relationship: ${data.relation}
+Ticket No: ${data.ticketNumber}
+Date: ${dayTheme.fullDateLabel}
+Venue: Malaviya Cricket Ground ONGC, Ahmedabad
+Gates Open: From 7:00 PM
+
+ACTIONS:
+- View Online Ticket: ${viewTicketUrl}
+- Download PDF Ticket: ${downloadPdfUrl}
+
+Your QR code is also included in the ticket above.
+Please show this QR at the entry gate.
+This QR is valid only for the date shown on the ticket.
+
+ONGC Navratri 2026 Organizing Committee
+Organizer: Digant Art
+    `.trim();
+
+    return {
+      subject: emailSubject,
+      html: htmlContent,
+      text: textContent,
+      attachments,
+    };
+  }
+
+  /**
+   * Sends the date-specific entry pass email to employee or family member
+   */
+  async sendEmployeeDailyPassEmail(data: EmployeeDailyPassEmailData): Promise<MailSendResult> {
+    const built = await this.buildEmployeeDailyPassEmail(data, { embedQrAsDataUri: false });
+
+    return this.sendEmail({
+      to: data.recipientEmail,
+      subject: built.subject,
+      html: built.html,
+      text: built.text,
+      displayName: 'ONGC Navratri 2026',
+      attachments: built.attachments,
+    });
+  }
+
+  /**
+   * Generates the rendered HTML preview for an employee daily pass email
+   */
+  async previewEmployeeDailyPassEmail(
+    data: EmployeeDailyPassEmailData,
+  ): Promise<{ subject: string; html: string; text: string }> {
+    const built = await this.buildEmployeeDailyPassEmail(data, { embedQrAsDataUri: true });
+    return {
+      subject: built.subject,
+      html: built.html,
+      text: built.text,
+    };
   }
 
   /**

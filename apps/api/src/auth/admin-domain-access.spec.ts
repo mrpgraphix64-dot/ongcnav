@@ -151,7 +151,8 @@ describe('Admin Domain Separation & Page Access Control', () => {
       expect(defaults).toContain('employee.bulk_upload');
       expect(defaults).toContain('employee.reports');
       expect(defaults).toContain('employee.operations');
-      expect(defaults.length).toBe(6);
+      expect(defaults).toContain('employee.qr_delivery');
+      expect(defaults.length).toBe(7);
     });
 
     it('allows access to specific page when permission is granted', () => {
