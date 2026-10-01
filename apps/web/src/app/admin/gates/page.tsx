@@ -409,11 +409,11 @@ export default function AdminGatesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-4 2xl:space-y-6">
       {/* Top Banner Alert Message */}
       {msg && (
         <div
-          className={`p-4 rounded-2xl border flex items-start justify-between gap-3 text-sm font-medium transition-all ${
+          className={`p-3 2xl:p-4 rounded-2xl border flex items-start justify-between gap-3 text-xs sm:text-sm font-medium transition-all ${
             msg.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : msg.type === 'warning'
@@ -421,13 +421,13 @@ export default function AdminGatesPage() {
               : 'bg-rose-50 border-rose-200 text-rose-800'
           }`}
         >
-          <div className="flex items-start gap-2.5">
+          <div className="flex items-start gap-2 2xl:gap-2.5">
             {msg.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-4 h-4 2xl:w-5 2xl:h-5 text-emerald-600 shrink-0 mt-0.5" />
             ) : msg.type === 'warning' ? (
-              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 2xl:w-5 2xl:h-5 text-amber-600 shrink-0 mt-0.5" />
             ) : (
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 2xl:w-5 2xl:h-5 text-rose-600 shrink-0 mt-0.5" />
             )}
             <div>
               <p>{msg.text}</p>
@@ -435,62 +435,62 @@ export default function AdminGatesPage() {
           </div>
           <button
             onClick={() => setMsg(null)}
-            className="text-stone-400 hover:text-stone-700"
+            className="text-stone-400 hover:text-stone-700 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
           </button>
         </div>
       )}
 
       {/* Top Stats & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl border border-stone-200/70 shadow-sm">
-        <div className="flex flex-wrap items-center gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 bg-white p-3.5 sm:p-4 2xl:p-5 rounded-2xl border border-stone-200/70 shadow-xs">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           <div>
-            <div className="text-xs font-semibold text-ink-soft uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-xs font-semibold text-ink-soft uppercase tracking-wider">
               Total Gates
             </div>
-            <div className="font-outfit font-black text-2xl text-maroon">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-maroon">
               {totalGates}
             </div>
           </div>
-          <div className="h-8 w-px bg-stone-200 hidden sm:block"></div>
+          <div className="h-7 2xl:h-8 w-px bg-stone-200 hidden sm:block"></div>
           <div>
-            <div className="text-xs font-semibold text-ink-soft uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-xs font-semibold text-ink-soft uppercase tracking-wider">
               Active Gates
             </div>
-            <div className="font-outfit font-black text-2xl text-emerald-600">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-600">
               {activeGates}
             </div>
           </div>
-          <div className="h-8 w-px bg-stone-200 hidden sm:block"></div>
+          <div className="h-7 2xl:h-8 w-px bg-stone-200 hidden sm:block"></div>
           <div>
-            <div className="text-xs font-semibold text-ink-soft uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-xs font-semibold text-ink-soft uppercase tracking-wider">
               Today&apos;s Check-ins
             </div>
-            <div className="font-outfit font-black text-2xl text-ink">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-ink">
               {totalTodayCheckins}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 2xl:gap-3">
           <button
             onClick={loadData}
             disabled={loading}
-            className="p-2.5 rounded-xl border border-stone-200 text-ink-soft hover:text-ink hover:bg-stone-50 transition-colors"
+            className="p-1.5 2xl:p-2 rounded-xl border border-stone-200 text-ink-soft hover:text-ink hover:bg-stone-50 transition-colors cursor-pointer"
             title="Refresh Data"
           >
             <RefreshCw
-              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+              className={`w-3.5 h-3.5 2xl:w-4 2xl:h-4 ${loading ? 'animate-spin' : ''}`}
             />
           </button>
 
           <button
             onClick={() => setShowCreateModal(true)}
             type="button"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-maroon text-white font-semibold text-sm hover:bg-maroon-light transition-all shadow-sm"
+            className="inline-flex items-center gap-1.5 2xl:gap-2 px-3 sm:px-3.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl bg-maroon text-white font-semibold text-xs 2xl:text-sm hover:bg-maroon-light transition-all shadow-xs cursor-pointer"
           >
-            <PlusCircle className="w-4 h-4 text-gold-light" />
+            <PlusCircle className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-gold-light" />
             <span>Add Event Gate</span>
           </button>
         </div>
@@ -498,9 +498,9 @@ export default function AdminGatesPage() {
 
       {/* Search / Filter & Bulk Actions Bar */}
       {gates.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-stone-200/70 max-w-md w-full shadow-sm">
-            <Search className="w-4 h-4 text-stone-400" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2.5 bg-white px-3 sm:px-3.5 py-1.5 2xl:py-2 rounded-xl border border-stone-200/70 max-w-md w-full shadow-xs">
+            <Search className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-stone-400" />
             <input
               type="text"
               value={searchQuery}
@@ -511,9 +511,9 @@ export default function AdminGatesPage() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="text-stone-400 hover:text-stone-600"
+                className="text-stone-400 hover:text-stone-600 cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3 2xl:w-3.5 2xl:h-3.5" />
               </button>
             )}
           </div>
@@ -522,12 +522,12 @@ export default function AdminGatesPage() {
             <button
               type="button"
               onClick={handleSelectAllGates}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white text-xs font-semibold text-ink-soft hover:text-ink hover:bg-stone-50 transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl border border-stone-200 bg-white text-xs font-semibold text-ink-soft hover:text-ink hover:bg-stone-50 transition-colors shadow-xs cursor-pointer"
             >
               {selectedGateIds.size > 0 && selectedGateIds.size === filteredGates.length ? (
-                <CheckSquare className="w-4 h-4 text-maroon" />
+                <CheckSquare className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
               ) : (
-                <Square className="w-4 h-4 text-stone-400" />
+                <Square className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-stone-400" />
               )}
               <span>
                 {selectedGateIds.size > 0 && selectedGateIds.size === filteredGates.length
@@ -540,7 +540,7 @@ export default function AdminGatesPage() {
               <button
                 type="button"
                 onClick={() => setShowBulkDeleteModal(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-sm"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 2xl:px-3.5 2xl:py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all shadow-xs cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete Selected ({selectedGateIds.size})</span>
@@ -551,7 +551,7 @@ export default function AdminGatesPage() {
       )}
 
       {/* Gates Grid / Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 2xl:gap-5">
         {filteredGates.map((gate) => {
           const isActive =
             gate.status === 'active' || gate.gateStatus === 'ACTIVE';
@@ -567,9 +567,9 @@ export default function AdminGatesPage() {
                 isSelected
                   ? 'border-maroon ring-2 ring-maroon/20'
                   : 'border-stone-200/70 hover:border-gold/50'
-              } shadow-sm p-5 flex flex-col justify-between transition-all group`}
+              } shadow-xs p-3.5 sm:p-4 2xl:p-5 flex flex-col justify-between transition-all group`}
             >
-              <div className="space-y-3.5">
+              <div className="space-y-2.5 2xl:space-y-3.5">
                 {/* Header: Checkbox, Name, Code & Status */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2.5">
@@ -586,61 +586,61 @@ export default function AdminGatesPage() {
                       )}
                     </button>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-maroon text-gold-light text-xs font-black font-outfit uppercase tracking-wider">
+                      <div className="flex items-center gap-1.5 2xl:gap-2">
+                        <span className="px-1.5 2xl:px-2 py-0.5 rounded-md bg-maroon text-gold-light text-[10px] 2xl:text-xs font-black font-outfit uppercase tracking-wider">
                           {gate.code || gate.gateNumber || `G${gate.id}`}
                         </span>
-                        <h3 className="font-outfit font-bold text-lg text-ink group-hover:text-maroon transition-colors">
+                        <h3 className="font-outfit font-bold text-base 2xl:text-lg text-ink group-hover:text-maroon transition-colors">
                           {gate.name}
                         </h3>
                       </div>
-                      <div className="text-xs text-ink-soft mt-1 flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-gold shrink-0" />
-                        <span>{gate.location || 'Location not specified'}</span>
+                      <div className="text-[11px] 2xl:text-xs text-ink-soft mt-0.5 2xl:mt-1 flex items-center gap-1.5">
+                        <MapPin className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-gold shrink-0" />
+                        <span className="truncate">{gate.location || 'Location not specified'}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Status Badge */}
                   {isActive ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-full text-[10px] 2xl:text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                       Active
                     </span>
                   ) : (
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-stone-100 text-stone-600 border border-stone-200">
+                    <span className="inline-flex items-center px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-full text-[10px] 2xl:text-xs font-bold bg-stone-100 text-stone-600 border border-stone-200">
                       Inactive
                     </span>
                   )}
                 </div>
 
                 {/* Type Badge & Description */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-extrabold uppercase tracking-wide bg-amber-50 text-amber-800 border border-amber-200">
+                <div className="flex flex-wrap items-center gap-1.5 2xl:gap-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] 2xl:text-[11px] font-extrabold uppercase tracking-wide bg-amber-50 text-amber-800 border border-amber-200">
                     {gate.type || 'General'} Entry
                   </span>
                   {gate.description && (
-                    <p className="text-xs text-ink-soft line-clamp-1 w-full">
+                    <p className="text-[11px] 2xl:text-xs text-ink-soft line-clamp-1 w-full">
                       {gate.description}
                     </p>
                   )}
                 </div>
 
                 {/* Assigned Staff & Today's Volume */}
-                <div className="bg-cream-soft rounded-xl p-3 border border-stone-200/60 grid grid-cols-2 gap-3 text-center">
+                <div className="bg-cream-soft rounded-xl p-2.5 2xl:p-3 border border-stone-200/60 grid grid-cols-2 gap-2.5 2xl:gap-3 text-center">
                   <div>
-                    <div className="text-[10px] font-extrabold uppercase tracking-wider text-ink-soft">
+                    <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-ink-soft">
                       Assigned Staff
                     </div>
-                    <div className="font-outfit font-bold text-base text-ink mt-0.5">
+                    <div className="font-outfit font-bold text-sm sm:text-base text-ink mt-0.5">
                       {assignedCount} Staff
                     </div>
                   </div>
-                  <div className="border-l border-stone-200/80 pl-3">
-                    <div className="text-[10px] font-extrabold uppercase tracking-wider text-ink-soft">
+                  <div className="border-l border-stone-200/80 pl-2.5 2xl:pl-3">
+                    <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-ink-soft">
                       Today&apos;s Check-ins
                     </div>
-                    <div className="font-outfit font-black text-base text-maroon mt-0.5">
+                    <div className="font-outfit font-black text-sm sm:text-base text-maroon mt-0.5">
                       {checkinCount}
                     </div>
                   </div>
@@ -648,21 +648,21 @@ export default function AdminGatesPage() {
 
                 {/* Staff Names list */}
                 {gate.users && gate.users.length > 0 ? (
-                  <div className="text-xs text-ink-soft">
+                  <div className="text-[11px] 2xl:text-xs text-ink-soft">
                     <span className="font-semibold text-ink">Operators: </span>
                     <span className="truncate">
                       {gate.users.map((u) => u.name).join(', ')}
                     </span>
                   </div>
                 ) : (
-                  <div className="text-xs text-amber-700 italic">
+                  <div className="text-[11px] 2xl:text-xs text-amber-700 italic">
                     No operators assigned yet
                   </div>
                 )}
               </div>
 
               {/* Actions Footer */}
-              <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between gap-2">
+              <div className="pt-3 2xl:pt-4 mt-3 2xl:mt-4 border-t border-stone-100 flex items-center justify-between gap-2">
                 <Link
                   href={`/admin/gates/${gate.id}`}
                   className="text-xs font-bold text-maroon hover:text-maroon-dark inline-flex items-center gap-1 group-hover:underline"

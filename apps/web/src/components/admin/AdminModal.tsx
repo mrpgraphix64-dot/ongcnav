@@ -92,26 +92,26 @@ export default function AdminModal({
       }}
     >
       <div
-        className={`bg-white rounded-2xl w-full ${maxWidthClass} shadow-2xl border border-stone-200/90 my-auto overflow-hidden animate-in zoom-in-95 duration-150 relative ${className}`}
+        className={`bg-white rounded-2xl w-full ${maxWidthClass} max-h-[calc(100vh-2rem)] flex flex-col shadow-2xl border border-stone-200/90 my-auto overflow-hidden animate-in zoom-in-95 duration-150 relative ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         {(title || showCloseButton) && (
           <div
-            className={`px-5 sm:px-6 py-4 flex items-center justify-between gap-3 ${
+            className={`px-4 sm:px-5 2xl:px-6 py-3 2xl:py-4 flex items-center justify-between gap-3 shrink-0 ${
               headerBorder ? 'border-b border-stone-100 bg-stone-50/60' : ''
             }`}
           >
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               {icon && <div className="shrink-0">{icon}</div>}
               <div className="min-w-0">
                 {title && (
-                  <h3 className="font-outfit font-bold text-base sm:text-lg text-ink truncate leading-tight">
+                  <h3 className="font-outfit font-bold text-sm sm:text-base 2xl:text-lg text-ink truncate leading-tight">
                     {title}
                   </h3>
                 )}
                 {subtitle && (
-                  <p className="text-xs text-ink-soft truncate mt-0.5">{subtitle}</p>
+                  <p className="text-[11px] 2xl:text-xs text-ink-soft truncate mt-0.5">{subtitle}</p>
                 )}
               </div>
             </div>
@@ -121,7 +121,7 @@ export default function AdminModal({
                 type="button"
                 onClick={onClose}
                 aria-label="Close modal"
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-stone-400 hover:text-ink hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-stone-400 hover:text-ink hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -130,7 +130,7 @@ export default function AdminModal({
         )}
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6">{children}</div>
+        <div className="p-4 sm:p-5 2xl:p-6 overflow-y-auto min-h-0 flex-1">{children}</div>
       </div>
     </div>
   );

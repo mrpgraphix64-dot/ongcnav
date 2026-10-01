@@ -567,24 +567,24 @@ export default function CommercialOrdersAuditPage() {
       <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
+            <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[9px] 2xl:text-[10px]">
               <tr>
-                <th className="px-3 py-3 w-8 text-center">
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3 w-8 text-center">
                   <span className="sr-only">Select</span>
                 </th>
-                <th className="px-3 py-3">Pass / Ticket ID</th>
-                <th className="px-3 py-3">Order #</th>
-                <th className="px-4 py-3">Pass Holder</th>
-                <th className="px-3 py-3">Pass Type & Dates</th>
-                <th className="px-3 py-3 text-center">Source</th>
-                <th className="px-3 py-3">Agent</th>
-                <th className="px-3 py-3 text-center">Qty</th>
-                <th className="px-3 py-3 text-right">Amount</th>
-                <th className="px-3 py-3">Payment</th>
-                <th className="px-3 py-3">Check-in Status</th>
-                <th className="px-3 py-3">Order Date</th>
-                <th className="px-3 py-3 text-center">Passes</th>
-                <th className="px-3 py-3 text-center">Action</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3">Pass / Ticket ID</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3">Order #</th>
+                <th className="px-3 2xl:px-4 py-2.5 2xl:py-3">Pass Holder</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3">Pass Type & Dates</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3 text-center">Source</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3">Agent</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3 text-center">Qty</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3 text-right">Amount</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3">Payment</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3">Check-in Status</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3">Order Date</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3 text-center">Passes</th>
+                <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 text-stone-900">
@@ -598,7 +598,7 @@ export default function CommercialOrdersAuditPage() {
                 return (
                   <React.Fragment key={ord.id}>
                     <tr className={`transition-colors ${isSelected ? 'bg-rose-50/40' : 'hover:bg-[#FAF7F2]/40'}`}>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-2.5 2xl:px-3 py-2 2xl:py-3 text-center">
                         <button
                           type="button"
                           onClick={() => handleToggleSelectOrder(ord.id)}
@@ -841,17 +841,17 @@ export default function CommercialOrdersAuditPage() {
       </div>
 
       {/* Top 6 Compact Channel & Pass Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 2xl:gap-3">
         {/* Card 1: TOTAL PASSES */}
-        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-xs">
-          <div className="text-[10px] font-extrabold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-            <Ticket className="w-3.5 h-3.5 text-[#7A1113]" />
+        <div className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 shadow-xs">
+          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+            <Ticket className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-[#7A1113]" />
             TOTAL PASSES
           </div>
-          <div className="font-outfit font-black text-2xl text-stone-900 mt-2">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900 mt-1.5 2xl:mt-2">
             {(passSummary?.total ?? summary.totalPasses).toLocaleString()}
           </div>
-          <div className="text-[10px] text-stone-400 font-medium mt-0.5">All issued passes</div>
+          <div className="text-[9px] 2xl:text-[10px] text-stone-400 font-medium mt-0.5">All issued passes</div>
         </div>
 
         {/* Card 2: WEBSITE PASSES */}
@@ -861,20 +861,20 @@ export default function CommercialOrdersAuditPage() {
             setChannelTab('PUBLIC');
             setPage(1);
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all shadow-xs ${
+          className={`text-left p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border transition-all shadow-xs ${
             channelTab === 'PUBLIC'
               ? 'bg-blue-50/60 border-blue-400 ring-2 ring-blue-400/20'
               : 'bg-white border-stone-200/80 hover:border-blue-200'
           }`}
         >
-          <div className="text-[10px] font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
-            <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+            <CreditCard className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-blue-600" />
             WEBSITE
           </div>
-          <div className="font-outfit font-black text-2xl text-blue-950 mt-2">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-blue-950 mt-1.5 2xl:mt-2">
             {(passSummary?.website ?? summary.publicPassesCount).toLocaleString()}
           </div>
-          <div className="text-[10px] text-blue-700/80 font-medium mt-0.5">
+          <div className="text-[9px] 2xl:text-[10px] text-blue-700/80 font-medium mt-0.5">
             ₹{summary.publicSalesInr.toLocaleString('en-IN')} online
           </div>
         </button>
@@ -886,20 +886,20 @@ export default function CommercialOrdersAuditPage() {
             setChannelTab('AGENT');
             setPage(1);
           }}
-          className={`text-left p-3.5 rounded-2xl border transition-all shadow-xs ${
+          className={`text-left p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border transition-all shadow-xs ${
             channelTab === 'AGENT'
               ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-400/20'
               : 'bg-white border-stone-200/80 hover:border-amber-200'
           }`}
         >
-          <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-amber-600" />
+          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+            <Users className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-amber-600" />
             AGENT
           </div>
-          <div className="font-outfit font-black text-2xl text-amber-950 mt-2">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-amber-950 mt-1.5 2xl:mt-2">
             {(passSummary?.agent ?? summary.agentPassesCount).toLocaleString()}
           </div>
-          <div className="text-[10px] text-amber-700/80 font-medium mt-0.5">
+          <div className="text-[9px] 2xl:text-[10px] text-amber-700/80 font-medium mt-0.5">
             ₹{summary.agentSalesInr.toLocaleString('en-IN')} agent
           </div>
         </button>
@@ -907,43 +907,43 @@ export default function CommercialOrdersAuditPage() {
         {/* Card 4: EMPLOYEE PASSES */}
         <Link
           href="/admin/employees"
-          className="bg-white p-3.5 rounded-2xl border border-stone-200/80 hover:border-purple-300 hover:bg-purple-50/20 transition-all shadow-xs block"
+          className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 hover:border-purple-300 hover:bg-purple-50/20 transition-all shadow-xs block"
         >
-          <div className="text-[10px] font-extrabold uppercase tracking-wider text-purple-900 flex items-center justify-between">
+          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-purple-900 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5 text-purple-600" />
+              <Building2 className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-purple-600" />
               EMPLOYEE
             </span>
             <span className="text-[9px] font-bold text-purple-600 underline">View</span>
           </div>
-          <div className="font-outfit font-black text-2xl text-purple-950 mt-2">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-purple-950 mt-1.5 2xl:mt-2">
             {(passSummary?.employee ?? 0).toLocaleString()}
           </div>
-          <div className="text-[10px] text-purple-700/80 font-medium mt-0.5">ONGC Staff & Family</div>
+          <div className="text-[9px] 2xl:text-[10px] text-purple-700/80 font-medium mt-0.5">ONGC Staff & Family</div>
         </Link>
 
         {/* Card 5: CHECKED IN */}
-        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-xs">
-          <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 shadow-xs">
+          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-emerald-600" />
             CHECKED IN
           </div>
-          <div className="font-outfit font-black text-2xl text-emerald-950 mt-2">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-950 mt-1.5 2xl:mt-2">
             {(passSummary?.checkedIn ?? 0).toLocaleString()}
           </div>
-          <div className="text-[10px] text-emerald-700/80 font-medium mt-0.5">Scanned at gates</div>
+          <div className="text-[9px] 2xl:text-[10px] text-emerald-700/80 font-medium mt-0.5">Scanned at gates</div>
         </div>
 
         {/* Card 6: NOT CHECKED IN */}
-        <div className="bg-white p-3.5 rounded-2xl border border-stone-200/80 shadow-xs">
-          <div className="text-[10px] font-extrabold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-stone-500" />
+        <div className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 shadow-xs">
+          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
+            <Clock className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-stone-500" />
             NOT CHECKED IN
           </div>
-          <div className="font-outfit font-black text-2xl text-stone-900 mt-2">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900 mt-1.5 2xl:mt-2">
             {(passSummary?.notCheckedIn ?? 0).toLocaleString()}
           </div>
-          <div className="text-[10px] text-stone-500 font-medium mt-0.5">Pending check-in</div>
+          <div className="text-[9px] 2xl:text-[10px] text-stone-500 font-medium mt-0.5">Pending check-in</div>
         </div>
       </div>
 
@@ -980,16 +980,16 @@ export default function CommercialOrdersAuditPage() {
       )}
 
       {/* Channel Tabs & Filter Controls */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs space-y-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
+      <div className="bg-white p-3 sm:p-3.5 2xl:p-4 rounded-2xl border border-stone-200/80 shadow-xs space-y-2.5 2xl:space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 2xl:gap-3 pb-2.5 2xl:pb-3 border-b border-stone-100">
           {/* Segmented Channel Tabs */}
-          <div className="flex items-center p-1 bg-stone-100 rounded-xl text-xs font-bold self-start overflow-x-auto max-w-full">
+          <div className="flex items-center p-0.5 2xl:p-1 bg-stone-100 rounded-xl text-[11px] 2xl:text-xs font-bold self-start overflow-x-auto max-w-full">
             <button
               onClick={() => {
                 setChannelTab('ALL');
                 setPage(1);
               }}
-              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
+              className={`px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 rounded-lg transition-all whitespace-nowrap ${
                 channelTab === 'ALL'
                   ? 'bg-white text-stone-900 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -1002,7 +1002,7 @@ export default function CommercialOrdersAuditPage() {
                 setChannelTab('PUBLIC');
                 setPage(1);
               }}
-              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
+              className={`px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 rounded-lg transition-all whitespace-nowrap ${
                 channelTab === 'PUBLIC'
                   ? 'bg-white text-blue-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -1015,7 +1015,7 @@ export default function CommercialOrdersAuditPage() {
                 setChannelTab('AGENT');
                 setPage(1);
               }}
-              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
+              className={`px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 rounded-lg transition-all whitespace-nowrap ${
                 channelTab === 'AGENT'
                   ? 'bg-white text-amber-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -1028,7 +1028,7 @@ export default function CommercialOrdersAuditPage() {
                 setChannelTab('FREE');
                 setPage(1);
               }}
-              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap ${
+              className={`px-2.5 2xl:px-3.5 py-1.5 2xl:py-2 rounded-lg transition-all whitespace-nowrap ${
                 channelTab === 'FREE'
                   ? 'bg-white text-emerald-800 shadow-xs'
                   : 'text-stone-600 hover:text-stone-900'
@@ -1039,30 +1039,30 @@ export default function CommercialOrdersAuditPage() {
           </div>
 
           {/* Records Counter or Selected Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 2xl:gap-3">
             {selectedOrderIds.size > 0 ? (
-              <div className="flex items-center gap-2.5 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
-                <span className="text-xs font-bold text-rose-800">
+              <div className="flex items-center gap-2 bg-rose-50 px-2.5 2xl:px-3 py-1 2xl:py-1.5 rounded-xl border border-rose-200">
+                <span className="text-[11px] 2xl:text-xs font-bold text-rose-800">
                   {selectedOrderIds.size} selected
                 </span>
                 <button
                   type="button"
                   onClick={handleOpenBulkDeleteModal}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 transition-colors shadow-2xs"
+                  className="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg bg-rose-600 text-white font-bold text-[11px] 2xl:text-xs hover:bg-rose-700 transition-colors shadow-2xs"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3 2xl:w-3.5 h-3 2xl:h-3.5" />
                   <span>Delete Selected</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedOrderIds(new Set())}
-                  className="text-xs text-rose-700 hover:underline font-semibold"
+                  className="text-[11px] 2xl:text-xs text-rose-700 hover:underline font-semibold"
                 >
                   Clear
                 </button>
               </div>
             ) : (
-              <div className="text-xs text-stone-500 font-medium">
+              <div className="text-[11px] 2xl:text-xs text-stone-500 font-medium">
                 {channelTab === 'AGENT'
                   ? `${hierarchicalAgentGroups.length} Active Agent Groups`
                   : channelTab === 'FREE' && orders.length > 0 && orders[0]?.orderNumber?.startsWith('FREE-')
@@ -1074,9 +1074,9 @@ export default function CommercialOrdersAuditPage() {
         </div>
 
         {/* Search & Filter Dropdowns */}
-        <div className="flex flex-col md:flex-row items-center gap-3">
+        <div className="flex flex-col md:flex-row items-center gap-2.5 2xl:gap-3">
           <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
               placeholder={
@@ -1091,11 +1091,11 @@ export default function CommercialOrdersAuditPage() {
                 setSearchQuery(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
+              className="w-full pl-9 pr-3.5 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
             />
           </div>
 
-          <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
+          <div className="flex items-center gap-2 2xl:gap-2.5 w-full md:w-auto flex-wrap">
             {channelTab !== 'FREE' && (
               <>
                 <select
@@ -1104,7 +1104,7 @@ export default function CommercialOrdersAuditPage() {
                     setTicketTypeFilter(e.target.value);
                     setPage(1);
                   }}
-                  className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+                  className="px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
                 >
                   <option value="ALL">All Pass Types</option>
                   <option value="COMMERCIAL_DAILY">Daily Pass</option>
@@ -1117,7 +1117,7 @@ export default function CommercialOrdersAuditPage() {
                     setStatusFilter(e.target.value);
                     setPage(1);
                   }}
-                  className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+                  className="px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="PAID">Paid / Confirmed</option>
@@ -1132,7 +1132,7 @@ export default function CommercialOrdersAuditPage() {
                     setCheckinFilter(e.target.value as any);
                     setPage(1);
                   }}
-                  className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+                  className="px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
                 >
                   <option value="ALL">All Check-in Status</option>
                   <option value="CHECKED_IN">Checked In</option>
@@ -1420,9 +1420,9 @@ export default function CommercialOrdersAuditPage() {
         <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs min-w-[1300px]">
-              <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
+              <thead className="bg-[#FAF7F2] border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider text-[9px] 2xl:text-[10px]">
                 <tr>
-                  <th className="px-3 py-3.5 w-8 text-center">
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5 w-8 text-center">
                     <button
                       type="button"
                       onClick={handleSelectAllCurrentPage}
@@ -1436,22 +1436,22 @@ export default function CommercialOrdersAuditPage() {
                       )}
                     </button>
                   </th>
-                  <th className="px-3 py-3.5">Pass / Ticket ID</th>
-                  <th className="px-3 py-3.5">Order #</th>
-                  <th className="px-4 py-3.5">Pass Holder</th>
-                  <th className="px-4 py-3.5">Contact</th>
-                  <th className="px-3 py-3.5">Pass Type</th>
-                  <th className="px-3 py-3.5 text-center">Source</th>
-                  <th className="px-3 py-3.5">Agent</th>
-                  <th className="px-3 py-3.5 text-center">Qty</th>
-                  <th className="px-3 py-3.5 text-right">Amount</th>
-                  <th className="px-3 py-3.5">Payment</th>
-                  <th className="px-3 py-3.5">Pass Status</th>
-                  <th className="px-3 py-3.5">Valid Dates</th>
-                  <th className="px-3 py-3.5">Check-in Status</th>
-                  <th className="px-3 py-3.5">Created At</th>
-                  <th className="px-3 py-3.5 text-center">Passes</th>
-                  <th className="px-3 py-3.5 text-center">Action</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Pass / Ticket ID</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Order #</th>
+                  <th className="px-3 2xl:px-4 py-2.5 2xl:py-3.5">Pass Holder</th>
+                  <th className="px-3 2xl:px-4 py-2.5 2xl:py-3.5">Contact</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Pass Type</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5 text-center">Source</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Agent</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5 text-center">Qty</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5 text-right">Amount</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Payment</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Pass Status</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Valid Dates</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Check-in Status</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5">Created At</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5 text-center">Passes</th>
+                  <th className="px-2.5 2xl:px-3 py-2.5 2xl:py-3.5 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 text-stone-900">
@@ -1488,7 +1488,7 @@ export default function CommercialOrdersAuditPage() {
                       <React.Fragment key={order.id}>
                         <tr className={`transition-colors ${isSelected ? 'bg-rose-50/40' : 'hover:bg-[#FAF7F2]/40'}`}>
                           {/* Row Select Checkbox */}
-                          <td className="px-3 py-3.5 text-center">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 text-center">
                             <button
                               type="button"
                               onClick={() => handleToggleSelectOrder(order.id)}
@@ -1503,7 +1503,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Pass / Ticket ID */}
-                          <td className="px-3 py-3.5 font-mono font-bold text-[#7A1113] whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 font-mono font-bold text-[#7A1113] whitespace-nowrap">
                             <div className="flex items-center gap-1">
                               <span>{ticketId}</span>
                               <button
@@ -1521,7 +1521,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Order Number */}
-                          <td className="px-3 py-3.5 font-mono text-stone-700 whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 font-mono text-stone-700 whitespace-nowrap">
                             <div className="flex items-center gap-1">
                               <span className="font-semibold">{order.orderNumber}</span>
                               <button
@@ -1539,18 +1539,18 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Pass Holder */}
-                          <td className="px-4 py-3.5">
+                          <td className="px-3 2xl:px-4 py-2 2xl:py-3.5">
                             <div className="font-bold text-stone-900">{order.customerName}</div>
                           </td>
 
                           {/* Contact */}
-                          <td className="px-4 py-3.5">
+                          <td className="px-3 2xl:px-4 py-2 2xl:py-3.5">
                             <div className="font-medium text-stone-800">{order.customerMobile}</div>
                             <div className="text-[11px] text-stone-500 truncate max-w-[160px]">{order.customerEmail}</div>
                           </td>
 
                           {/* Pass Type */}
-                          <td className="px-3 py-3.5">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5">
                             <div className="font-semibold text-stone-800">
                               {order.ticketType === 'COMMERCIAL_SEASON'
                                 ? 'Season Pass'
@@ -1561,7 +1561,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Source Badge */}
-                          <td className="px-3 py-3.5 text-center whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 text-center whitespace-nowrap">
                             {order.source === 'PUBLIC' ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
                                 WEBSITE
@@ -1578,7 +1578,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Agent */}
-                          <td className="px-3 py-3.5 whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 whitespace-nowrap">
                             {order.agent ? (
                               <div>
                                 <div className="font-bold text-stone-900">{order.agent.name}</div>
@@ -1592,15 +1592,15 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Qty */}
-                          <td className="px-3 py-3.5 font-bold text-center">{order.quantity}</td>
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 font-bold text-center">{order.quantity}</td>
 
                           {/* Amount */}
-                          <td className="px-3 py-3.5 font-outfit font-black text-right text-stone-900 whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 font-outfit font-black text-right text-stone-900 whitespace-nowrap">
                             ₹{order.amountInr.toLocaleString('en-IN')}
                           </td>
 
                           {/* Payment */}
-                          <td className="px-3 py-3.5 whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 whitespace-nowrap">
                             {order.isTestPayment ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                 TEST PAID
@@ -1617,14 +1617,14 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Pass Status */}
-                          <td className="px-3 py-3.5 whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 whitespace-nowrap">
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-700 border border-stone-200">
                               {order.orderStatus || 'ACTIVE'}
                             </span>
                           </td>
 
                           {/* Valid Dates */}
-                          <td className="px-3 py-3.5 text-stone-600 whitespace-nowrap text-[11px]">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 text-stone-600 whitespace-nowrap text-[11px]">
                             {order.selectedDates && order.selectedDates.length > 0 ? (
                               <span title={order.selectedDates.join(', ')}>
                                 {order.selectedDates.length === 9 ? 'All 9 Days' : `${order.selectedDates.length} Days Selected`}
@@ -1635,7 +1635,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Check-in Status */}
-                          <td className="px-3 py-3.5 whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 whitespace-nowrap">
                             {isOrderCheckedIn ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -1650,7 +1650,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Created At Date */}
-                          <td className="px-3 py-3.5 text-stone-500 whitespace-nowrap">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 text-stone-500 whitespace-nowrap">
                             {new Date(order.createdAt).toLocaleDateString('en-IN', {
                               day: '2-digit',
                               month: 'short',
@@ -1660,7 +1660,7 @@ export default function CommercialOrdersAuditPage() {
                           </td>
 
                           {/* Attendee Passes Drilldown Toggle */}
-                          <td className="px-3 py-3.5 text-center">
+                          <td className="px-2.5 2xl:px-3 py-2 2xl:py-3.5 text-center">
                             <button
                               type="button"
                               onClick={() => toggleOrderPasses(order.id)}

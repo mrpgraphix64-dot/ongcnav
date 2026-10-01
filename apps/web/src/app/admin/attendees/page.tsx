@@ -585,62 +585,62 @@ export default function AdminAttendeesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-4 2xl:space-y-6">
       {/* TOP SUMMARY METRICS BAR */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-sm flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 2xl:gap-4">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
               Total Registrations
             </div>
-            <div className="font-outfit font-black text-2xl text-[#7A1113] mt-0.5">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-[#7A1113] mt-0.5">
               {metrics.total_registrations}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-[#7A1113]/10 text-[#7A1113] flex items-center justify-center font-bold">
-            <Users className="w-5 h-5" />
+          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-[#7A1113]/10 text-[#7A1113] flex items-center justify-center font-bold">
+            <Users className="w-4 h-4 2xl:w-5 2xl:h-5" />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
               Total People
             </div>
-            <div className="font-outfit font-black text-2xl text-stone-900 mt-0.5">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900 mt-0.5">
               {metrics.total_people}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-            <User className="w-5 h-5" />
+          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+            <User className="w-4 h-4 2xl:w-5 2xl:h-5" />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
               ONGC Staff
             </div>
-            <div className="font-outfit font-black text-2xl text-emerald-600 mt-0.5">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-600 mt-0.5">
               {metrics.total_employees}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <ShieldCheck className="w-5 h-5" />
+          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <ShieldCheck className="w-4 h-4 2xl:w-5 2xl:h-5" />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
               Family Members
             </div>
-            <div className="font-outfit font-black text-2xl text-blue-600 mt-0.5">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-blue-600 mt-0.5">
               {metrics.total_family_members}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-            <Users className="w-5 h-5" />
+          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+            <Users className="w-4 h-4 2xl:w-5 2xl:h-5" />
           </div>
         </div>
       </div>
@@ -669,12 +669,12 @@ export default function AdminAttendeesPage() {
       )}
 
       {/* Action Bar & Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm space-y-4">
+      <div className="bg-white p-3 sm:p-3.5 2xl:p-4 rounded-2xl border border-stone-200/70 shadow-xs space-y-3 2xl:space-y-4">
         {/* ROW 1: Search & Primary Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           {/* Search Input */}
           <div className="relative flex-1 w-full min-w-0">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
               placeholder="Search by attendee name, mobile, email, ticket ID, or employee CPF..."
@@ -683,15 +683,15 @@ export default function AdminAttendeesPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] transition-all"
+              className="w-full pl-9 pr-3.5 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113] transition-all"
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-start sm:justify-end shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap justify-start sm:justify-end shrink-0">
             <button
               onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 2xl:px-3.5 2xl:py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5 text-amber-300" />
               <span>Quick Add</span>
@@ -699,7 +699,7 @@ export default function AdminAttendeesPage() {
 
             <Link
               href="/admin/bulk-upload"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-stone-200 hover:bg-[#FAF7F2] text-stone-700 text-xs font-bold transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 2xl:px-3.5 2xl:py-2 rounded-xl border border-stone-200 hover:bg-[#FAF7F2] text-stone-700 text-xs font-bold transition-colors"
             >
               <UploadCloud className="w-3.5 h-3.5 text-[#7A1113]" />
               <span>Bulk Upload</span>
@@ -707,7 +707,7 @@ export default function AdminAttendeesPage() {
 
             <button
               onClick={handleBulkExport}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-stone-200 hover:bg-[#FAF7F2] text-stone-700 text-xs font-bold transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 2xl:px-3.5 2xl:py-2 rounded-xl border border-stone-200 hover:bg-[#FAF7F2] text-stone-700 text-xs font-bold transition-colors cursor-pointer"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
               <span>Export CSV</span>
@@ -717,7 +717,7 @@ export default function AdminAttendeesPage() {
               onClick={loadData}
               disabled={loading}
               title="Refresh"
-              className="p-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors"
+              className="p-1.5 2xl:p-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -725,9 +725,9 @@ export default function AdminAttendeesPage() {
         </div>
 
         {/* ROW 2: Filters, Grouping Controls, and Highlighted Selection Bar */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-3 border-t border-stone-100 text-xs">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 sm:gap-3 pt-2.5 2xl:pt-3 border-t border-stone-100 text-xs">
           {/* Left: Filters & Grouping */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 2xl:gap-2.5 flex-wrap">
             {/* Status Filter */}
             <select
               value={statusFilter}
@@ -735,7 +735,7 @@ export default function AdminAttendeesPage() {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 bg-white hover:border-stone-300 focus:outline-none focus:ring-1 focus:ring-[#7A1113]"
+              className="px-2.5 py-1 2xl:px-3 2xl:py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700 bg-white hover:border-stone-300 focus:outline-none focus:ring-1 focus:ring-[#7A1113]"
             >
               <option value="all">All Status</option>
               <option value="active">Active / Pending</option>
@@ -866,9 +866,9 @@ export default function AdminAttendeesPage() {
       <div className="bg-white rounded-2xl border border-stone-200/70 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#FAF7F2] border-b border-stone-200/70 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
+            <thead className="bg-[#FAF7F2] border-b border-stone-200/70 text-stone-500 font-bold uppercase tracking-wider text-[9px] 2xl:text-[10px]">
               <tr>
-                <th className="px-4 py-3.5 w-10">
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5 w-10">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -876,29 +876,29 @@ export default function AdminAttendeesPage() {
                     className="rounded text-[#7A1113] focus:ring-[#7A1113] border-stone-300"
                   />
                 </th>
-                <th className="px-4 py-3.5">Attendee / Pass Holder</th>
-                <th className="px-4 py-3.5">Ticket ID</th>
-                <th className="px-4 py-3.5">Registration / Employee</th>
-                <th className="px-4 py-3.5">Category</th>
-                <th className="px-4 py-3.5">Source</th>
-                <th className="px-4 py-3.5">Live Entry Status</th>
-                <th className="px-4 py-3.5">Digital Pass</th>
-                <th className="px-4 py-3.5 text-right">Actions</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5">Attendee / Pass Holder</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5">Ticket ID</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5">Registration / Employee</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5">Category</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5">Source</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5">Live Entry Status</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5">Digital Pass</th>
+                <th className="px-3 sm:px-4 py-2.5 2xl:py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 text-stone-900">
               {loading && primaryAttendees.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-stone-400">
-                    <RefreshCw className="w-6 h-6 text-stone-300 animate-spin mx-auto mb-2" />
-                    <p className="font-semibold text-stone-600">Loading attendee directory...</p>
+                  <td colSpan={9} className="px-4 py-8 2xl:py-12 text-center text-stone-400">
+                    <RefreshCw className="w-5 h-5 2xl:w-6 2xl:h-6 text-stone-300 animate-spin mx-auto mb-2" />
+                    <p className="font-semibold text-xs text-stone-600">Loading attendee directory...</p>
                   </td>
                 </tr>
               ) : primaryAttendees.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-stone-400">
-                    <Users className="w-10 h-10 text-stone-300 mx-auto mb-2" />
-                    <p className="font-semibold text-stone-600">No attendees found.</p>
+                  <td colSpan={9} className="px-4 py-8 2xl:py-12 text-center text-stone-400">
+                    <Users className="w-8 h-8 2xl:w-10 2xl:h-10 text-stone-300 mx-auto mb-2" />
+                    <p className="font-semibold text-xs text-stone-600">No attendees found.</p>
                   </td>
                 </tr>
               ) : (
@@ -923,7 +923,7 @@ export default function AdminAttendeesPage() {
                     <React.Fragment key={primary.id}>
                       {/* Primary Attendee Row / Commercial Order Parent Row */}
                       <tr className="hover:bg-[#FAF7F2]/50 transition-colors bg-white font-medium">
-                        <td className="px-4 py-3.5">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3">
                           <input
                             type="checkbox"
                             checked={primarySelected}
@@ -933,8 +933,8 @@ export default function AdminAttendeesPage() {
                         </td>
 
                         {/* Name & Contact */}
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-2.5">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3">
+                          <div className="flex items-center gap-2">
                             {groupByRegistration && hasChildren ? (
                               <button
                                 onClick={() => toggleGroup(`group_${primary.id}`)}
@@ -978,7 +978,7 @@ export default function AdminAttendeesPage() {
                         </td>
 
                         {/* Ticket ID / Commercial Order Number */}
-                        <td className="px-4 py-3.5 font-mono font-bold whitespace-nowrap">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3 font-mono font-bold whitespace-nowrap">
                           {primary.isCommercialOrder ? (
                             <div className="flex items-center gap-1.5">
                               <span className="text-[#7A1113]">
@@ -994,7 +994,7 @@ export default function AdminAttendeesPage() {
                         </td>
 
                         {/* Registration / Employee / Commercial Order info */}
-                        <td className="px-4 py-3.5">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3">
                           {primary.isCommercialOrder ? (
                             <div>
                               <div className="font-bold text-xs text-stone-800 flex items-center gap-1.5">
@@ -1031,7 +1031,7 @@ export default function AdminAttendeesPage() {
                         </td>
 
                         {/* Category */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
                               primary.isCommercialOrder
@@ -1048,12 +1048,12 @@ export default function AdminAttendeesPage() {
                         </td>
 
                         {/* Source */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3 whitespace-nowrap">
                           {renderSourceBadge(primary)}
                         </td>
 
                         {/* Live Entry Status */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3 whitespace-nowrap">
                           {primary.isCommercialOrder ? (
                             commCheckedInCount > 0 ? (
                               <div>
@@ -1090,10 +1090,10 @@ export default function AdminAttendeesPage() {
                         </td>
 
                         {/* Digital Pass / QR */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3 whitespace-nowrap">
                           <button
                             onClick={() => setQrModalAttendee(primary)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-stone-200 text-stone-700 hover:bg-[#FAF7F2] font-semibold text-xs transition-colors"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-stone-200 text-stone-700 hover:bg-[#FAF7F2] font-semibold text-xs transition-colors cursor-pointer"
                           >
                             <QrCode className="w-3.5 h-3.5 text-[#7A1113]" />
                             <span>{primary.isCommercialOrder ? 'View Passes' : 'View Pass'}</span>
@@ -1101,7 +1101,7 @@ export default function AdminAttendeesPage() {
                         </td>
 
                         {/* Actions */}
-                        <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        <td className="px-3 sm:px-4 py-2 2xl:py-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
                             <a
                               href={`/api/attendees/${primary.id}/qr-download`}
@@ -1114,14 +1114,14 @@ export default function AdminAttendeesPage() {
                             <button
                               onClick={() => handleRegenerateQr(primary.id, primary.ticketNumber)}
                               title="Regenerate QR Token"
-                              className="p-1.5 rounded-lg text-stone-400 hover:text-[#7A1113] hover:bg-[#FAF7F2]"
+                              className="p-1.5 rounded-lg text-stone-400 hover:text-[#7A1113] hover:bg-[#FAF7F2] cursor-pointer"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => openDeleteModal(primary.id, primary.name)}
                               title="Delete Attendee"
-                              className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50"
+                              className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1147,7 +1147,7 @@ export default function AdminAttendeesPage() {
                               key={pass.id}
                               className="bg-[#FAF7F2]/60 hover:bg-[#FAF7F2] transition-colors text-xs border-stone-100"
                             >
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 <input
                                   type="checkbox"
                                   checked={passSelected}
@@ -1155,8 +1155,8 @@ export default function AdminAttendeesPage() {
                                   className="rounded text-[#7A1113] focus:ring-[#7A1113] border-stone-300"
                                 />
                               </td>
-                              <td className="px-4 py-2.5">
-                                <div className="flex items-center gap-2 pl-8">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
+                                <div className="flex items-center gap-2 pl-6 2xl:pl-8">
                                   <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
                                   <div>
                                     <div className="font-semibold text-stone-800 flex items-center gap-2">
@@ -1172,23 +1172,23 @@ export default function AdminAttendeesPage() {
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-2.5 font-mono font-bold text-[#7A1113]">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 font-mono font-bold text-[#7A1113]">
                                 {pass.ticketNumber}
                               </td>
-                              <td className="px-4 py-2.5 text-stone-500 text-[11px]">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 text-stone-500 text-[11px]">
                                 {Array.isArray(pass.bookingDays) && pass.bookingDays.length > 0
                                   ? pass.bookingDays.join(', ')
                                   : primary.order?.ticketType || 'E-Pass'}
                               </td>
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                                   {pass.category || primary.category}
                                 </span>
                               </td>
-                              <td className="px-4 py-2.5 whitespace-nowrap">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 whitespace-nowrap">
                                 {renderSourceBadge(pass)}
                               </td>
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 {passCheckedIn ? (
                                   <div>
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
@@ -1207,16 +1207,16 @@ export default function AdminAttendeesPage() {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 <button
                                   onClick={() => setQrModalAttendee(pass)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-stone-200 text-stone-600 hover:bg-white text-[11px]"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-stone-200 text-stone-600 hover:bg-white text-[11px] cursor-pointer"
                                 >
                                   <QrCode className="w-3 h-3 text-[#7A1113]" />
                                   <span>View Pass</span>
                                 </button>
                               </td>
-                              <td className="px-4 py-2.5 text-right">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 text-right">
                                 <div className="flex items-center justify-end gap-1">
                                   <a
                                     href={`/api/attendees/${pass.id}/qr-download`}
@@ -1229,14 +1229,14 @@ export default function AdminAttendeesPage() {
                                   <button
                                     onClick={() => handleRegenerateQr(pass.id, pass.ticketNumber)}
                                     title="Regenerate QR"
-                                    className="p-1 rounded text-stone-400 hover:text-[#7A1113]"
+                                    className="p-1 rounded text-stone-400 hover:text-[#7A1113] cursor-pointer"
                                   >
                                     <RefreshCw className="w-3 h-3" />
                                   </button>
                                   <button
                                     onClick={() => openDeleteModal(pass.id, pass.name || pass.ticketNumber)}
                                     title="Delete Pass"
-                                    className="p-1 rounded text-stone-400 hover:text-rose-600"
+                                    className="p-1 rounded text-stone-400 hover:text-rose-600 cursor-pointer"
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </button>
@@ -1265,7 +1265,7 @@ export default function AdminAttendeesPage() {
                               key={fam.id}
                               className="bg-[#FAF7F2]/60 hover:bg-[#FAF7F2] transition-colors text-xs border-stone-100"
                             >
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 <input
                                   type="checkbox"
                                   checked={famSelected}
@@ -1273,8 +1273,8 @@ export default function AdminAttendeesPage() {
                                   className="rounded text-[#7A1113] focus:ring-[#7A1113] border-stone-300"
                                 />
                               </td>
-                              <td className="px-4 py-2.5">
-                                <div className="flex items-center gap-2 pl-8">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
+                                <div className="flex items-center gap-2 pl-6 2xl:pl-8">
                                   <div className="w-1.5 h-1.5 rounded-full bg-stone-300"></div>
                                   <div>
                                     <div className="font-semibold text-stone-800 flex items-center gap-2">
@@ -1291,21 +1291,21 @@ export default function AdminAttendeesPage() {
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-2.5 font-mono font-bold text-stone-600">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 font-mono font-bold text-stone-600">
                                 {fam.ticketNumber}
                               </td>
-                              <td className="px-4 py-2.5 text-stone-400 text-[11px]">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 text-stone-400 text-[11px]">
                                 Family of {primary.employee?.name || primary.name}
                               </td>
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                   Family Member
                                 </span>
                               </td>
-                              <td className="px-4 py-2.5 whitespace-nowrap">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 whitespace-nowrap">
                                 {renderSourceBadge(fam)}
                               </td>
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 {famCheckedIn ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -1317,16 +1317,16 @@ export default function AdminAttendeesPage() {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-4 py-2.5">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5">
                                 <button
                                   onClick={() => setQrModalAttendee(fam)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-stone-200 text-stone-600 hover:bg-white text-[11px]"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-stone-200 text-stone-600 hover:bg-white text-[11px] cursor-pointer"
                                 >
                                   <QrCode className="w-3 h-3 text-[#7A1113]" />
                                   <span>Pass</span>
                                 </button>
                               </td>
-                              <td className="px-4 py-2.5 text-right">
+                              <td className="px-3 sm:px-4 py-1.5 2xl:py-2.5 text-right">
                                 <div className="flex items-center justify-end gap-1">
                                   <a
                                     href={`/api/attendees/${fam.id}/qr-download`}
@@ -1339,14 +1339,14 @@ export default function AdminAttendeesPage() {
                                   <button
                                     onClick={() => handleRegenerateQr(fam.id, fam.ticketNumber)}
                                     title="Regenerate QR"
-                                    className="p-1 rounded text-stone-400 hover:text-[#7A1113]"
+                                    className="p-1 rounded text-stone-400 hover:text-[#7A1113] cursor-pointer"
                                   >
                                     <RefreshCw className="w-3 h-3" />
                                   </button>
                                   <button
                                     onClick={() => openDeleteModal(fam.id, fam.name)}
                                     title="Delete"
-                                    className="p-1 rounded text-stone-400 hover:text-rose-600"
+                                    className="p-1 rounded text-stone-400 hover:text-rose-600 cursor-pointer"
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </button>

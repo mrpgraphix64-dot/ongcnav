@@ -349,12 +349,12 @@ export default function AdminEmployeesPage() {
   }, [passData, selectedPassIndex]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-4 2xl:space-y-6">
       {/* ERROR BANNER */}
       {errorMsg && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between">
+        <div className="p-3 2xl:p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <AlertCircle className="w-4 h-4 2xl:w-5 2xl:h-5 text-rose-600 shrink-0" />
             <span>{errorMsg}</span>
           </div>
           <button
@@ -367,98 +367,98 @@ export default function AdminEmployeesPage() {
       )}
 
       {/* TOP PASS SUMMARY CARDS (PART 5) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 2xl:gap-3">
         {/* TOTAL PASSES */}
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
+            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Total Passes
             </span>
-            <Ticket className="w-4 h-4 text-maroon" />
+            <Ticket className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
           </div>
-          <div className="font-outfit font-black text-2xl text-ink">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-ink">
             {summaryLoading ? '—' : summary.totalPasses.toLocaleString()}
           </div>
-          <div className="text-[10px] text-ink-soft mt-1">Across all categories</div>
+          <div className="text-[9px] 2xl:text-[10px] text-ink-soft mt-1">Across all categories</div>
         </div>
 
         {/* WEBSITE PASSES */}
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
+            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Website
             </span>
-            <Globe className="w-4 h-4 text-emerald-600" />
+            <Globe className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-emerald-600" />
           </div>
-          <div className="font-outfit font-black text-2xl text-emerald-700">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-700">
             {summaryLoading ? '—' : summary.websitePasses.toLocaleString()}
           </div>
-          <div className="text-[10px] text-emerald-600 mt-1">Public online sales</div>
+          <div className="text-[9px] 2xl:text-[10px] text-emerald-600 mt-1">Public online sales</div>
         </div>
 
         {/* AGENT PASSES */}
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
+            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Agent
             </span>
-            <Shield className="w-4 h-4 text-blue-600" />
+            <Shield className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-blue-600" />
           </div>
-          <div className="font-outfit font-black text-2xl text-blue-700">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-blue-700">
             {summaryLoading ? '—' : summary.agentPasses.toLocaleString()}
           </div>
-          <div className="text-[10px] text-blue-600 mt-1">Authorized agents</div>
+          <div className="text-[9px] 2xl:text-[10px] text-blue-600 mt-1">Authorized agents</div>
         </div>
 
         {/* EMPLOYEE PASSES */}
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
+            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Employee
             </span>
-            <Users className="w-4 h-4 text-purple-600" />
+            <Users className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-purple-600" />
           </div>
-          <div className="font-outfit font-black text-2xl text-purple-700">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-purple-700">
             {summaryLoading ? '—' : summary.employeePasses.toLocaleString()}
           </div>
-          <div className="text-[10px] text-purple-600 mt-1">Staff &amp; family passes</div>
+          <div className="text-[9px] 2xl:text-[10px] text-purple-600 mt-1">Staff &amp; family passes</div>
         </div>
 
         {/* CHECKED IN */}
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
+            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Checked In
             </span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <CheckCircle2 className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-emerald-600" />
           </div>
-          <div className="font-outfit font-black text-2xl text-emerald-600">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-600">
             {summaryLoading ? '—' : summary.checkedInPasses.toLocaleString()}
           </div>
-          <div className="text-[10px] text-emerald-600 mt-1">Verified at turnstiles</div>
+          <div className="text-[9px] 2xl:text-[10px] text-emerald-600 mt-1">Verified at turnstiles</div>
         </div>
 
         {/* NOT CHECKED IN */}
-        <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
+        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
+            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Pending Entry
             </span>
-            <Clock className="w-4 h-4 text-amber-600" />
+            <Clock className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-amber-600" />
           </div>
-          <div className="font-outfit font-black text-2xl text-amber-700">
+          <div className="font-outfit font-black text-xl 2xl:text-2xl text-amber-700">
             {summaryLoading ? '—' : summary.notCheckedInPasses.toLocaleString()}
           </div>
-          <div className="text-[10px] text-amber-600 mt-1">Yet to check in</div>
+          <div className="text-[9px] 2xl:text-[10px] text-amber-600 mt-1">Yet to check in</div>
         </div>
       </div>
 
       {/* FILTER & SEARCH BAR */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      <div className="bg-white p-3 sm:p-3.5 2xl:p-4 rounded-2xl border border-stone-200/80 shadow-xs space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3">
           {/* Search */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
               value={searchQuery}
@@ -467,22 +467,22 @@ export default function AdminEmployeesPage() {
                 setPage(1);
               }}
               placeholder="Search by Employee Name, CPF / ID, Mobile, Email, Department..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon bg-cream/30"
+              className="w-full pl-9 pr-3.5 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs sm:text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon bg-cream/30"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-ink cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
           {/* Filter dropdowns */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 2xl:gap-2.5">
             {/* Pass Status Filter */}
-            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-ink">
+            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1 2xl:px-3 2xl:py-1.5 text-xs font-semibold text-ink">
               <span className="text-ink-soft font-normal">Status:</span>
               <select
                 value={statusFilter}
@@ -503,7 +503,7 @@ export default function AdminEmployeesPage() {
             </div>
 
             {/* Checkin Status Filter */}
-            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-ink">
+            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1 2xl:px-3 2xl:py-1.5 text-xs font-semibold text-ink">
               <span className="text-ink-soft font-normal">Check-in:</span>
               <select
                 value={checkinFilter}
@@ -526,9 +526,9 @@ export default function AdminEmployeesPage() {
                 loadSummary();
               }}
               title="Refresh"
-              className="p-2.5 rounded-xl border border-stone-200 text-stone-600 hover:text-maroon hover:border-maroon/30 transition-colors cursor-pointer"
+              className="p-1.5 2xl:p-2 rounded-xl border border-stone-200 text-stone-600 hover:text-maroon hover:border-maroon/30 transition-colors cursor-pointer"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 2xl:w-4 2xl:h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -539,30 +539,30 @@ export default function AdminEmployeesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-stone-50/80 border-b border-stone-200/70 text-ink-soft uppercase text-[10px] font-bold tracking-wider">
-                <th className="py-3.5 px-4 font-bold">Employee Name</th>
-                <th className="py-3.5 px-4 font-bold">CPF / ID</th>
-                <th className="py-3.5 px-4 font-bold">Mobile &amp; Email</th>
-                <th className="py-3.5 px-4 font-bold">Department</th>
-                <th className="py-3.5 px-4 font-bold">Registration</th>
-                <th className="py-3.5 px-4 font-bold">Pass Type</th>
-                <th className="py-3.5 px-4 font-bold">Pass Status</th>
-                <th className="py-3.5 px-4 font-bold">Check-in Status</th>
-                <th className="py-3.5 px-4 font-bold">Registered</th>
-                <th className="py-3.5 px-4 font-bold text-right">Actions</th>
+              <tr className="bg-stone-50/80 border-b border-stone-200/70 text-ink-soft uppercase text-[9px] 2xl:text-[10px] font-bold tracking-wider">
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Employee Name</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">CPF / ID</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Mobile &amp; Email</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Department</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Registration</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Pass Type</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Pass Status</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Check-in Status</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Registered</th>
+                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-ink-soft">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto text-maroon mb-2" />
+                  <td colSpan={10} className="py-8 2xl:py-12 text-center text-ink-soft">
+                    <RefreshCw className="w-5 h-5 2xl:w-6 2xl:h-6 animate-spin mx-auto text-maroon mb-2" />
                     <span>Loading employee passes...</span>
                   </td>
                 </tr>
               ) : employees.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-ink-soft">
+                  <td colSpan={10} className="py-8 2xl:py-12 text-center text-ink-soft">
                     <Users className="w-8 h-8 text-stone-300 mx-auto mb-2" />
                     <p className="font-semibold text-ink text-sm">No employee records found</p>
                     <p className="text-xs text-ink-soft mt-1">
@@ -579,46 +579,46 @@ export default function AdminEmployeesPage() {
                     className="hover:bg-cream/40 transition-colors group"
                   >
                     {/* Name */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-ink text-sm group-hover:text-maroon transition-colors">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                      <div className="font-bold text-ink text-xs sm:text-sm group-hover:text-maroon transition-colors">
                         {emp.name}
                       </div>
-                      <div className="text-[11px] text-ink-soft flex items-center gap-1 mt-0.5">
+                      <div className="text-[10px] 2xl:text-[11px] text-ink-soft flex items-center gap-1 mt-0.5">
                         <Briefcase className="w-3 h-3 text-stone-400" />
                         <span>{emp.designation || 'Staff'}</span>
                       </div>
                     </td>
 
                     {/* CPF */}
-                    <td className="py-3.5 px-4">
-                      <span className="font-mono font-bold text-maroon bg-maroon/5 border border-maroon/20 px-2 py-0.5 rounded text-xs">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                      <span className="font-mono font-bold text-maroon bg-maroon/5 border border-maroon/20 px-1.5 2xl:px-2 py-0.5 rounded text-xs">
                         {emp.cpf}
                       </span>
                     </td>
 
                     {/* Mobile & Email */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-ink flex items-center gap-1">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                      <div className="font-semibold text-ink text-xs flex items-center gap-1">
                         <Phone className="w-3 h-3 text-stone-400" />
                         <span>{emp.mobile || '—'}</span>
                       </div>
                       {emp.email && (
-                        <div className="text-[11px] text-ink-soft flex items-center gap-1 mt-0.5">
+                        <div className="text-[10px] 2xl:text-[11px] text-ink-soft flex items-center gap-1 mt-0.5">
                           <Mail className="w-3 h-3 text-stone-400" />
-                          <span className="truncate max-w-[180px]">{emp.email}</span>
+                          <span className="truncate max-w-[150px] 2xl:max-w-[180px]">{emp.email}</span>
                         </div>
                       )}
                     </td>
 
                     {/* Department */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-ink">{emp.department || 'ONGC'}</div>
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                      <div className="font-semibold text-ink text-xs">{emp.department || 'ONGC'}</div>
                     </td>
 
                     {/* Registration Status */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border ${
+                        className={`inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wide border ${
                           emp.registrationStatus === 'APPROVED'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                             : emp.registrationStatus === 'REJECTED'
@@ -635,22 +635,22 @@ export default function AdminEmployeesPage() {
                     </td>
 
                     {/* Pass Type */}
-                    <td className="py-3.5 px-4">
-                      <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-50 text-purple-900 border border-purple-200">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                      <div className="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg text-[11px] 2xl:text-xs font-semibold bg-purple-50 text-purple-900 border border-purple-200">
                         <Ticket className="w-3 h-3 text-purple-700" />
                         <span>{emp.passType}</span>
                       </div>
                       {emp.familyMembersCount > 0 && (
-                        <div className="text-[10px] text-ink-soft mt-0.5">
+                        <div className="text-[9px] 2xl:text-[10px] text-ink-soft mt-0.5">
                           Total: {emp.totalPasses} pass{emp.totalPasses > 1 ? 'es' : ''}
                         </div>
                       )}
                     </td>
 
                     {/* Pass Status */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border ${
+                        className={`inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wide border ${
                           emp.passStatus === 'ACTIVE'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                             : emp.passStatus === 'SUSPENDED'
@@ -663,15 +663,15 @@ export default function AdminEmployeesPage() {
                     </td>
 
                     {/* Check-in Status */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
                       {emp.isCheckedIn ? (
                         <div>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             <span>Checked In</span>
                           </span>
                           {emp.latestCheckin && (
-                            <div className="text-[10px] text-ink-soft mt-0.5">
+                            <div className="text-[9px] 2xl:text-[10px] text-ink-soft mt-0.5">
                               {emp.latestCheckin.gateName} &bull;{' '}
                               {new Date(emp.latestCheckin.checkinTime).toLocaleTimeString([], {
                                 hour: '2-digit',
@@ -681,7 +681,7 @@ export default function AdminEmployeesPage() {
                           )}
                         </div>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
+                        <span className="inline-flex items-center gap-1 px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
                           <Clock className="w-3 h-3 text-stone-400" />
                           <span>Not Checked In</span>
                         </span>
@@ -689,7 +689,7 @@ export default function AdminEmployeesPage() {
                     </td>
 
                     {/* Registration Date */}
-                    <td className="py-3.5 px-4 text-ink-soft whitespace-nowrap">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4 text-ink-soft whitespace-nowrap text-[11px] 2xl:text-xs">
                       {new Date(emp.registrationDate).toLocaleDateString('en-GB', {
                         day: '2-digit',
                         month: 'short',
@@ -698,7 +698,7 @@ export default function AdminEmployeesPage() {
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
                         {emp.registrationStatus === 'PENDING' && (
                           <>

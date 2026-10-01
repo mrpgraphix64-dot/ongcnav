@@ -596,53 +596,53 @@ export default function AdminStaffPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-4 2xl:space-y-6">
       {/* Top Action & Stats Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl border border-stone-200/70 shadow-sm">
-        <div className="flex flex-wrap items-center gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 bg-white p-3.5 sm:p-4 2xl:p-5 rounded-2xl border border-stone-200/70 shadow-xs">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           <div>
-            <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-xs font-semibold text-stone-500 uppercase tracking-wider">
               Total Staff
             </div>
-            <div className="font-outfit font-black text-2xl text-[#7A1113]">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-[#7A1113]">
               {internalStaffList.length}
             </div>
           </div>
-          <div className="h-8 w-px bg-stone-200 hidden sm:block"></div>
+          <div className="h-7 2xl:h-8 w-px bg-stone-200 hidden sm:block"></div>
           <div>
-            <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-xs font-semibold text-stone-500 uppercase tracking-wider">
               Active Operators
             </div>
-            <div className="font-outfit font-black text-2xl text-emerald-600">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-600">
               {activeOperatorsCount}
             </div>
           </div>
-          <div className="h-8 w-px bg-stone-200 hidden sm:block"></div>
+          <div className="h-7 2xl:h-8 w-px bg-stone-200 hidden sm:block"></div>
           <div>
-            <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+            <div className="text-[10px] 2xl:text-xs font-semibold text-stone-500 uppercase tracking-wider">
               Active Gates
             </div>
-            <div className="font-outfit font-black text-2xl text-stone-900">
+            <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900">
               {gatesList.length}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 2xl:gap-3">
           <button
             onClick={loadData}
             disabled={loading}
             title="Refresh Staff Data"
-            className="p-2.5 rounded-xl border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors"
+            className="p-1.5 2xl:p-2 rounded-xl border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 2xl:w-4 2xl:h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
             type="button"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white font-semibold text-sm transition-all shadow-sm"
+            className="inline-flex items-center gap-1.5 2xl:gap-2 px-3 sm:px-3.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white font-semibold text-xs 2xl:text-sm transition-all shadow-xs cursor-pointer"
           >
-            <UserPlus className="w-4 h-4 text-amber-300" />
+            <UserPlus className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-amber-300" />
             <span>Add Staff Operator</span>
           </button>
         </div>
@@ -675,35 +675,35 @@ export default function AdminStaffPage() {
       )}
 
       {/* ADMINISTRATORS SECTION */}
-      <div className="bg-white p-5 rounded-2xl border border-stone-200/70 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+      <div className="bg-white p-3.5 sm:p-4 2xl:p-5 rounded-2xl border border-stone-200/70 shadow-sm space-y-3 2xl:space-y-4">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-2 2xl:pb-3">
           <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-[#7A1113]" />
-            <h3 className="font-outfit font-bold text-base text-stone-900">
+            <Shield className="w-4 h-4 2xl:w-5 2xl:h-5 text-[#7A1113]" />
+            <h3 className="font-outfit font-bold text-sm 2xl:text-base text-stone-900">
               Domain Administrators
             </h3>
-            <span className="text-[11px] font-semibold text-stone-500 bg-stone-100 px-2.5 py-0.5 rounded-full border border-stone-200">
+            <span className="text-[10px] 2xl:text-[11px] font-semibold text-stone-500 bg-stone-100 px-2 2xl:px-2.5 py-0.5 rounded-full border border-stone-200">
               Strict 1 Admin Per Domain
             </span>
           </div>
-          <p className="text-xs text-stone-500 hidden sm:block">
+          <p className="text-[11px] 2xl:text-xs text-stone-500 hidden sm:block">
             Global authority managed by Super Admin
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 2xl:gap-4">
           {/* E-Pass Admin Card */}
-          <div className="p-4 rounded-xl border border-stone-200 bg-[#FAF7F2]/60 space-y-3">
+          <div className="p-3 2xl:p-4 rounded-xl border border-stone-200 bg-[#FAF7F2]/60 space-y-2.5 2xl:space-y-3">
             <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-[#7A1113]/10 text-[#7A1113] flex items-center justify-center font-bold text-xs shrink-0 border border-[#7A1113]/20">
+              <div className="flex items-center gap-2 2xl:gap-2.5">
+                <div className="w-8 h-8 2xl:w-9 2xl:h-9 rounded-xl bg-[#7A1113]/10 text-[#7A1113] flex items-center justify-center font-bold text-xs shrink-0 border border-[#7A1113]/20">
                   EP
                 </div>
                 <div>
-                  <h4 className="font-outfit font-bold text-sm text-stone-900">
+                  <h4 className="font-outfit font-bold text-xs 2xl:text-sm text-stone-900">
                     E-Pass Admin
                   </h4>
-                  <span className="text-[10px] font-mono font-bold text-stone-500">
+                  <span className="text-[9px] 2xl:text-[10px] font-mono font-bold text-stone-500">
                     Role: COMMERCIAL_ADMIN
                   </span>
                 </div>
@@ -711,7 +711,7 @@ export default function AdminStaffPage() {
 
               {ePassAdmin ? (
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  className={`inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-bold border ${
                     ePassAdmin.isActive
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : 'bg-stone-100 text-stone-600 border-stone-200'
@@ -720,57 +720,57 @@ export default function AdminStaffPage() {
                   {ePassAdmin.isActive ? 'Active' : 'Inactive'}
                 </span>
               ) : (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                <span className="inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                   Not Configured
                 </span>
               )}
             </div>
 
             {ePassAdmin ? (
-              <div className="space-y-2 text-xs">
-                <div className="bg-white p-3 rounded-lg border border-stone-200/80 space-y-1 shadow-xs">
-                  <div className="font-bold text-stone-900">{ePassAdmin.name}</div>
-                  <div className="text-[11px] text-stone-500">{ePassAdmin.email}</div>
+              <div className="space-y-1.5 2xl:space-y-2 text-xs">
+                <div className="bg-white p-2.5 2xl:p-3 rounded-lg border border-stone-200/80 space-y-0.5 2xl:space-y-1 shadow-xs">
+                  <div className="font-bold text-xs 2xl:text-sm text-stone-900">{ePassAdmin.name}</div>
+                  <div className="text-[10px] 2xl:text-[11px] text-stone-500">{ePassAdmin.email}</div>
                   {(ePassAdmin.mobile || ePassAdmin.phone) && (
-                    <div className="text-[11px] text-stone-400">
+                    <div className="text-[10px] 2xl:text-[11px] text-stone-400">
                       {ePassAdmin.mobile || ePassAdmin.phone}
                     </div>
                   )}
-                  <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
+                  <div className="text-[9px] 2xl:text-[10px] text-stone-400 pt-1 2xl:pt-1.5 border-t border-stone-100 flex items-center justify-between">
                     <span>Domain: <strong className="text-stone-700">E-Pass (Commercial)</strong></span>
                     <span>Last active: {formatTimeAgo(ePassAdmin.last_activity_at)}</span>
                   </div>
-                  <div className="text-[10px] bg-stone-50 p-2 rounded border border-stone-100 space-y-0.5 mt-1">
+                  <div className="text-[9px] 2xl:text-[10px] bg-stone-50 p-1.5 2xl:p-2 rounded border border-stone-100 space-y-0.5 mt-1">
                     <div className="text-emerald-700 font-semibold">Allowed: /admin, /admin/commercial/* (Desk Role — Scanner Excluded)</div>
                     <div className="text-rose-600 font-medium">Restricted: Employee Passes, CPF, Family, Bulk Upload, Help Desk, Daily Closing, Global Settings</div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <span className="text-[11px] font-bold text-emerald-800 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="flex flex-wrap items-center justify-between gap-1.5 2xl:gap-2 pt-1">
+                  <span className="text-[10px] 2xl:text-[11px] font-bold text-emerald-800 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 3xl:w-3.5 h-3 2xl:h-3.5 text-emerald-600" />
                     E-Pass Admin already exists
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 2xl:gap-1.5">
                     <button
                       type="button"
                       onClick={() => openPageAccessModal(ePassAdmin)}
-                      className="px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-semibold text-xs transition-colors flex items-center gap-1 shadow-2xs"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-semibold text-[11px] 2xl:text-xs transition-colors flex items-center gap-1 shadow-2xs"
                     >
-                      <SlidersHorizontal className="w-3.5 h-3.5 text-amber-700" />
+                      <SlidersHorizontal className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-amber-700" />
                       <span>Page Access</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => openEditModal(ePassAdmin)}
-                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-[11px] 2xl:text-xs transition-colors"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => setStaffToToggle(ePassAdmin)}
-                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-[11px] 2xl:text-xs transition-colors"
                     >
                       {ePassAdmin.isActive ? 'Deactivate' : 'Activate'}
                     </button>
@@ -780,7 +780,7 @@ export default function AdminStaffPage() {
                         setStaffToResetPwd(ePassAdmin);
                         setResetPwdInput('OngcPass@2026');
                       }}
-                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-[11px] 2xl:text-xs transition-colors"
                     >
                       Reset Password
                     </button>
@@ -788,8 +788,8 @@ export default function AdminStaffPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center py-4 bg-white rounded-lg border border-dashed border-stone-200 space-y-2">
-                <p className="text-xs text-stone-500">
+              <div className="text-center py-3 2xl:py-4 bg-white rounded-lg border border-dashed border-stone-200 space-y-1.5 2xl:space-y-2">
+                <p className="text-[11px] 2xl:text-xs text-stone-500">
                   No E-Pass Admin configured for commercial orders, allocations, and inventory.
                 </p>
                 <button
@@ -801,7 +801,7 @@ export default function AdminStaffPage() {
                     }));
                     setShowCreateModal(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7A1113] hover:bg-[#8F1417] text-white font-bold text-xs shadow-xs transition-all"
+                  className="inline-flex items-center gap-1.5 px-2.5 2xl:px-3 py-1 2xl:py-1.5 rounded-lg bg-[#7A1113] hover:bg-[#8F1417] text-white font-bold text-[11px] 2xl:text-xs shadow-xs transition-all"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   <span>Create E-Pass Admin</span>
@@ -811,17 +811,17 @@ export default function AdminStaffPage() {
           </div>
 
           {/* Employee Admin Card */}
-          <div className="p-4 rounded-xl border border-stone-200 bg-[#FAF7F2]/60 space-y-3">
+          <div className="p-3 2xl:p-4 rounded-xl border border-stone-200 bg-[#FAF7F2]/60 space-y-2.5 2xl:space-y-3">
             <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold text-xs shrink-0 border border-blue-200">
+              <div className="flex items-center gap-2 2xl:gap-2.5">
+                <div className="w-8 h-8 2xl:w-9 2xl:h-9 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold text-xs shrink-0 border border-blue-200">
                   EA
                 </div>
                 <div>
-                  <h4 className="font-outfit font-bold text-sm text-stone-900">
+                  <h4 className="font-outfit font-bold text-xs 2xl:text-sm text-stone-900">
                     Employee Admin
                   </h4>
-                  <span className="text-[10px] font-mono font-bold text-stone-500">
+                  <span className="text-[9px] 2xl:text-[10px] font-mono font-bold text-stone-500">
                     Role: EMPLOYEE_ADMIN
                   </span>
                 </div>
@@ -829,7 +829,7 @@ export default function AdminStaffPage() {
 
               {employeeAdmin ? (
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  className={`inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-bold border ${
                     employeeAdmin.isActive
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : 'bg-stone-100 text-stone-600 border-stone-200'
@@ -838,57 +838,57 @@ export default function AdminStaffPage() {
                   {employeeAdmin.isActive ? 'Active' : 'Inactive'}
                 </span>
               ) : (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                <span className="inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                   Not Configured
                 </span>
               )}
             </div>
 
             {employeeAdmin ? (
-              <div className="space-y-2 text-xs">
-                <div className="bg-white p-3 rounded-lg border border-stone-200/80 space-y-1 shadow-xs">
-                  <div className="font-bold text-stone-900">{employeeAdmin.name}</div>
-                  <div className="text-[11px] text-stone-500">{employeeAdmin.email}</div>
+              <div className="space-y-1.5 2xl:space-y-2 text-xs">
+                <div className="bg-white p-2.5 2xl:p-3 rounded-lg border border-stone-200/80 space-y-0.5 2xl:space-y-1 shadow-xs">
+                  <div className="font-bold text-xs 2xl:text-sm text-stone-900">{employeeAdmin.name}</div>
+                  <div className="text-[10px] 2xl:text-[11px] text-stone-500">{employeeAdmin.email}</div>
                   {(employeeAdmin.mobile || employeeAdmin.phone) && (
-                    <div className="text-[11px] text-stone-400">
+                    <div className="text-[10px] 2xl:text-[11px] text-stone-400">
                       {employeeAdmin.mobile || employeeAdmin.phone}
                     </div>
                   )}
-                  <div className="text-[10px] text-stone-400 pt-1.5 border-t border-stone-100 flex items-center justify-between">
+                  <div className="text-[9px] 2xl:text-[10px] text-stone-400 pt-1 2xl:pt-1.5 border-t border-stone-100 flex items-center justify-between">
                     <span>Domain: <strong className="text-stone-700">Employee Registrations</strong></span>
                     <span>Last active: {formatTimeAgo(employeeAdmin.last_activity_at)}</span>
                   </div>
-                  <div className="text-[10px] bg-stone-50 p-2 rounded border border-stone-100 space-y-0.5 mt-1">
+                  <div className="text-[9px] 2xl:text-[10px] bg-stone-50 p-1.5 2xl:p-2 rounded border border-stone-100 space-y-0.5 mt-1">
                     <div className="text-emerald-700 font-semibold">Allowed: /admin, /admin/attendees, /admin/bulk-upload, /admin/helpdesk, /admin/daily-closing, /admin/reports (Desk Role — Scanner Excluded)</div>
                     <div className="text-rose-600 font-medium">Restricted: Commercial Orders, Agents, Allocations, Inventory, Razorpay Data, Global Settings</div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <span className="text-[11px] font-bold text-emerald-800 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="flex flex-wrap items-center justify-between gap-1.5 2xl:gap-2 pt-1">
+                  <span className="text-[10px] 2xl:text-[11px] font-bold text-emerald-800 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-emerald-600" />
                     Employee Admin already exists
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 2xl:gap-1.5">
                     <button
                       type="button"
                       onClick={() => openPageAccessModal(employeeAdmin)}
-                      className="px-2.5 py-1 rounded-lg border border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100 font-semibold text-xs transition-colors flex items-center gap-1 shadow-2xs"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100 font-semibold text-[11px] 2xl:text-xs transition-colors flex items-center gap-1 shadow-2xs"
                     >
-                      <SlidersHorizontal className="w-3.5 h-3.5 text-blue-700" />
+                      <SlidersHorizontal className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-blue-700" />
                       <span>Page Access</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => openEditModal(employeeAdmin)}
-                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-[11px] 2xl:text-xs transition-colors"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => setStaffToToggle(employeeAdmin)}
-                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-[11px] 2xl:text-xs transition-colors"
                     >
                       {employeeAdmin.isActive ? 'Deactivate' : 'Activate'}
                     </button>
@@ -898,7 +898,7 @@ export default function AdminStaffPage() {
                         setStaffToResetPwd(employeeAdmin);
                         setResetPwdInput('OngcPass@2026');
                       }}
-                      className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-xs transition-colors"
+                      className="px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 font-semibold text-[11px] 2xl:text-xs transition-colors"
                     >
                       Reset Password
                     </button>
@@ -906,8 +906,8 @@ export default function AdminStaffPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center py-4 bg-white rounded-lg border border-dashed border-stone-200 space-y-2">
-                <p className="text-xs text-stone-500">
+              <div className="text-center py-3 2xl:py-4 bg-white rounded-lg border border-dashed border-stone-200 space-y-1.5 2xl:space-y-2">
+                <p className="text-[11px] 2xl:text-xs text-stone-500">
                   No Employee Admin configured for registrations, attendees, and employee operations.
                 </p>
                 <button
@@ -919,7 +919,7 @@ export default function AdminStaffPage() {
                     }));
                     setShowCreateModal(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-xs transition-all"
+                  className="inline-flex items-center gap-1.5 px-2.5 2xl:px-3 py-1 2xl:py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-[11px] 2xl:text-xs shadow-xs transition-all"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   <span>Create Employee Admin</span>
@@ -931,24 +931,24 @@ export default function AdminStaffPage() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/70 shadow-sm flex flex-col md:flex-row items-center gap-3">
+      <div className="bg-white p-3 sm:p-3.5 2xl:p-4 rounded-2xl border border-stone-200/70 shadow-sm flex flex-col md:flex-row items-center gap-2.5 2xl:gap-3">
         <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             type="text"
             placeholder="Search staff by name, email, or mobile..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
+            className="w-full pl-9 pr-3.5 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#7A1113] focus:ring-1 focus:ring-[#7A1113]"
           />
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex items-center gap-2.5 2xl:gap-3 w-full md:w-auto">
           {/* Role Filter */}
           <select
             value={selectedRole}
             onChange={(e) => setSelectedRole(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+            className="px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
           >
             <option value="ALL">All Roles</option>
             {Object.entries(ROLES_MAP).map(([val, label]) => (
@@ -962,7 +962,7 @@ export default function AdminStaffPage() {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
+            className="px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-700 bg-white focus:outline-none focus:border-[#7A1113]"
           >
             <option value="ALL">All Status</option>
             <option value="active">Active Only</option>
@@ -1008,9 +1008,9 @@ export default function AdminStaffPage() {
       <div className="bg-white rounded-2xl border border-stone-200/70 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#FAF7F2] border-b border-stone-200/70 text-stone-500 font-bold uppercase tracking-wider text-[10px]">
+            <thead className="bg-[#FAF7F2] border-b border-stone-200/70 text-stone-500 font-bold uppercase tracking-wider text-[9px] 2xl:text-[10px]">
               <tr>
-                <th className="w-10 px-4 py-3.5 text-center">
+                <th className="w-8 2xl:w-10 px-3 2xl:px-4 py-2.5 2xl:py-3.5 text-center">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -1019,20 +1019,20 @@ export default function AdminStaffPage() {
                     className="rounded border-stone-300 text-[#7A1113] focus:ring-[#7A1113] cursor-pointer"
                   />
                 </th>
-                <th className="px-5 py-3.5">Staff Member</th>
-                <th className="px-5 py-3.5">Role</th>
-                <th className="px-5 py-3.5">Assigned Gates</th>
-                <th className="px-5 py-3.5">Status</th>
-                <th className="px-5 py-3.5">Last Activity</th>
-                <th className="px-5 py-3.5 text-right">Actions</th>
+                <th className="px-3 sm:px-4 2xl:px-5 py-2.5 2xl:py-3.5">Staff Member</th>
+                <th className="px-3 sm:px-4 2xl:px-5 py-2.5 2xl:py-3.5">Role</th>
+                <th className="px-3 sm:px-4 2xl:px-5 py-2.5 2xl:py-3.5">Assigned Gates</th>
+                <th className="px-3 sm:px-4 2xl:px-5 py-2.5 2xl:py-3.5">Status</th>
+                <th className="px-3 sm:px-4 2xl:px-5 py-2.5 2xl:py-3.5">Last Activity</th>
+                <th className="px-3 sm:px-4 2xl:px-5 py-2.5 2xl:py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 text-stone-900">
               {filteredStaff.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-stone-400">
-                    <Users className="w-10 h-10 text-stone-300 mx-auto mb-2" />
-                    <p className="font-semibold text-stone-600">
+                  <td colSpan={7} className="px-4 py-10 2xl:py-12 text-center text-stone-400">
+                    <Users className="w-8 h-8 2xl:w-10 2xl:h-10 text-stone-300 mx-auto mb-2" />
+                    <p className="font-semibold text-xs 2xl:text-sm text-stone-600">
                       {internalStaffList.length === 0
                         ? 'No staff members created yet.'
                         : 'No staff matching the search filters.'}
@@ -1072,7 +1072,7 @@ export default function AdminStaffPage() {
                   return (
                     <tr key={staff.id} className="hover:bg-[#FAF7F2]/40 transition-colors">
                       {/* Selection Checkbox */}
-                      <td className="w-10 px-4 py-4 text-center">
+                      <td className="w-8 2xl:w-10 px-3 2xl:px-4 py-2 2xl:py-3.5 text-center">
                         {staff.role === 'SUPER_ADMIN' ? (
                           <input
                             type="checkbox"
@@ -1091,25 +1091,25 @@ export default function AdminStaffPage() {
                       </td>
 
                       {/* Name & Contact */}
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-[#7A1113] text-white font-outfit font-bold text-xs flex items-center justify-center shrink-0 shadow-sm">
+                      <td className="px-3 sm:px-4 2xl:px-5 py-2 2xl:py-3.5">
+                        <div className="flex items-center gap-2.5 2xl:gap-3">
+                          <div className="w-7 h-7 2xl:w-8 2xl:h-9 rounded-full bg-[#7A1113] text-white font-outfit font-bold text-[10px] 2xl:text-xs flex items-center justify-center shrink-0 shadow-sm">
                             {initials}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-bold text-sm text-stone-900 truncate">
+                            <div className="font-bold text-xs 2xl:text-sm text-stone-900 truncate">
                               {staff.name}
                             </div>
                             {(staff.staffId || staff.staff_id) && (
-                              <div className="text-[10px] font-mono font-bold text-stone-500">
+                              <div className="text-[9px] 2xl:text-[10px] font-mono font-bold text-stone-500">
                                 ID: {staff.staffId || staff.staff_id}
                               </div>
                             )}
-                            <div className="text-[11px] text-stone-500 truncate">
+                            <div className="text-[10px] 2xl:text-[11px] text-stone-500 truncate">
                               {staff.email}
                             </div>
                             {(staff.mobile || staff.phone) && (
-                              <div className="text-[10px] text-stone-400">
+                              <div className="text-[9px] 2xl:text-[10px] text-stone-400">
                                 {staff.mobile || staff.phone}
                               </div>
                             )}
@@ -1118,18 +1118,18 @@ export default function AdminStaffPage() {
                       </td>
 
                       {/* Role Badge */}
-                      <td className="px-5 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-4 2xl:px-5 py-2 2xl:py-3.5 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-extrabold border ${roleBadgeClass}`}
+                          className={`inline-flex items-center px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-md text-[10px] 2xl:text-[11px] font-extrabold border ${roleBadgeClass}`}
                         >
                           {ROLES_MAP[staff.role] || staff.role}
                         </span>
                       </td>
 
                       {/* Assigned Gates */}
-                      <td className="px-5 py-4">
+                      <td className="px-3 sm:px-4 2xl:px-5 py-2 2xl:py-3.5">
                         {isUnrestricted ? (
-                          <span className="text-xs font-semibold text-emerald-700 italic">
+                          <span className="text-[11px] 2xl:text-xs font-semibold text-emerald-700 italic">
                             All Gates (Unrestricted)
                           </span>
                         ) : assignedGates.length > 0 ? (
@@ -1137,56 +1137,56 @@ export default function AdminStaffPage() {
                             {assignedGates.map((gate) => (
                               <span
                                 key={gate.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#FAF7F2] border border-stone-200 text-stone-800"
+                                className="inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-bold bg-[#FAF7F2] border border-stone-200 text-stone-800"
                               >
                                 {gate.name} ({gate.code || gate.gateNumber || `G-${gate.id}`})
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-amber-700 italic">No gates assigned</span>
+                          <span className="text-[11px] 2xl:text-xs text-amber-700 italic">No gates assigned</span>
                         )}
                       </td>
 
                       {/* Status */}
-                      <td className="px-5 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-4 2xl:px-5 py-2 2xl:py-3.5 whitespace-nowrap">
                         {staff.isActive || staff.status === 'active' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="inline-flex items-center gap-1.5 px-2 2xl:px-2.5 py-0.5 rounded-full text-[10px] 2xl:text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                             Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
+                          <span className="inline-flex items-center px-2 2xl:px-2.5 py-0.5 rounded-full text-[10px] 2xl:text-[11px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
                             Inactive
                           </span>
                         )}
                       </td>
 
                       {/* Last Activity */}
-                      <td className="px-5 py-4 whitespace-nowrap text-stone-500">
+                      <td className="px-3 sm:px-4 2xl:px-5 py-2 2xl:py-3.5 whitespace-nowrap text-stone-500 text-[11px] 2xl:text-xs">
                         {formatTimeAgo(staff.last_activity_at)}
                       </td>
 
                       {/* Actions */}
-                      <td className="px-5 py-4 text-right whitespace-nowrap">
+                      <td className="px-3 sm:px-4 2xl:px-5 py-2 2xl:py-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {/* View Activity */}
                           <Link
                             href={`/admin/staff/${staff.id}/activity`}
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-[#7A1113] hover:bg-[#FAF7F2] transition-colors"
+                            className="p-1 2xl:p-1.5 rounded-lg text-stone-400 hover:text-[#7A1113] hover:bg-[#FAF7F2] transition-colors"
                             title="View Operator Activity Logs"
                           >
-                            <History className="w-4 h-4" />
+                            <History className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                           </Link>
 
                           {/* Edit Staff */}
                           <button
                             onClick={() => openEditModal(staff)}
                             type="button"
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-[#7A1113] hover:bg-[#FAF7F2] transition-colors"
+                            className="p-1 2xl:p-1.5 rounded-lg text-stone-400 hover:text-[#7A1113] hover:bg-[#FAF7F2] transition-colors"
                             title="Edit Staff Member"
                           >
-                            <Edit3 className="w-4 h-4" />
+                            <Edit3 className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                           </button>
 
                           {/* Manage Page Access for Domain Admins */}
@@ -1194,10 +1194,10 @@ export default function AdminStaffPage() {
                             <button
                               onClick={() => openPageAccessModal(staff)}
                               type="button"
-                              className="p-1.5 rounded-lg text-amber-600 hover:text-amber-800 hover:bg-amber-50 transition-colors"
+                              className="p-1 2xl:p-1.5 rounded-lg text-amber-600 hover:text-amber-800 hover:bg-amber-50 transition-colors"
                               title="Manage Domain Page Access"
                             >
-                              <SlidersHorizontal className="w-4 h-4" />
+                              <SlidersHorizontal className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                             </button>
                           )}
 
@@ -1208,10 +1208,10 @@ export default function AdminStaffPage() {
                               setResetPwdInput('OngcPass@2026');
                             }}
                             type="button"
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
+                            className="p-1 2xl:p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
                             title="Reset Password"
                           >
-                            <KeyRound className="w-4 h-4" />
+                            <KeyRound className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
                           </button>
 
                           {/* Toggle Status (opens confirmation modal) */}
@@ -1219,7 +1219,7 @@ export default function AdminStaffPage() {
                             <button
                               onClick={() => setStaffToToggle(staff)}
                               type="button"
-                              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
+                              className="p-1 2xl:p-1.5 rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
                               title={
                                 staff.isActive
                                   ? 'Deactivate Operator Account'
@@ -1227,9 +1227,9 @@ export default function AdminStaffPage() {
                               }
                             >
                               {staff.isActive ? (
-                                <UserX className="w-4 h-4 text-stone-400 hover:text-amber-600 transition-colors" />
+                                <UserX className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-stone-400 hover:text-amber-600 transition-colors" />
                               ) : (
-                                <UserCheck className="w-4 h-4 text-emerald-600" />
+                                <UserCheck className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-emerald-600" />
                               )}
                             </button>
                           )}
@@ -1242,10 +1242,10 @@ export default function AdminStaffPage() {
                                 setStaffDeleteError(null);
                               }}
                               type="button"
-                              className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              className="p-1 2xl:p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                               title="Delete Staff Account"
                             >
-                              <Trash2 className="w-4 h-4 text-stone-400 hover:text-rose-600" />
+                              <Trash2 className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-stone-400 hover:text-rose-600" />
                             </button>
                           )}
                         </div>

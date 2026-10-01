@@ -847,7 +847,7 @@ export default function AdminLayout({
           <Link
             href="/admin"
             onClick={() => setSidebarOpen(false)}
-            className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-stone-100 shrink-0 hover:opacity-95 transition-opacity"
+            className="flex items-center gap-2.5 2xl:gap-3 px-4 2xl:px-5 pt-3.5 2xl:pt-5 pb-3 2xl:pb-4 border-b border-stone-100 shrink-0 hover:opacity-95 transition-opacity"
           >
             <img
               src="/images/logo-web.png"
@@ -881,7 +881,7 @@ export default function AdminLayout({
           </Link>
 
           {/* Navigation Links (Strictly Role-Filtered matching Laravel hierarchy) */}
-          <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
+          <nav className="flex-1 min-h-0 px-2.5 2xl:px-3 py-2 2xl:py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
             {(() => {
               // Determine active navigation item: exact match takes highest priority,
               // otherwise longest prefix match among visible items wins.
@@ -916,21 +916,21 @@ export default function AdminLayout({
                 return (
                   <React.Fragment key={item.href}>
                     {showSectionHeader && (
-                      <div className="px-3 pt-3 pb-1 text-[10px] font-extrabold tracking-wider text-ink-soft uppercase font-outfit">
+                      <div className="px-2.5 2xl:px-3 pt-2 2xl:pt-3 pb-0.5 2xl:pb-1 text-[9px] 2xl:text-[10px] font-extrabold tracking-wider text-ink-soft uppercase font-outfit">
                         {sectionToRender}
                       </div>
                     )}
                     <Link
                       href={item.href}
                       onClick={() => setSidebarOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                      className={`flex items-center gap-2.5 2xl:gap-3 px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl text-xs 2xl:text-sm font-semibold transition-colors ${
                         isActive
                           ? 'bg-maroon text-white shadow-xs'
                           : 'text-ink/80 hover:bg-cream-soft hover:text-ink'
                       }`}
                     >
                       <Icon
-                        className={`w-[18px] h-[18px] shrink-0 ${
+                        className={`w-4 h-4 2xl:w-[18px] 2xl:h-[18px] shrink-0 ${
                           isActive ? 'text-gold-light' : 'text-ink-soft'
                         }`}
                       />
@@ -942,18 +942,18 @@ export default function AdminLayout({
             })()}
 
             {/* Public Event Link Button */}
-            <div className="pt-3 mt-3 border-t border-stone-100">
-              <div className="px-3 pb-1.5 text-[10px] font-extrabold tracking-wider text-ink-soft uppercase font-outfit">
+            <div className="pt-2 mt-2 2xl:pt-3 2xl:mt-3 border-t border-stone-100">
+              <div className="px-2.5 2xl:px-3 pb-1 text-[9px] 2xl:text-[10px] font-extrabold tracking-wider text-ink-soft uppercase font-outfit">
                 Public Event
               </div>
               <a
                 href="/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-bold text-maroon bg-gradient-to-r from-gold/15 to-gold/25 border border-gold/40 hover:border-maroon/50 hover:bg-gold/30 transition-all group shadow-xs"
+                className="flex items-center justify-between px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl text-xs 2xl:text-sm font-bold text-maroon bg-gradient-to-r from-gold/15 to-gold/25 border border-gold/40 hover:border-maroon/50 hover:bg-gold/30 transition-all group shadow-xs"
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Globe className="w-[18px] h-[18px] text-maroon group-hover:scale-110 transition-transform" />
+                <div className="flex items-center gap-2 2xl:gap-2.5 min-w-0">
+                  <Globe className="w-4 h-4 2xl:w-[18px] 2xl:h-[18px] text-maroon group-hover:scale-110 transition-transform" />
                   <span className="truncate">Go to Website</span>
                 </div>
                 <ExternalLink className="w-3.5 h-3.5 text-maroon/80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0" />
@@ -962,11 +962,11 @@ export default function AdminLayout({
           </nav>
 
           {/* Sidebar Footer: User Session & Support */}
-          <div className="p-3 border-t border-stone-100 space-y-2 shrink-0 bg-white">
+          <div className="p-2.5 2xl:p-3 border-t border-stone-100 space-y-1.5 2xl:space-y-2 shrink-0 bg-white">
             {/* Authenticated User Quick Info */}
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-cream-soft border border-stone-200/60">
+            <div className="flex items-center justify-between p-2 2xl:p-2.5 rounded-xl bg-cream-soft border border-stone-200/60">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-maroon text-white flex items-center justify-center font-outfit font-bold text-xs shrink-0">
+                <div className="w-7 h-7 2xl:w-8 2xl:h-8 rounded-full bg-maroon text-white flex items-center justify-center font-outfit font-bold text-xs shrink-0">
                   {userInitials}
                 </div>
                 <div className="min-w-0">
@@ -988,12 +988,12 @@ export default function AdminLayout({
             </div>
 
             {/* Support Card: Authentic operational contact label without unverified numbers */}
-            <div className="flex items-center gap-2.5 bg-white rounded-xl p-2.5 border border-stone-200/50">
-              <div className="w-7 h-7 rounded-full bg-maroon/10 text-maroon flex items-center justify-center shrink-0">
-                <Headphones className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-2.5 bg-white rounded-xl p-2 2xl:p-2.5 border border-stone-200/50">
+              <div className="w-6 h-6 2xl:w-7 2xl:h-7 rounded-full bg-maroon/10 text-maroon flex items-center justify-center shrink-0">
+                <Headphones className="w-3 2xl:w-3.5 h-3 2xl:h-3.5" />
               </div>
-              <div className="text-[11px] min-w-0">
-                <div className="font-semibold text-ink">Gate Operations Support</div>
+              <div className="text-[10px] 2xl:text-[11px] min-w-0 leading-tight">
+                <div className="font-semibold text-ink truncate">Gate Operations Support</div>
                 <div className="text-ink-soft truncate">Event Control Room</div>
               </div>
             </div>
@@ -1007,19 +1007,19 @@ export default function AdminLayout({
 
           {/* Top Bar Header */}
           <header className="shrink-0 z-30 bg-cream/95 backdrop-blur-sm border-b border-stone-200/70">
-            <div className="px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
+            <div className="px-3 sm:px-5 lg:px-6 2xl:px-8 py-2 sm:py-2.5 2xl:py-3.5 flex items-center justify-between gap-2.5 2xl:gap-4">
               {/* Left: Mobile trigger & Page Titles */}
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-2.5 2xl:gap-3 min-w-0">
                 <button
                   onClick={() => setSidebarOpen(true)}
-                  className="lg:hidden w-9 h-9 rounded-lg bg-white border border-stone-200 text-ink flex items-center justify-center shrink-0 shadow-xs"
+                  className="lg:hidden w-8 h-8 2xl:w-9 2xl:h-9 rounded-lg bg-white border border-stone-200 text-ink flex items-center justify-center shrink-0 shadow-xs"
                   aria-label="Open navigation menu"
                 >
-                  <Menu className="w-[18px] h-[18px]" />
+                  <Menu className="w-4 h-4 2xl:w-[18px] 2xl:h-[18px]" />
                 </button>
 
                 <div className="min-w-0">
-                  <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-maroon font-outfit">
+                  <div className="hidden sm:flex items-center gap-1.5 text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-maroon font-outfit">
                     <span>
                       {normalizedRole === 'COMMERCIAL_ADMIN'
                         ? 'E-PASS ADMINISTRATION'
@@ -1036,69 +1036,69 @@ export default function AdminLayout({
                         : 'ENTRY CONTROL PORTAL'}
                     </span>
                   </div>
-                  <h1 className="font-outfit font-bold text-lg sm:text-xl text-ink truncate leading-tight">
+                  <h1 className="font-outfit font-bold text-base sm:text-lg 2xl:text-xl text-ink truncate leading-tight">
                     {pageMeta.title}
                   </h1>
-                  <p className="text-xs text-ink-soft truncate hidden sm:block">
+                  <p className="text-[11px] 2xl:text-xs text-ink-soft truncate hidden sm:block leading-tight">
                     {pageMeta.subtitle}
                   </p>
                 </div>
               </div>
 
               {/* Right: Real Operational Status, Real Event Date, Scanner Shortcut & User Menu */}
-              <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 2xl:gap-2.5 shrink-0">
                 {/* Event Operational Status (Real backend state or explicit neutral loading) */}
                 {statusLoading ? (
-                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 border border-stone-200 text-xs font-semibold text-stone-500">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 2xl:px-3 2xl:py-1.5 rounded-lg bg-stone-100 border border-stone-200 text-[11px] 2xl:text-xs font-semibold text-stone-500">
                     <span className="w-1.5 h-1.5 rounded-full bg-stone-400 animate-pulse" />
                     <span>Checking Status...</span>
                   </div>
                 ) : emergencyStopped === true ? (
-                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 2xl:px-3 2xl:py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-[11px] 2xl:text-xs font-semibold text-rose-700">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
                     <span>Emergency Stop Active</span>
                   </div>
                 ) : scanningEnabled === false || eventStatus === 'closed' ? (
-                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-700">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 2xl:px-3 2xl:py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] 2xl:text-xs font-semibold text-amber-700">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                     <span>Scanning Suspended</span>
                   </div>
                 ) : eventStatus === 'open' && scanningEnabled === true ? (
-                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 2xl:px-3 2xl:py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] 2xl:text-xs font-semibold text-emerald-700">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span>Gate Active</span>
                   </div>
                 ) : (
-                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 border border-stone-200 text-xs font-semibold text-stone-600">
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 2xl:px-3 2xl:py-1.5 rounded-lg bg-stone-100 border border-stone-200 text-[11px] 2xl:text-xs font-semibold text-stone-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
                     <span>Status Neutral</span>
                   </div>
                 )}
 
                 {/* Event Operational Date (From backend settings or neutral indicator) */}
-                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs font-semibold text-ink shadow-xs">
-                  <Calendar className="w-[14px] h-[14px] text-maroon" />
+                <div className="hidden md:flex items-center gap-1.5 2xl:gap-2 px-2.5 py-1 2xl:px-3 2xl:py-1.5 rounded-lg bg-white border border-stone-200 text-[11px] 2xl:text-xs font-semibold text-ink shadow-xs">
+                  <Calendar className="w-3.5 h-3.5 2xl:w-[14px] 2xl:h-[14px] text-maroon" />
                   <span>{activeDate ? activeDate : 'Event Schedule'}</span>
                 </div>
 
                 {/* Quick Scan Button (Mobile) */}
                 <Link
                   href="/scanner"
-                  className="md:hidden w-9 h-9 rounded-lg bg-maroon text-white flex items-center justify-center shadow-xs"
+                  className="md:hidden w-8 h-8 rounded-lg bg-maroon text-white flex items-center justify-center shadow-xs"
                   title="Open Scanner"
                 >
-                  <ScanLine className="w-[16px] h-[16px]" />
+                  <ScanLine className="w-4 h-4" />
                 </Link>
 
                 {/* Page Refresh Button */}
                 <button
                   onClick={handleRefresh}
                   type="button"
-                  className="w-9 h-9 rounded-lg bg-white border border-stone-200 text-ink flex items-center justify-center hover:border-maroon/40 transition-colors shrink-0 shadow-xs cursor-pointer"
+                  className="w-8 h-8 2xl:w-9 2xl:h-9 rounded-lg bg-white border border-stone-200 text-ink flex items-center justify-center hover:border-maroon/40 transition-colors shrink-0 shadow-xs cursor-pointer"
                   title="Refresh Page"
                 >
                   <RefreshCw
-                    className={`w-[16px] h-[16px] text-maroon ${
+                    className={`w-3.5 h-3.5 2xl:w-[16px] 2xl:h-[16px] text-maroon ${
                       isRefreshing ? 'animate-spin' : ''
                     }`}
                   />
@@ -1109,20 +1109,20 @@ export default function AdminLayout({
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
                     type="button"
-                    className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-white border border-stone-200 hover:border-maroon/40 transition-colors shrink-0 shadow-xs cursor-pointer"
+                    className="flex items-center gap-1.5 sm:gap-2 p-1 sm:px-2.5 sm:py-1 2xl:px-3 2xl:py-1.5 rounded-xl bg-white border border-stone-200 hover:border-maroon/40 transition-colors shrink-0 shadow-xs cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-maroon text-white flex items-center justify-center font-outfit font-bold text-xs shrink-0">
+                    <div className="w-6 h-6 2xl:w-7 2xl:h-7 rounded-lg bg-maroon text-white flex items-center justify-center font-outfit font-bold text-[11px] 2xl:text-xs shrink-0">
                       {userInitials}
                     </div>
                     <div className="hidden sm:block text-left min-w-0">
-                      <div className="font-outfit font-bold text-xs text-ink truncate max-w-[130px]">
+                      <div className="font-outfit font-bold text-xs text-ink truncate max-w-[110px] 2xl:max-w-[130px] leading-tight">
                         {user?.name || 'Administrator'}
                       </div>
-                      <span className="inline-block text-[9px] font-extrabold px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded border border-amber-200 uppercase">
+                      <span className="inline-block text-[8px] 2xl:text-[9px] font-extrabold px-1 py-0.1 2xl:px-1.5 2xl:py-0.2 bg-amber-100 text-amber-900 rounded border border-amber-200 uppercase leading-none">
                         {roleBadgeLabel}
                       </span>
                     </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-stone-400 hidden sm:block" />
+                    <ChevronDown className="w-3 h-3 2xl:w-3.5 2xl:h-3.5 text-stone-400 hidden sm:block" />
                   </button>
 
                   {/* Dropdown Menu */}
@@ -1187,8 +1187,8 @@ export default function AdminLayout({
           <main
             className={`flex-1 min-h-0 ${
               isViewportManagedPage
-                ? 'overflow-hidden flex flex-col px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4'
-                : 'overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 py-5 sm:py-6'
+                ? 'overflow-hidden flex flex-col px-3 sm:px-5 lg:px-6 2xl:px-8 py-2.5 sm:py-3 2xl:py-4'
+                : 'overflow-y-auto overflow-x-hidden px-3 sm:px-5 lg:px-6 2xl:px-8 py-3.5 sm:py-4 2xl:py-6'
             }`}
           >
             {!isAuthorized ? (
