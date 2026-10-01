@@ -442,10 +442,16 @@ function getPageMeta(pathname: string, userRole?: string): { title: string; subt
       subtitle: 'Manage gate operators, supervisors, roles, and credential access.',
     };
   }
+  if (pathname.startsWith('/admin/employees/qr-delivery')) {
+    return {
+      title: 'Daily QR Pass Delivery',
+      subtitle: 'Generate and dispatch date-specific QR entry passes to approved ONGC personnel.',
+    };
+  }
   if (pathname.startsWith('/admin/employees')) {
     return {
-      title: 'Employees Directory',
-      subtitle: 'ONGC employee roster, digital E-Pass status, and venue check-in verification.',
+      title: 'Employee Directory',
+      subtitle: 'ONGC employee roster, registration review, and employee pass management.',
     };
   }
   if (pathname.startsWith('/admin/attendees')) {

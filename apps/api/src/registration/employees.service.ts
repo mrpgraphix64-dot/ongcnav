@@ -85,7 +85,7 @@ export class EmployeesService {
       };
     }
 
-    const [total, records] = await Promise.all([
+    const [total, records, totalAll, pendingCount, approvedCount, rejectedCount] = await Promise.all([
       this.prisma.employee.count({ where }),
       this.prisma.employee.findMany({
         where,
@@ -104,6 +104,16 @@ export class EmployeesService {
             },
           },
         },
+      }),
+      this.prisma.employee.count(),
+      this.prisma.employee.count({
+        where: { registrationStatus: RegistrationStatus.PENDING as any },
+      }),
+      this.prisma.employee.count({
+        where: { registrationStatus: RegistrationStatus.APPROVED as any },
+      }),
+      this.prisma.employee.count({
+        where: { registrationStatus: RegistrationStatus.REJECTED as any },
       }),
     ]);
 
@@ -167,6 +177,12 @@ export class EmployeesService {
       page,
       totalPages,
       limit,
+      counts: {
+        total: totalAll,
+        pending: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+      },
     };
   }
 
@@ -423,6 +439,82 @@ export class EmployeesService {
     return {
       success: true,
       message: `Registration for ${emp.name} (CPF: ${emp.cpf}) has been rejected.`,
+    };
+  }
+
+  async bulkApproveRegistrations(ids: bigint[]) {
+    if (!ids || ids.length === 0) {
+      return { success: true, count: 0, message: 'No employees selected.' };
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        id: { in: ids },
+        registrationStatus: RegistrationStatus.PENDING as any,
+      },
+      select: { id: true, name: true, cpf: true },
+    });
+
+    if (employees.length === 0) {
+      return { success: true, count: 0, message: 'No eligible pending employees found to approve.' };
+    }
+
+    const eligibleIds = employees.map((e) => e.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employee.updateMany({
+        where: { id: { in: eligibleIds } },
+        data: { registrationStatus: RegistrationStatus.APPROVED as any },
+      });
+
+      await tx.attendee.updateMany({
+        where: { employeeId: { in: eligibleIds } },
+        data: { status: AttendeeStatus.ACTIVE as any },
+      });
+    });
+
+    return {
+      success: true,
+      count: eligibleIds.length,
+      message: `Successfully approved ${eligibleIds.length} employee registration${eligibleIds.length > 1 ? 's' : ''}.`,
+    };
+  }
+
+  async bulkRejectRegistrations(ids: bigint[], reason?: string) {
+    if (!ids || ids.length === 0) {
+      return { success: true, count: 0, message: 'No employees selected.' };
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        id: { in: ids },
+        registrationStatus: { not: RegistrationStatus.REJECTED as any },
+      },
+      select: { id: true, name: true, cpf: true },
+    });
+
+    if (employees.length === 0) {
+      return { success: true, count: 0, message: 'No eligible employees found to reject.' };
+    }
+
+    const eligibleIds = employees.map((e) => e.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employee.updateMany({
+        where: { id: { in: eligibleIds } },
+        data: { registrationStatus: RegistrationStatus.REJECTED as any },
+      });
+
+      await tx.attendee.updateMany({
+        where: { employeeId: { in: eligibleIds } },
+        data: { status: AttendeeStatus.REVOKED as any },
+      });
+    });
+
+    return {
+      success: true,
+      count: eligibleIds.length,
+      message: `Successfully rejected ${eligibleIds.length} employee registration${eligibleIds.length > 1 ? 's' : ''}.`,
     };
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Users,
   Search,
@@ -30,6 +30,7 @@ import {
   Building,
   Briefcase,
   Ticket,
+  Filter,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import AdminModal from '@/components/admin/AdminModal';
@@ -146,23 +147,26 @@ interface EmployeePassData {
 
 export default function AdminEmployeesPage() {
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
-  const [summary, setSummary] = useState<PassSummary>({
-    totalPasses: 0,
-    websitePasses: 0,
-    agentPasses: 0,
-    employeePasses: 0,
-    checkedInPasses: 0,
-    notCheckedInPasses: 0,
-  });
+  const [statusCounts, setStatusCounts] = useState<{
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+  }>({ total: 0, pending: 0, approved: 0, rejected: 0 });
 
   const [loading, setLoading] = useState(true);
-  const [summaryLoading, setSummaryLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [checkinFilter, setCheckinFilter] = useState('ALL');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Row Selection & Bulk Actions
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -181,6 +185,17 @@ export default function AdminEmployeesPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Close filter popover on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterPopoverRef.current && !filterPopoverRef.current.contains(e.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleViewDetails = async (id: string) => {
     setDetailLoading(true);
@@ -206,7 +221,6 @@ export default function AdminEmployeesPage() {
         setDetailEmployee((prev) => (prev ? { ...prev, registrationStatus: 'APPROVED' } : null));
       }
       await loadEmployees();
-      await loadSummary();
     } catch (err: any) {
       alert(err.message || 'Failed to approve registration');
     } finally {
@@ -229,7 +243,6 @@ export default function AdminEmployeesPage() {
         setDetailEmployee((prev) => (prev ? { ...prev, registrationStatus: 'REJECTED' } : null));
       }
       await loadEmployees();
-      await loadSummary();
     } catch (err: any) {
       alert(err.message || 'Failed to reject registration');
     } finally {
@@ -237,20 +250,72 @@ export default function AdminEmployeesPage() {
     }
   };
 
-  // Load Pass Summary
-  const loadSummary = useCallback(async () => {
-    try {
-      setSummaryLoading(true);
-      const res = await fetchApi<PassSummary>('/admin/pass-summary');
-      if (res) {
-        setSummary(res);
-      }
-    } catch (err: any) {
-      console.warn('Failed to load pass summary:', err);
-    } finally {
-      setSummaryLoading(false);
+  // Bulk Actions
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0 || bulkBusy) return;
+    const eligibleCount = employees.filter((e) => selectedIds.includes(e.id) && e.registrationStatus === 'PENDING').length;
+    const countToApprove = eligibleCount > 0 ? eligibleCount : selectedIds.length;
+    if (!confirm(`Approve ${countToApprove} selected employee registration${countToApprove > 1 ? 's' : ''}?`)) {
+      return;
     }
-  }, []);
+    setBulkBusy(true);
+    setActionSuccess(null);
+    try {
+      const res = await fetchApi<{ success: boolean; message: string; count?: number }>('/admin/employees/bulk-approve', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      setActionSuccess(res.message || `Approved ${res.count || countToApprove} registrations.`);
+      setSelectedIds([]);
+      await loadEmployees();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to bulk approve registrations.');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkReject = async () => {
+    if (selectedIds.length === 0 || bulkBusy) return;
+    const countToReject = selectedIds.length;
+    if (!confirm(`Reject ${countToReject} selected employee registration${countToReject > 1 ? 's' : ''}? Linked passes will be revoked.`)) {
+      return;
+    }
+    setBulkBusy(true);
+    setActionSuccess(null);
+    try {
+      const res = await fetchApi<{ success: boolean; message: string; count?: number }>('/admin/employees/bulk-reject', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      setActionSuccess(res.message || `Rejected ${res.count || countToReject} registrations.`);
+      setSelectedIds([]);
+      await loadEmployees();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to bulk reject registrations.');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  // Selection Helpers
+  const allVisibleSelected = employees.length > 0 && employees.every((e) => selectedIds.includes(e.id));
+  const someVisibleSelected = employees.some((e) => selectedIds.includes(e.id)) && !allVisibleSelected;
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !employees.some((e) => e.id === id)));
+    } else {
+      const visibleIds = employees.map((e) => e.id);
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
   // Load Employees List
   const loadEmployees = useCallback(async () => {
@@ -270,12 +335,21 @@ export default function AdminEmployeesPage() {
         total: number;
         page: number;
         totalPages: number;
+        counts?: {
+          total: number;
+          pending: number;
+          approved: number;
+          rejected: number;
+        };
       }>(`/admin/employees?${params.toString()}`);
 
       if (res) {
         setEmployees(res.employees || []);
         setTotalCount(res.total || 0);
         setTotalPages(res.totalPages || 1);
+        if (res.counts) {
+          setStatusCounts(res.counts);
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load employees list.');
@@ -283,10 +357,6 @@ export default function AdminEmployeesPage() {
       setLoading(false);
     }
   }, [page, limit, searchQuery, statusFilter, checkinFilter]);
-
-  useEffect(() => {
-    loadSummary();
-  }, [loadSummary]);
 
   useEffect(() => {
     loadEmployees();
@@ -349,190 +419,255 @@ export default function AdminEmployeesPage() {
   }, [passData, selectedPassIndex]);
 
   return (
-    <div className="space-y-3.5 sm:space-y-4 2xl:space-y-6">
+    <div className="space-y-2.5 sm:space-y-3">
       {/* ERROR BANNER */}
       {errorMsg && (
-        <div className="p-3 2xl:p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-center justify-between">
+        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 2xl:w-5 2xl:h-5 text-rose-600 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{errorMsg}</span>
           </div>
           <button
             onClick={() => setErrorMsg(null)}
             className="text-stone-400 hover:text-stone-700 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* TOP PASS SUMMARY CARDS (PART 5) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 2xl:gap-3">
-        {/* TOTAL PASSES */}
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
-            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-              Total Passes
-            </span>
-            <Ticket className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
+      {/* ACTION SUCCESS BANNER */}
+      {actionSuccess && (
+        <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{actionSuccess}</span>
           </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-ink">
-            {summaryLoading ? '—' : summary.totalPasses.toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-ink-soft mt-1">Across all categories</div>
+          <button
+            onClick={() => setActionSuccess(null)}
+            className="text-stone-400 hover:text-stone-700 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* COMPACT TOP ROW: TITLE & DYNAMIC SUMMARY PILLS */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h1 className="font-outfit font-bold text-base sm:text-lg text-ink leading-tight">
+            Employee Directory
+          </h1>
+          <p className="text-[11px] sm:text-xs text-ink-soft">
+            ONGC employee roster, registration review, and employee pass management.
+          </p>
         </div>
 
-        {/* WEBSITE PASSES */}
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
-            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-              Website
-            </span>
-            <Globe className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-emerald-600" />
-          </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-700">
-            {summaryLoading ? '—' : summary.websitePasses.toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-emerald-600 mt-1">Public online sales</div>
-        </div>
-
-        {/* AGENT PASSES */}
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
-            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-              Agent
-            </span>
-            <Shield className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-blue-600" />
-          </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-blue-700">
-            {summaryLoading ? '—' : summary.agentPasses.toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-blue-600 mt-1">Authorized agents</div>
-        </div>
-
-        {/* EMPLOYEE PASSES */}
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
-            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-              Employee
-            </span>
-            <Users className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-purple-600" />
-          </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-purple-700">
-            {summaryLoading ? '—' : summary.employeePasses.toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-purple-600 mt-1">Staff &amp; family passes</div>
-        </div>
-
-        {/* CHECKED IN */}
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
-            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-              Checked In
-            </span>
-            <CheckCircle2 className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-emerald-600" />
-          </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-600">
-            {summaryLoading ? '—' : summary.checkedInPasses.toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-emerald-600 mt-1">Verified at turnstiles</div>
-        </div>
-
-        {/* NOT CHECKED IN */}
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-stone-400 mb-1.5 2xl:mb-2">
-            <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-              Pending Entry
-            </span>
-            <Clock className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-amber-600" />
-          </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-amber-700">
-            {summaryLoading ? '—' : summary.notCheckedInPasses.toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-amber-600 mt-1">Yet to check in</div>
+        {/* Dynamic Summary Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white border border-stone-200/90 shadow-2xs text-stone-700">
+            <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+            Total <strong className="font-bold text-ink ml-0.5">{statusCounts.total}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50/80 border border-amber-200/80 shadow-2xs text-amber-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Pending <strong className="font-bold text-amber-900 ml-0.5">{statusCounts.pending}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50/80 border border-emerald-200/80 shadow-2xs text-emerald-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Approved <strong className="font-bold text-emerald-900 ml-0.5">{statusCounts.approved}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50/80 border border-rose-200/80 shadow-2xs text-rose-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            Rejected <strong className="font-bold text-rose-900 ml-0.5">{statusCounts.rejected}</strong>
+          </span>
         </div>
       </div>
 
-      {/* FILTER & SEARCH BAR */}
-      <div className="bg-white p-3 sm:p-3.5 2xl:p-4 rounded-2xl border border-stone-200/80 shadow-xs space-y-3">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-3">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
+      {/* COMPACT FILTER & SEARCH BAR */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        {/* Search Input */}
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search employee name, CPF / ID, mobile, email, department..."
+            className="w-full pl-9 pr-8 py-1.5 sm:py-2 rounded-xl border border-stone-200 text-xs sm:text-sm focus:outline-none focus:border-maroon bg-white shadow-2xs"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
                 setPage(1);
               }}
-              placeholder="Search by Employee Name, CPF / ID, Mobile, Email, Department..."
-              className="w-full pl-9 pr-3.5 py-1.5 2xl:py-2 rounded-xl border border-stone-200 text-xs sm:text-sm focus:outline-none focus:border-maroon focus:ring-1 focus:ring-maroon bg-cream/30"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-ink cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-ink cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Collapsed Filter Dropdown + Refresh */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative" ref={filterPopoverRef}>
+            <button
+              type="button"
+              onClick={() => setIsFilterOpen((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                statusFilter !== 'ALL' || checkinFilter !== 'ALL'
+                  ? 'bg-maroon text-white border-maroon'
+                  : isFilterOpen
+                  ? 'bg-stone-100 border-stone-300 text-ink'
+                  : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filters</span>
+              {(statusFilter !== 'ALL' || checkinFilter !== 'ALL') && (
+                <span className="w-4 h-4 rounded-full bg-gold text-maroon font-black text-[10px] flex items-center justify-center">
+                  {(statusFilter !== 'ALL' ? 1 : 0) + (checkinFilter !== 'ALL' ? 1 : 0)}
+                </span>
+              )}
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Filter Popover Panel */}
+            {isFilterOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-stone-200 shadow-xl p-4 z-40 space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+                  <span className="font-outfit font-bold text-xs uppercase tracking-wider text-ink">
+                    Filter Employees
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterOpen(false)}
+                    className="text-stone-400 hover:text-ink cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Registration Status */}
+                <div>
+                  <label className="block text-[11px] font-bold text-ink-soft mb-1">
+                    Registration Status
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-ink bg-stone-50 focus:outline-none focus:border-maroon cursor-pointer"
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="PENDING">Pending Review</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="REJECTED">Rejected</option>
+                    <option value="ACTIVE">Pass Active</option>
+                    <option value="SUSPENDED">Pass Suspended</option>
+                    <option value="REVOKED">Pass Revoked</option>
+                  </select>
+                </div>
+
+                {/* Check-in Status */}
+                <div>
+                  <label className="block text-[11px] font-bold text-ink-soft mb-1">
+                    Check-in Status
+                  </label>
+                  <select
+                    value={checkinFilter}
+                    onChange={(e) => {
+                      setCheckinFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-ink bg-stone-50 focus:outline-none focus:border-maroon cursor-pointer"
+                  >
+                    <option value="ALL">All Check-ins</option>
+                    <option value="CHECKED_IN">Checked In</option>
+                    <option value="NOT_CHECKED_IN">Not Checked In</option>
+                  </select>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between pt-2 border-t border-stone-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter('ALL');
+                      setCheckinFilter('ALL');
+                      setPage(1);
+                    }}
+                    className="text-xs text-stone-500 hover:text-maroon font-semibold cursor-pointer"
+                  >
+                    Clear Filters
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterOpen(false)}
+                    className="px-3.5 py-1 rounded-lg bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition-colors cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Filter dropdowns */}
-          <div className="flex flex-wrap items-center gap-2 2xl:gap-2.5">
-            {/* Pass Status Filter */}
-            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1 2xl:px-3 2xl:py-1.5 text-xs font-semibold text-ink">
-              <span className="text-ink-soft font-normal">Status:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-transparent border-none text-xs font-bold text-ink focus:outline-none cursor-pointer"
-              >
-                <option value="ALL">All Status</option>
-                <option value="PENDING">Pending Review</option>
-                <option value="APPROVED">Approved</option>
-                <option value="REJECTED">Rejected</option>
-                <option value="ACTIVE">Pass Active</option>
-                <option value="SUSPENDED">Pass Suspended</option>
-                <option value="REVOKED">Pass Revoked</option>
-              </select>
-            </div>
+          {/* Refresh */}
+          <button
+            type="button"
+            onClick={() => loadEmployees()}
+            title="Refresh List"
+            className="p-1.5 sm:p-2 rounded-xl border border-stone-200 bg-white text-stone-600 hover:text-maroon hover:border-maroon/30 transition-colors cursor-pointer shadow-2xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
 
-            {/* Checkin Status Filter */}
-            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1 2xl:px-3 2xl:py-1.5 text-xs font-semibold text-ink">
-              <span className="text-ink-soft font-normal">Check-in:</span>
-              <select
-                value={checkinFilter}
-                onChange={(e) => {
-                  setCheckinFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-transparent border-none text-xs font-bold text-ink focus:outline-none cursor-pointer"
-              >
-                <option value="ALL">All Check-ins</option>
-                <option value="CHECKED_IN">Checked In</option>
-                <option value="NOT_CHECKED_IN">Not Checked In</option>
-              </select>
-            </div>
-
-            {/* Refresh */}
+      {/* COMPACT BULK ACTION BAR (VISIBLE ONLY WHEN ROWS ARE SELECTED) */}
+      {selectedIds.length > 0 && (
+        <div className="bg-stone-900 text-white px-3.5 py-2 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs font-semibold shadow-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+              {selectedIds.length} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                loadEmployees();
-                loadSummary();
-              }}
-              title="Refresh"
-              className="p-1.5 2xl:p-2 rounded-xl border border-stone-200 text-stone-600 hover:text-maroon hover:border-maroon/30 transition-colors cursor-pointer"
+              type="button"
+              disabled={bulkBusy}
+              onClick={handleBulkApprove}
+              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 2xl:w-4 2xl:h-4 ${loading ? 'animate-spin' : ''}`} />
+              <Check className="w-3.5 h-3.5" />
+              <span>Approve Selected</span>
+            </button>
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={handleBulkReject}
+              className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Reject Selected</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Clear
             </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* EMPLOYEES DATA TABLE */}
       <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
@@ -540,29 +675,41 @@ export default function AdminEmployeesPage() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-stone-50/80 border-b border-stone-200/70 text-ink-soft uppercase text-[9px] 2xl:text-[10px] font-bold tracking-wider">
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Employee Name</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">CPF / ID</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Mobile &amp; Email</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Department</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Registration</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Pass Type</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Pass Status</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Check-in Status</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold">Registered</th>
-                <th className="py-2.5 2xl:py-3.5 px-3 sm:px-4 font-bold text-right">Actions</th>
+                <th className="py-2 px-2.5 w-9 text-center">
+                  <input
+                    type="checkbox"
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected;
+                    }}
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer"
+                    aria-label="Select all visible employees"
+                  />
+                </th>
+                <th className="py-2 px-3 font-bold">Employee Name</th>
+                <th className="py-2 px-2.5 font-bold">CPF / ID</th>
+                <th className="py-2 px-2.5 font-bold">Mobile &amp; Email</th>
+                <th className="py-2 px-2.5 font-bold">Department</th>
+                <th className="py-2 px-2.5 font-bold">Registration</th>
+                <th className="py-2 px-2.5 font-bold">Pass Type</th>
+                <th className="py-2 px-2.5 font-bold">Pass Status</th>
+                <th className="py-2 px-2.5 font-bold">Check-in Status</th>
+                <th className="py-2 px-2.5 font-bold">Registered</th>
+                <th className="py-2 px-3 font-bold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-8 2xl:py-12 text-center text-ink-soft">
-                    <RefreshCw className="w-5 h-5 2xl:w-6 2xl:h-6 animate-spin mx-auto text-maroon mb-2" />
-                    <span>Loading employee passes...</span>
+                  <td colSpan={11} className="py-8 text-center text-ink-soft">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto text-maroon mb-2" />
+                    <span>Loading employee directory...</span>
                   </td>
                 </tr>
               ) : employees.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-8 2xl:py-12 text-center text-ink-soft">
+                  <td colSpan={11} className="py-8 text-center text-ink-soft">
                     <Users className="w-8 h-8 text-stone-300 mx-auto mb-2" />
                     <p className="font-semibold text-ink text-sm">No employee records found</p>
                     <p className="text-xs text-ink-soft mt-1">
@@ -576,49 +723,62 @@ export default function AdminEmployeesPage() {
                 employees.map((emp) => (
                   <tr
                     key={emp.id}
-                    className="hover:bg-cream/40 transition-colors group"
+                    className={`hover:bg-cream/40 transition-colors group ${
+                      selectedIds.includes(emp.id) ? 'bg-amber-50/40' : ''
+                    }`}
                   >
+                    {/* Checkbox */}
+                    <td className="py-1.5 px-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(emp.id)}
+                        onChange={() => toggleSelectRow(emp.id)}
+                        className="w-3.5 h-3.5 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer"
+                        aria-label={`Select ${emp.name}`}
+                      />
+                    </td>
+
                     {/* Name */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
-                      <div className="font-bold text-ink text-xs sm:text-sm group-hover:text-maroon transition-colors">
+                    <td className="py-1.5 px-3">
+                      <div className="font-bold text-ink text-xs group-hover:text-maroon transition-colors">
                         {emp.name}
                       </div>
-                      <div className="text-[10px] 2xl:text-[11px] text-ink-soft flex items-center gap-1 mt-0.5">
+                      <div className="text-[10px] text-ink-soft flex items-center gap-1 mt-0.5">
                         <Briefcase className="w-3 h-3 text-stone-400" />
                         <span>{emp.designation || 'Staff'}</span>
                       </div>
                     </td>
 
                     {/* CPF */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
-                      <span className="font-mono font-bold text-maroon bg-maroon/5 border border-maroon/20 px-1.5 2xl:px-2 py-0.5 rounded text-xs">
+                    <td className="py-1.5 px-2.5">
+                      <span className="font-mono font-bold text-maroon bg-maroon/5 border border-maroon/20 px-1.5 py-0.5 rounded text-[11px]">
                         {emp.cpf}
                       </span>
                     </td>
 
                     {/* Mobile & Email */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
-                      <div className="font-semibold text-ink text-xs flex items-center gap-1">
+                    <td className="py-1.5 px-2.5">
+                      <div className="font-medium text-ink text-xs flex items-center gap-1">
                         <Phone className="w-3 h-3 text-stone-400" />
                         <span>{emp.mobile || '—'}</span>
                       </div>
                       {emp.email && (
-                        <div className="text-[10px] 2xl:text-[11px] text-ink-soft flex items-center gap-1 mt-0.5">
+                        <div className="text-[10px] text-ink-soft flex items-center gap-1 mt-0.5">
                           <Mail className="w-3 h-3 text-stone-400" />
-                          <span className="truncate max-w-[150px] 2xl:max-w-[180px]">{emp.email}</span>
+                          <span className="truncate max-w-[150px]">{emp.email}</span>
                         </div>
                       )}
                     </td>
 
                     {/* Department */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
-                      <div className="font-semibold text-ink text-xs">{emp.department || 'ONGC'}</div>
+                    <td className="py-1.5 px-2.5">
+                      <div className="font-medium text-ink text-xs">{emp.department || 'ONGC'}</div>
                     </td>
 
                     {/* Registration Status */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                    <td className="py-1.5 px-2.5">
                       <span
-                        className={`inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wide border ${
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide border ${
                           emp.registrationStatus === 'APPROVED'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                             : emp.registrationStatus === 'REJECTED'
@@ -635,22 +795,22 @@ export default function AdminEmployeesPage() {
                     </td>
 
                     {/* Pass Type */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
-                      <div className="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-0.5 2xl:py-1 rounded-lg text-[11px] 2xl:text-xs font-semibold bg-purple-50 text-purple-900 border border-purple-200">
-                        <Ticket className="w-3 h-3 text-purple-700" />
+                    <td className="py-1.5 px-2.5">
+                      <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-900 border border-purple-200">
+                        <Ticket className="w-2.5 h-2.5 text-purple-700" />
                         <span>{emp.passType}</span>
                       </div>
                       {emp.familyMembersCount > 0 && (
-                        <div className="text-[9px] 2xl:text-[10px] text-ink-soft mt-0.5">
+                        <div className="text-[9px] text-ink-soft mt-0.5">
                           Total: {emp.totalPasses} pass{emp.totalPasses > 1 ? 'es' : ''}
                         </div>
                       )}
                     </td>
 
                     {/* Pass Status */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                    <td className="py-1.5 px-2.5">
                       <span
-                        className={`inline-flex items-center px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wide border ${
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide border ${
                           emp.passStatus === 'ACTIVE'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                             : emp.passStatus === 'SUSPENDED'
@@ -663,15 +823,15 @@ export default function AdminEmployeesPage() {
                     </td>
 
                     {/* Check-in Status */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4">
+                    <td className="py-1.5 px-2.5">
                       {emp.isCheckedIn ? (
                         <div>
-                          <span className="inline-flex items-center gap-1 px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                             <span>Checked In</span>
                           </span>
                           {emp.latestCheckin && (
-                            <div className="text-[9px] 2xl:text-[10px] text-ink-soft mt-0.5">
+                            <div className="text-[9px] text-ink-soft mt-0.5">
                               {emp.latestCheckin.gateName} &bull;{' '}
                               {new Date(emp.latestCheckin.checkinTime).toLocaleTimeString([], {
                                 hour: '2-digit',
@@ -681,15 +841,15 @@ export default function AdminEmployeesPage() {
                           )}
                         </div>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 2xl:px-2 py-0.5 rounded text-[9px] 2xl:text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
-                          <Clock className="w-3 h-3 text-stone-400" />
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
+                          <Clock className="w-2.5 h-2.5 text-stone-400" />
                           <span>Not Checked In</span>
                         </span>
                       )}
                     </td>
 
                     {/* Registration Date */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4 text-ink-soft whitespace-nowrap text-[11px] 2xl:text-xs">
+                    <td className="py-1.5 px-2.5 text-ink-soft whitespace-nowrap text-[10px]">
                       {new Date(emp.registrationDate).toLocaleDateString('en-GB', {
                         day: '2-digit',
                         month: 'short',
@@ -698,15 +858,15 @@ export default function AdminEmployeesPage() {
                     </td>
 
                     {/* Actions */}
-                    <td className="py-2 2xl:py-3.5 px-3 sm:px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                    <td className="py-1.5 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1 flex-wrap">
                         {emp.registrationStatus === 'PENDING' && (
                           <>
                             <button
                               type="button"
                               disabled={processingId === emp.id}
                               onClick={() => handleApprove(emp.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-600 hover:text-white border border-emerald-300 font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 hover:bg-emerald-600 hover:text-white border border-emerald-300 font-bold text-[10px] transition-colors cursor-pointer disabled:opacity-50"
                               title="Approve Employee Registration"
                             >
                               <Check className="w-3 h-3" />
@@ -716,7 +876,7 @@ export default function AdminEmployeesPage() {
                               type="button"
                               disabled={processingId === emp.id}
                               onClick={() => handleReject(emp.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 text-rose-800 hover:bg-rose-600 hover:text-white border border-rose-300 font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-800 hover:bg-rose-600 hover:text-white border border-rose-300 font-bold text-[10px] transition-colors cursor-pointer disabled:opacity-50"
                               title="Reject Employee Registration"
                             >
                               <X className="w-3 h-3" />
@@ -727,7 +887,7 @@ export default function AdminEmployeesPage() {
                         <button
                           type="button"
                           onClick={() => handleViewDetails(emp.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700 hover:bg-stone-200 font-bold text-[11px] transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 hover:bg-stone-200 font-bold text-[10px] transition-colors cursor-pointer"
                           title="View Registration Details"
                         >
                           <Eye className="w-3 h-3" />
@@ -736,7 +896,7 @@ export default function AdminEmployeesPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenPass(emp.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-maroon/10 text-maroon hover:bg-maroon hover:text-white font-bold text-[11px] transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-maroon/10 text-maroon hover:bg-maroon hover:text-white font-bold text-[10px] transition-colors cursor-pointer"
                           title="View Official E-Pass"
                         >
                           <Ticket className="w-3 h-3" />
@@ -751,8 +911,8 @@ export default function AdminEmployeesPage() {
           </table>
         </div>
 
-        {/* PAGINATION */}
-        <div className="p-4 border-t border-stone-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-ink-soft">
+        {/* COMPACT PAGINATION */}
+        <div className="px-3.5 py-2 border-t border-stone-200/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-ink-soft bg-stone-50/50">
           <div>
             Showing <strong>{employees.length}</strong> of <strong>{totalCount}</strong> employees
           </div>
@@ -761,17 +921,17 @@ export default function AdminEmployeesPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || loading}
-              className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white font-semibold text-ink hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white font-semibold text-ink hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs"
             >
               Previous
             </button>
-            <span className="px-2 font-bold text-ink">
+            <span className="px-1.5 font-bold text-ink text-xs">
               Page {page} of {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || loading}
-              className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white font-semibold text-ink hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white font-semibold text-ink hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs"
             >
               Next
             </button>

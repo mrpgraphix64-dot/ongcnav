@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import Link from 'next/link';
 import {
   Info,
   CheckCircle2,
@@ -27,6 +26,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import MaintenanceNotice from '@/components/MaintenanceNotice';
+import { getEventDayTheme } from '@ongc/shared-types';
 
 // ----------------------------------------------------------------------------
 // Event dates for ONGC Navratri 2026.
@@ -235,30 +235,63 @@ function DateChipGrid({
       {EVENT_DATES.map((iso, idx) => {
         const selected = selectedDates.includes(iso);
         const { weekday, day, month } = formatDateChip(iso);
+        const theme = getEventDayTheme(iso);
         return (
           <button
             key={iso}
             type="button"
             onClick={() => onToggle(iso)}
-            className={`p-2 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center ${
+            style={
               selected
-                ? 'bg-maroon text-white border-maroon shadow-md scale-[1.02]'
-                : 'bg-white text-ink border-stone-200 hover:border-maroon/40 hover:bg-cream-soft'
+                ? {
+                    backgroundColor: theme.primaryColor,
+                    borderColor: theme.secondaryColor,
+                    color: '#FFFFFF',
+                  }
+                : {
+                    backgroundColor: theme.bgColor,
+                    borderColor: `${theme.primaryColor}38`,
+                  }
+            }
+            className={`p-2 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center cursor-pointer ${
+              selected ? 'scale-[1.02] shadow-md' : 'hover:scale-[1.01]'
             }`}
           >
+            <div className="flex items-center justify-center gap-1">
+              <span
+                className="text-[9px] uppercase tracking-wider font-bold"
+                style={{
+                  color: selected ? theme.secondaryColor : theme.primaryColor,
+                }}
+              >
+                Day {idx + 1}
+              </span>
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{
+                  backgroundColor: theme.secondaryColor,
+                }}
+              />
+            </div>
             <span
-              className={`text-[9px] uppercase tracking-wider font-bold ${
-                selected ? 'text-gold-light' : 'text-ink-soft'
+              className={`font-outfit font-extrabold text-base leading-tight mt-0.5 ${
+                selected ? 'text-white' : 'text-stone-900'
               }`}
             >
-              Day {idx + 1}
+              {day}
             </span>
-            <span className="font-outfit font-extrabold text-base leading-tight mt-0.5">{day}</span>
-            <span className={`text-[10px] font-semibold ${selected ? 'text-white/90' : 'text-ink-soft'}`}>
+            <span
+              className={`text-[10px] font-semibold ${
+                selected ? 'text-white/90' : 'text-stone-600'
+              }`}
+            >
               {month}
             </span>
             <span
-              className={`text-[9px] font-medium mt-0.5 ${selected ? 'text-gold-light/90' : 'text-stone-400'}`}
+              className="text-[9px] font-medium mt-0.5"
+              style={{
+                color: selected ? `${theme.secondaryColor}E6` : '#78716c',
+              }}
             >
               {weekday}
             </span>
@@ -268,6 +301,7 @@ function DateChipGrid({
     </div>
   );
 }
+
 
 function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 }) {
   const steps = [
@@ -343,7 +377,7 @@ export default function EmployeeRegisterPage() {
 
   const scrollTop = () => {
     if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'auto' });
     }
   };
 
@@ -550,6 +584,7 @@ export default function EmployeeRegisterPage() {
 
     setErrorMessage('');
     setSubmitting(true);
+    scrollTop();
 
     try {
       const cleanMobile = common.mobile.trim();
@@ -630,44 +665,59 @@ export default function EmployeeRegisterPage() {
         </p>
       </div>
 
-      {submitted ? (
-        /* SUCCESS STATE CARD — PENDING ADMIN REVIEW & DAILY QR DELIVERY */
-        <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-amber-500/40 shadow-xl text-center space-y-6">
-          <div className="w-20 h-20 rounded-full bg-amber-50 text-amber-600 mx-auto flex items-center justify-center shadow-inner border border-amber-200">
-            <CheckCircle2 className="w-10 h-10" />
+      {submitting ? (
+        /* SUBMITTING PROGRESS CARD */
+        <div className="bg-white rounded-3xl p-8 sm:p-12 border border-gold/40 shadow-xl text-center space-y-6">
+          <div className="w-20 h-20 rounded-full bg-cream-light text-maroon mx-auto flex items-center justify-center shadow-inner border border-gold/40">
+            <Loader2 className="w-10 h-10 animate-spin text-maroon" />
           </div>
 
           <div className="space-y-2">
             <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider">
-              Pending Admin Review
+              Processing
+            </div>
+            <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink">
+              Submitting Registration...
+            </h2>
+            <div className="w-16 h-1 bg-gold mx-auto rounded-full" />
+          </div>
+
+          <p className="text-ink-soft text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
+            Please wait while your pass details and photographs are being processed and securely stored.
+          </p>
+        </div>
+      ) : submitted ? (
+        /* SUCCESS STATE CARD — PENDING ADMIN REVIEW & DAILY QR DELIVERY */
+        <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/40 shadow-xl text-center space-y-6">
+          <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner border border-emerald-200">
+            <CheckCircle2 className="w-10 h-10" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider">
+              Registration Successful
             </div>
             <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink">
               Registration Submitted Successfully
             </h2>
-            <div className="w-16 h-1 bg-amber-500 mx-auto rounded-full" />
+            <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full" />
           </div>
 
           <p className="text-ink-soft text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
-            Your registration for <strong>{common.name}</strong> (CPF: <span className="font-mono font-bold text-ink">{common.cpf}</span>) has been received and will be reviewed by the event organizing team.
+            Your registration for <strong>{common.name}</strong> (CPF: <span className="font-mono font-bold text-ink">{common.cpf}</span>) has been submitted successfully. Your selected event dates have been recorded.
           </p>
 
           {/* Daily QR Delivery Information Banner */}
           <div className="text-left bg-cream-light border border-amber-300/80 rounded-2xl p-5 space-y-3 max-w-lg mx-auto">
             <h3 className="font-outfit font-extrabold text-sm text-maroon flex items-center gap-2">
               <Info className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>How You Will Receive Your Entry Passes</span>
+              <span>Pass Delivery Information</span>
             </h3>
             <ul className="text-xs text-ink-soft space-y-2 leading-relaxed">
               <li className="flex items-start gap-2">
                 <span className="text-amber-600 font-bold">•</span>
                 <span>
-                  <strong>No entry pass is needed today.</strong> Your registration is currently awaiting admin confirmation.
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-amber-600 font-bold">•</span>
-                <span>
-                  <strong>Daily QR Passes:</strong> Your QR pass will be sent to your registered email for each selected event date when released by the administration.
+                  After approval, your date-specific QR entry pass will be sent to your registered email address (<strong className="text-ink">{common.email}</strong>) for each selected event day.
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -685,18 +735,11 @@ export default function EmployeeRegisterPage() {
             </ul>
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link
-              href="/"
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gold text-maroon-deep font-bold text-sm hover:bg-gold-light transition-all shadow-md inline-flex items-center justify-center gap-2 border border-maroon/20"
-            >
-              <span>Back to Home</span>
-            </Link>
-
+          <div className="pt-2 flex items-center justify-center">
             <button
               onClick={resetForm}
               type="button"
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-maroon text-white font-bold text-sm hover:bg-maroon-dark transition-all shadow-md inline-flex items-center justify-center gap-2 border border-gold/40"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-maroon text-white font-bold text-sm hover:bg-maroon-dark transition-all shadow-md inline-flex items-center justify-center gap-2 border border-gold/40 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4 text-gold-light" />
               <span>Register Another Employee</span>
@@ -814,6 +857,27 @@ export default function EmployeeRegisterPage() {
                       />
                     </div>
 
+                    {/* Email Address */}
+                    <div>
+                      <label htmlFor="emp-email" className="block text-xs font-bold text-ink mb-1.5">
+                        Email Address <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        id="emp-email"
+                        type="email"
+                        value={common.email}
+                        onChange={(e) => setCommon((prev) => ({ ...prev, email: e.target.value }))}
+                        required
+                        inputMode="email"
+                        autoComplete="email"
+                        placeholder="e.g. ramesh.patel@ongc.co.in"
+                        className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
+                      />
+                      <p className="text-[11px] text-stone-500 mt-1">
+                        Your daily QR entry pass will be sent to this email address on each selected event day.
+                      </p>
+                    </div>
+
                     {/* Mobile Number */}
                     <div>
                       <label htmlFor="emp-mobile" className="block text-xs font-bold text-ink mb-1.5">
@@ -838,27 +902,6 @@ export default function EmployeeRegisterPage() {
                         placeholder="e.g. 9876543210"
                         className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                       />
-                    </div>
-
-                    {/* Email Address */}
-                    <div>
-                      <label htmlFor="emp-email" className="block text-xs font-bold text-ink mb-1.5">
-                        Email Address <span className="text-rose-600">*</span>
-                      </label>
-                      <input
-                        id="emp-email"
-                        type="email"
-                        value={common.email}
-                        onChange={(e) => setCommon((prev) => ({ ...prev, email: e.target.value }))}
-                        required
-                        inputMode="email"
-                        autoComplete="email"
-                        placeholder="e.g. ramesh.patel@ongc.co.in"
-                        className="w-full px-4 py-3.5 rounded-xl bg-cream-light border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
-                      />
-                      <p className="text-[11px] text-stone-500 mt-1">
-                        Your QR pass will be sent to this email.
-                      </p>
                     </div>
 
                     {/* Photo Upload */}
@@ -1166,12 +1209,12 @@ export default function EmployeeRegisterPage() {
                   {submitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Submitting Pass...</span>
+                      <span>Submitting Registration...</span>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Confirm &amp; Issue Passes</span>
+                      <span>Submit Registration</span>
                     </>
                   )}
                 </button>

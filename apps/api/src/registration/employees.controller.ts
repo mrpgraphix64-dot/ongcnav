@@ -134,6 +134,30 @@ export class EmployeesController {
     return this.employeesService.getEmployeeDetails(BigInt(id));
   }
 
+  @Post('employees/bulk-approve')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Bulk approve employee registrations and activate passes' })
+  async bulkApproveRegistrations(@Body() body: { ids: string[] }) {
+    const bigIntIds = (body.ids || []).map((id) => BigInt(id));
+    return this.employeesService.bulkApproveRegistrations(bigIntIds);
+  }
+
+  @Post('employees/bulk-reject')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Bulk reject employee registrations and revoke passes' })
+  async bulkRejectRegistrations(@Body() body: { ids: string[]; reason?: string }) {
+    const bigIntIds = (body.ids || []).map((id) => BigInt(id));
+    return this.employeesService.bulkRejectRegistrations(bigIntIds, body.reason);
+  }
+
   @Post('employees/:id/approve')
   @Roles(
     UserRole.SUPER_ADMIN,
