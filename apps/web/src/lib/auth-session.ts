@@ -87,11 +87,6 @@ export function setStoredAuthUser(user: AuthUser): void {
       ch.postMessage(event);
     }
   } catch {}
-
-  // Broadcast in current tab
-  try {
-    window.dispatchEvent(new CustomEvent('ongc:auth-sync', { detail: event }));
-  } catch {}
 }
 
 /**
@@ -118,11 +113,6 @@ export function clearStoredAuth(): void {
     if (ch) {
       ch.postMessage(event);
     }
-  } catch {}
-
-  // Broadcast in current tab
-  try {
-    window.dispatchEvent(new CustomEvent('ongc:auth-sync', { detail: event }));
   } catch {}
 }
 
@@ -214,21 +204,11 @@ export function subscribeToAuthSync(callback: (event: AuthSyncEvent) => void): (
   };
   window.addEventListener('storage', handleStorage);
 
-  // 3. Current-tab custom event listener
-  const handleCustom = (customEvt: Event) => {
-    const detail = (customEvt as CustomEvent)?.detail;
-    if (detail?.type) {
-      callback(detail as AuthSyncEvent);
-    }
-  };
-  window.addEventListener('ongc:auth-sync', handleCustom);
-
   // Unsubscribe function
   return () => {
     if (ch) {
       ch.removeEventListener('message', handleBroadcast);
     }
     window.removeEventListener('storage', handleStorage);
-    window.removeEventListener('ongc:auth-sync', handleCustom);
   };
 }

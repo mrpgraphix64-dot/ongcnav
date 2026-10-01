@@ -224,5 +224,30 @@ describe('Web Auth Session & Cross-Tab Synchronization', () => {
 
       unsubscribe();
     });
+
+    it('does not dispatch auth-sync events into the same tab when setting stored user (breaks feedback loop)', () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToAuthSync(listener);
+
+      setStoredAuthUser({
+        id: 'admin-1',
+        name: 'Super Admin',
+        email: 'admin@ongc.co.in',
+        role: 'SUPER_ADMIN',
+      });
+
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it('does not dispatch auth-sync events into the same tab when clearing stored auth', () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToAuthSync(listener);
+
+      clearStoredAuth();
+
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
   });
 });

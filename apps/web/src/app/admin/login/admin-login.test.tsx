@@ -3,8 +3,11 @@ import ReactDOMServer from 'react-dom/server';
 import AdminLoginPage from './page';
 import { AUTH_SESSION_KEY } from '@/lib/auth-session';
 
+import AdminLayout from '../layout';
+
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
+  usePathname: () => '/admin/login',
   useRouter: () => ({
     push: jest.fn(),
     replace: jest.fn(),
@@ -63,5 +66,17 @@ describe('Admin Login Page Cross-Tab Auth UI Tests', () => {
     const html = ReactDOMServer.renderToStaticMarkup(<AdminLoginPage />);
     expect(html).toContain('Verifying Admin Session...');
     expect(html).toContain('Redirecting to operations portal...');
+  });
+
+  it('AdminLayout unconditionally runs hooks and cleanly renders children without shell on /admin/login', () => {
+    const html = ReactDOMServer.renderToStaticMarkup(
+      <AdminLayout>
+        <div id="login-container">Login Page Child Content</div>
+      </AdminLayout>,
+    );
+    expect(html).toContain('Login Page Child Content');
+    expect(html).not.toContain('GLOBAL');
+    expect(html).not.toContain('OPERATIONS');
+    expect(html).not.toContain('Verifying administrative access...');
   });
 });

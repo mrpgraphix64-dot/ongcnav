@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -39,6 +39,8 @@ function AdminLoginForm() {
     return !!getStoredAuthUser();
   });
 
+  const checkInFlightRef = useRef(false);
+
   const resolveDestination = (user?: any): string => {
     const role = String(user?.role || '').toUpperCase();
     if (isAgentRole(role)) {
@@ -57,6 +59,9 @@ function AdminLoginForm() {
     let isMounted = true;
 
     async function checkServerSession() {
+      if (checkInFlightRef.current) return;
+      checkInFlightRef.current = true;
+
       try {
         const res = await fetchApi('/auth/me');
         if (!isMounted) return;
@@ -74,6 +79,8 @@ function AdminLoginForm() {
           clearStoredAuth();
           setCheckingAuth(false);
         }
+      } finally {
+        checkInFlightRef.current = false;
       }
     }
 
@@ -81,13 +88,14 @@ function AdminLoginForm() {
     checkServerSession();
 
     // 2. Cross-tab real-time auth synchronization via BroadcastChannel / Storage events
-    const unsubscribe = subscribeToAuthSync(async (event) => {
+    const unsubscribe = subscribeToAuthSync((event) => {
       if (!isMounted) return;
 
-      if (event.type === 'LOGIN') {
-        // Security rule: Do NOT accept a broadcast event as proof of authentication.
-        // Always re-check the existing session with the server as source of truth.
-        await checkServerSession();
+      if (event.type === 'LOGIN' && event.user) {
+        // Another tab authenticated successfully; update local state directly without re-fetching /auth/me
+        setCheckingAuth(false);
+        const destination = resolveDestination(event.user);
+        router.replace(destination);
       } else if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
         setCheckingAuth(false);
       }

@@ -542,10 +542,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  // If on /admin/login, bypass the Admin Shell completely so it renders full-screen
-  if (pathname === '/admin/login') {
-    return <>{children}</>;
-  }
+  const isLoginPage = pathname === '/admin/login';
 
   // Hydrate user safely after mount to prevent React Error #418 (hydration mismatch)
   const [user, setUser] = useState<AdminUser | null>(() => getStoredAuthUser() as AdminUser | null);
@@ -565,6 +562,8 @@ export default function AdminLayout({
 
   // Fetch real authenticated user profile
   useEffect(() => {
+    if (isLoginPage) return;
+
     let isMounted = true;
 
     async function loadUserProfile() {
@@ -608,9 +607,26 @@ export default function AdminLayout({
         setUser(null);
         setAuthChecking(false);
         router.replace('/admin/login');
-      } else if (event.type === 'LOGIN') {
-        // Re-verify session with the server as single source of truth
-        loadUserProfile();
+      } else if (event.type === 'LOGIN' && event.user) {
+        const normRole = normalizeRole(event.user.role);
+
+        if (normRole === 'COMMERCIAL_AGENT' || normRole === 'COMMERCIAL_SUB_AGENT' || isAgentRole(normRole)) {
+          setUser(null);
+          setAuthChecking(false);
+          router.replace('/agent');
+          return;
+        }
+
+        if (normRole === 'SCANNER_STAFF' || normRole === 'GATE_OPERATOR') {
+          setUser(null);
+          setAuthChecking(false);
+          router.replace('/scanner');
+          return;
+        }
+
+        // Direct local state update from event.user — DO NOT re-fetch /auth/me
+        setUser(event.user as AdminUser);
+        setAuthChecking(false);
       }
     });
 
@@ -629,10 +645,12 @@ export default function AdminLayout({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
     };
-  }, [pathname, router]);
+  }, [pathname, isLoginPage, router]);
 
   // Fetch real event-control status periodically from backend
   useEffect(() => {
+    if (isLoginPage) return;
+
     let isMounted = true;
 
     async function loadStatus() {
@@ -726,6 +744,11 @@ export default function AdminLayout({
     if (normalizedRole === 'COMMERCIAL_SUB_AGENT') return 'E-Pass Sub-Agent';
     return normalizedRole.replace(/_/g, ' ');
   })();
+
+  // If on /admin/login, bypass the Admin Shell completely so it renders full-screen
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
 
   if (authChecking) {
     return (
