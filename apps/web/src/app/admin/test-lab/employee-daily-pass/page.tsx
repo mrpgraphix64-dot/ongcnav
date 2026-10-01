@@ -424,7 +424,7 @@ export default function EmployeeDailyPassTestLabPage() {
   const selectedTheme = getEventDayTheme(selectedEventDate);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6.5rem)] sm:h-[calc(100vh-7rem)] max-h-[calc(100vh-6.5rem)] sm:max-h-[calc(100vh-7rem)] overflow-hidden space-y-3">
+    <div className="h-full min-h-0 flex-1 flex flex-col overflow-hidden space-y-3">
       {/* Top Banner & Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gold/30 pb-3 shrink-0">
         <div>

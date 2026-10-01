@@ -560,6 +560,20 @@ export default function AdminLayout({
   const router = useRouter();
 
   const isLoginPage = pathname === '/admin/login';
+  const isViewportManagedPage = pathname.startsWith('/admin/test-lab/employee-daily-pass');
+
+  // Prevent document/browser-level scrollbars across the admin shell
+  useEffect(() => {
+    if (isLoginPage) return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, [isLoginPage]);
 
   // Hydrate user safely after mount to prevent React Error #418 (hydration mismatch)
   const [user, setUser] = useState<AdminUser | null>(() => getStoredAuthUser() as AdminUser | null);
@@ -769,7 +783,7 @@ export default function AdminLayout({
 
   if (authChecking) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-cream font-sans select-none">
+      <div className="h-dvh max-h-dvh w-full flex flex-col items-center justify-center bg-cream font-sans select-none">
         <div className="w-10 h-10 border-3 border-stone-200 border-t-maroon rounded-full animate-spin mb-4" />
         <div className="font-outfit font-extrabold text-xs tracking-widest uppercase text-maroon">
           ONGC Navratri Operations
@@ -781,7 +795,7 @@ export default function AdminLayout({
 
   if (!isAuthorized) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-cream p-8 text-center">
+      <div className="h-dvh max-h-dvh w-full flex flex-col items-center justify-center bg-cream p-8 text-center">
         <ShieldAlert className="w-12 h-12 text-maroon mb-3" />
         <h2 className="text-lg font-bold text-ink">Access Restricted</h2>
         <p className="text-sm text-ink-soft max-w-md mt-1">
@@ -798,7 +812,7 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col font-sans bg-cream text-ink selection:bg-maroon selection:text-white overflow-hidden">
+    <div className="h-dvh max-h-dvh w-full flex flex-col font-sans bg-cream text-ink selection:bg-maroon selection:text-white overflow-hidden">
       {/* Emergency Stop Top Alert Banner (shown only when emergency stop is active) */}
       {emergencyStopped === true && (
         <div className="bg-maroon text-white px-4 py-2 text-center text-xs font-black tracking-widest uppercase flex items-center justify-center gap-2 border-b border-gold/40 shadow-md shrink-0 z-50">
@@ -964,7 +978,7 @@ export default function AdminLayout({
         </aside>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-cream">
+        <div className="flex-1 flex flex-col h-full min-w-0 min-h-0 overflow-hidden bg-cream">
           {/* Persistent System Banners */}
           <SuperAdminPowerBanner userRole={user?.role} />
 
@@ -1147,7 +1161,13 @@ export default function AdminLayout({
           </header>
 
           {/* Main Body: Operational viewport with RBAC guard */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+          <main
+            className={`flex-1 min-h-0 ${
+              isViewportManagedPage
+                ? 'overflow-hidden flex flex-col px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4'
+                : 'overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 py-5 sm:py-6'
+            }`}
+          >
             {!isAuthorized ? (
               <div className="max-w-xl mx-auto my-12 p-8 bg-white rounded-2xl border border-rose-200 shadow-sm text-center space-y-4">
                 <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
