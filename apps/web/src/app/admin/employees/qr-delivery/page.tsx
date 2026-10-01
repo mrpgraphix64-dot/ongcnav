@@ -26,7 +26,12 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import AdminModal from '@/components/admin/AdminModal';
-import { OFFICIAL_EVENT_DATES, getEventDayTheme } from '@ongc/shared-types';
+import {
+  OFFICIAL_EVENT_DATES,
+  getEventDayTheme,
+  buildDailyEmployeePassPresentation,
+} from '@ongc/shared-types';
+import DailyEmployeeTicketCard from '@/components/pass/DailyEmployeeTicketCard';
 
 interface DeliveryStats {
   eventDate: string;
@@ -669,73 +674,53 @@ export default function DailyQrDeliveryPage() {
       </div>
 
       {/* VIEW QR MODAL */}
-      {viewPass && (
-        <AdminModal
-          isOpen={!!viewPass}
-          onClose={() => setViewPass(null)}
-          title="Daily Entry QR Pass"
-        >
-          <div className="space-y-5 text-center p-2">
-            <div className="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-900 text-xs font-extrabold uppercase tracking-wider">
-              VALID ONLY FOR: {formatDateDisplay(viewPass.eventDate)}
-            </div>
+      {viewPass && (() => {
+        const presentation = buildDailyEmployeePassPresentation({
+          eventDate: viewPass.eventDate,
+          ticketNumber: viewPass.ticketNumber,
+          qrToken: viewPass.qrToken,
+          status: viewPass.status,
+          attendeeName: viewPass.attendeeName,
+          isFamily: viewPass.isFamily,
+          relation: viewPass.relation,
+          employeeName: viewPass.employeeName,
+          employeeCpf: viewPass.cpf,
+          department: viewPass.department,
+        });
 
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-[#5A0F21] to-[#3D0714] text-white border-2 border-gold shadow-lg max-w-sm mx-auto space-y-4">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-gold-light">
-                ONGC NAVRATRI 2026 &bull; OFFICIAL ENTRY
-              </div>
-              <div className="font-outfit font-black text-xl text-white">
-                {viewPass.attendeeName}
-              </div>
-              <div className="text-xs text-gold font-semibold">
-                {viewPass.relation} {viewPass.cpf ? `(CPF: ${viewPass.cpf})` : ''}
-              </div>
+        return (
+          <AdminModal
+            isOpen={!!viewPass}
+            onClose={() => setViewPass(null)}
+            title="Daily Entry QR Pass"
+          >
+            <div className="space-y-4 p-1">
+              <DailyEmployeeTicketCard
+                presentation={presentation}
+                qrSvg={viewPass.qrSvg}
+              />
 
-              {/* QR Image Box */}
-              <div className="bg-white p-4 rounded-xl inline-block mx-auto shadow-md">
-                {viewPass.qrSvg ? (
-                  <div
-                    className="w-48 h-48 mx-auto"
-                    dangerouslySetInnerHTML={{ __html: viewPass.qrSvg }}
-                  />
-                ) : (
-                  <div className="w-48 h-48 flex items-center justify-center text-xs text-stone-400">
-                    QR Preview
-                  </div>
-                )}
-                <div className="text-[10px] font-black tracking-widest text-maroon uppercase mt-1">
-                  SCAN AT GATE
-                </div>
-              </div>
-
-              <div className="font-mono text-xs font-bold text-gold-light">
-                Ticket: {viewPass.ticketNumber}
-              </div>
-              <div className="text-[11px] text-stone-300">
-                Single-use entry credential valid on {formatDateDisplay(viewPass.eventDate)}.
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 rounded-xl bg-gold text-maroon-deep font-bold text-xs hover:bg-gold-light transition-all flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print QR Pass</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewPass(null)}
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-xs font-bold text-ink hover:bg-stone-100"
+                >
+                  Close
+                </button>
               </div>
             </div>
-
-            <div className="pt-2 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-gold text-maroon-deep font-bold text-xs hover:bg-gold-light transition-all flex items-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print QR Pass</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewPass(null)}
-                className="px-4 py-2 rounded-xl border border-stone-200 text-xs font-bold text-ink hover:bg-stone-100"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </AdminModal>
-      )}
+          </AdminModal>
+        );
+      })()}
     </div>
   );
 }

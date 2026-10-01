@@ -9,7 +9,12 @@ import {
   EmailAttachment,
 } from './mail.types';
 import { getEmailBrandingUrls } from './branding-assets';
-import { getEventDayTheme, EventDayTheme } from '@ongc/shared-types';
+import {
+  getEventDayTheme,
+  EventDayTheme,
+  buildDailyEmployeePassPresentation,
+  DailyEmployeePassPresentation,
+} from '@ongc/shared-types';
 
 @Injectable()
 export class MailService {
@@ -841,19 +846,30 @@ Reworkzone.com (https://reworkzone.com)
         : `cid:${cid}`
       : '';
 
-    const isPrimary =
+    const isFamily = !(
       data.relation.toLowerCase().includes('employee') ||
       data.relation.toLowerCase().includes('primary') ||
-      data.relation.toLowerCase().includes('self');
-    const badgeText = isPrimary ? 'ONGC EMPLOYEE ENTRY PASS' : `FAMILY PASS (${data.relation.toUpperCase()})`;
+      data.relation.toLowerCase().includes('self')
+    );
 
-    const dayTheme: EventDayTheme = getEventDayTheme(data.eventDate);
+    const presentation = buildDailyEmployeePassPresentation({
+      eventDate: data.eventDate,
+      ticketNumber: data.ticketNumber,
+      qrToken: data.qrToken,
+      attendeeName: data.attendeeName,
+      isFamily,
+      relation: data.relation,
+      employeeName: data.employeeName,
+      employeeCpf: data.cpf,
+      department: data.department,
+    });
+    const dayTheme: EventDayTheme = presentation.theme;
     const viewTicketUrl = data.viewTicketUrl || `${this.webUrl}/employee/daily-pass/${data.qrToken}`;
     const downloadPdfUrl = data.downloadPdfUrl || `${this.apiUrl}/public/employee/daily-pass/${data.qrToken}/pdf`;
 
     const emailSubject =
       data.subjectOverride ||
-      `Your ONGC Navratri Entry Pass for ${dayTheme.fullDateLabel} - ${data.attendeeName}`;
+      `Your ONGC Navratri Entry Pass for Night ${presentation.nightNumber} (${presentation.eventDateFormatted}) - ${presentation.attendeeName}`;
 
     // Optional direct PDF attachment
     if (data.pdfBuffer && data.pdfBuffer.length > 0) {
@@ -879,24 +895,24 @@ Reworkzone.com (https://reworkzone.com)
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
           <!-- BRAND HEADER -->
           <tr>
-            <td style="background-color: #3B0813; background: linear-gradient(180deg, #4A0C1A 0%, #150207 100%); padding: 28px 20px 22px 20px; text-align: center; color: #FFFFFF; border-bottom: 3px solid ${dayTheme.secondaryColor};">
+            <td style="background-color: #FFFFFF; border-top: 4px solid ${dayTheme.primaryColor}; border-bottom: 2px solid ${dayTheme.secondaryColor}; padding: 24px 20px 18px 20px; text-align: center;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
                 <tr>
-                  <td align="center" style="padding-bottom: 12px;">
-                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="110" style="display: block; width: 110px; max-width: 110px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
+                  <td align="center" style="padding-bottom: 8px;">
+                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="100" style="display: block; width: 100px; max-width: 100px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
                   </td>
                 </tr>
                 <tr>
-                  <td align="center" style="padding-bottom: 4px;">
-                    <div style="font-family: 'Cinzel', 'Georgia', serif; font-size: 22px; font-weight: 800; color: ${dayTheme.secondaryColor}; letter-spacing: 4px; text-transform: uppercase; line-height: 1.2;">
+                  <td align="center" style="padding-bottom: 2px;">
+                    <div style="font-family: 'Cinzel', 'Georgia', serif; font-size: 20px; font-weight: 800; color: ${dayTheme.primaryColor}; letter-spacing: 3px; text-transform: uppercase; line-height: 1.2;">
                       ONGC NAVRATRI 2026
                     </div>
                   </td>
                 </tr>
                 <tr>
                   <td align="center">
-                    <div style="font-size: 11px; font-weight: 700; color: #F5E6B3; letter-spacing: 2px; text-transform: uppercase;">
-                      Your Daily Entry Pass
+                    <div style="font-size: 11px; font-weight: 700; color: ${dayTheme.secondaryColor}; letter-spacing: 1.5px; text-transform: uppercase;">
+                      OFFICIAL EMPLOYEE & FAMILY ENTRY E-PASS
                     </div>
                   </td>
                 </tr>
@@ -906,75 +922,83 @@ Reworkzone.com (https://reworkzone.com)
 
           <!-- MAIN BODY -->
           <tr>
-            <td style="padding: 26px 20px;">
+            <td style="padding: 24px 20px;">
               <!-- GREETING & STATUS ANNOUNCEMENT -->
-              <div style="font-size: 16px; font-weight: 700; color: #2A1810; margin-bottom: 8px;">
-                Hello ${this.escapeHtml(data.attendeeName)},
+              <div style="font-size: 15px; font-weight: 700; color: #2A1810; margin-bottom: 6px;">
+                Hello ${this.escapeHtml(presentation.attendeeName)},
               </div>
-              <div style="font-size: 14px; color: #4A3B32; line-height: 1.6; margin-bottom: 18px;">
-                Your entry pass for:
+              <div style="font-size: 13px; color: #4A3B32; line-height: 1.5; margin-bottom: 16px;">
+                Your official entry pass for:
                 <div style="margin: 8px 0; padding: 12px 16px; background-color: ${dayTheme.bgColor}; border-left: 4px solid ${dayTheme.primaryColor}; border-radius: 8px; border: 1px solid #EADDCF;">
-                  <div style="font-size: 16px; font-weight: 800; color: ${dayTheme.primaryColor};">
-                    ${dayTheme.fullDateLabel} (${dayTheme.dayOfWeek})
+                  <div style="font-size: 15px; font-weight: 800; color: ${dayTheme.primaryColor};">
+                    ${presentation.eventDateFormatted} (${dayTheme.dayOfWeek})
                   </div>
-                  <div style="font-size: 12px; font-weight: 700; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;">
-                    DAY ${dayTheme.dayNumber} OF 9 — ${dayTheme.themeTitle}
+                  <div style="font-size: 12px; font-weight: 800; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;">
+                    NIGHT ${presentation.nightNumber} OF 9 — ${presentation.themeTitle}
                   </div>
                   <div style="font-size: 11px; color: #6E5C50; margin-top: 2px;">
-                    Visual Motif: ${dayTheme.motifName}
+                    Visual Motif: ${presentation.motifName}
                   </div>
                 </div>
-                is ready.
+                is ready. Please present this date-specific pass at the gate.
               </div>
 
               <!-- ==================== TICKET PREVIEW ==================== -->
-              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: linear-gradient(145deg, ${dayTheme.primaryColor} 0%, ${dayTheme.accentColor} 100%); border: 2px solid ${dayTheme.secondaryColor}; border-radius: 16px; margin-bottom: 22px; text-align: center; color: #FFFFFF; box-shadow: 0 4px 16px rgba(0,0,0,0.18);">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FFFFFF; border: 2px solid ${dayTheme.secondaryColor}; border-top: 4px solid ${dayTheme.primaryColor}; border-radius: 16px; margin-bottom: 22px; text-align: center; color: #2A1810; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
                 <tr>
-                  <td style="padding: 22px 18px; text-align: center;">
+                  <td style="padding: 20px 18px; text-align: center;">
                     <!-- TOP TICKET TAG -->
-                    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #F5E6B3; font-weight: bold; margin-bottom: 4px;">
-                      ONGC NAVRATRI 2026 &bull; OFFICIAL ENTRY PASS
-                    </div>
-                    <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.15); border: 1px solid ${dayTheme.secondaryColor}; border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 700; color: #FFF; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
-                      DAY ${dayTheme.dayNumber} &bull; ${dayTheme.themeTitle}
+                    <div style="display: inline-block; background-color: ${dayTheme.primaryColor}; border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 800; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+                      NIGHT ${presentation.nightNumber} &bull; ${presentation.themeTitle}
                     </div>
 
                     <!-- ATTENDEE NAME -->
-                    <div style="font-size: 22px; font-weight: 800; color: #FFFFFF; margin: 4px 0 2px 0;">
-                      ${this.escapeHtml(data.attendeeName)}
+                    <div style="font-size: 22px; font-weight: 900; color: ${dayTheme.primaryColor}; margin: 4px 0 2px 0;">
+                      ${this.escapeHtml(presentation.attendeeName)}
                     </div>
-                    <div style="font-size: 12px; font-weight: 700; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">
-                      ${badgeText}
+                    <div style="font-size: 11px; font-weight: 800; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">
+                      PASS HOLDER: ${presentation.passHolderLabel.toUpperCase()}
                     </div>
-                    ${!isPrimary ? `<div style="font-size: 12px; color: #F5E6B3; margin-bottom: 4px;">Employee: ${this.escapeHtml(data.employeeName)}${data.cpf ? ` (CPF: ${this.escapeHtml(data.cpf)})` : ''}</div>` : ''}
+
+                    <!-- ATTENDEE / PRIMARY EMPLOYEE METADATA -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FAF8F5; border-radius: 10px; border: 1px solid #EADDCF; margin-bottom: 14px; text-align: left;">
+                      <tr>
+                        <td style="padding: 10px 14px; font-size: 11px; line-height: 1.6; color: #4A3B32;">
+                          ${presentation.isFamily ? `
+                            <div><strong>Primary Employee:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.primaryEmployeeName)}</span></div>
+                            <div><strong>Employee CPF:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.employeeCpf)}</span></div>
+                          ` : `
+                            <div><strong>Employee CPF:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.employeeCpf)}</span></div>
+                            <div><strong>Department:</strong> <span style="color: #1A1A1A;">${this.escapeHtml(presentation.department)}</span></div>
+                          `}
+                          <div><strong>Ticket Number:</strong> <span style="font-family: monospace; font-weight: 700; color: #1A1A1A;">${this.escapeHtml(presentation.ticketNumber)}</span></div>
+                          <div><strong>Authorized Date:</strong> <span style="font-weight: 800; color: ${dayTheme.primaryColor};">${presentation.eventDateFormatted}</span></div>
+                          <div><strong>Venue:</strong> ${presentation.venue.name}</div>
+                          <div><strong>Entry Timing:</strong> ${presentation.entryTiming}</div>
+                        </td>
+                      </tr>
+                    </table>
 
                     <!-- QR CODE CONTAINER -->
-                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="background-color: #FFFFFF; border-radius: 14px; margin: 14px auto; border: 2px solid ${dayTheme.secondaryColor};">
+                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="background-color: #FFFFFF; border-radius: 12px; margin: 10px auto; border: 2px solid ${dayTheme.secondaryColor};">
                       <tr>
-                        <td align="center" style="padding: 14px; background-color: #FFFFFF; border-radius: 12px;">
+                        <td align="center" style="padding: 12px; background-color: #FFFFFF; border-radius: 10px;">
                           ${base64Png ? `
-                            <img src="${qrImgSrc}" alt="Entry QR - ${data.ticketNumber}" width="200" height="200" style="display: block; width: 200px; height: 200px; margin: 0 auto; border: 0;" />
+                            <img src="${qrImgSrc}" alt="Entry QR - ${presentation.ticketNumber}" width="190" height="190" style="display: block; width: 190px; height: 190px; margin: 0 auto; border: 0;" />
                           ` : `
-                            <div style="width: 200px; height: 200px; line-height: 200px; text-align: center; color: #7A1930; font-size: 12px; font-weight: bold;">
+                            <div style="width: 190px; height: 190px; line-height: 190px; text-align: center; color: ${dayTheme.primaryColor}; font-size: 12px; font-weight: bold;">
                               QR code loading...
                             </div>
                           `}
-                          <div style="font-size: 11px; font-weight: 900; letter-spacing: 2px; color: ${dayTheme.primaryColor}; text-transform: uppercase; margin-top: 8px;">
-                            SCAN AT ENTRY
+                          <div style="display: inline-block; background-color: ${dayTheme.bgColor}; border: 1px solid ${dayTheme.primaryColor}; border-radius: 12px; padding: 4px 10px; margin-top: 8px; font-size: 10px; font-weight: 900; letter-spacing: 1px; color: ${dayTheme.primaryColor}; text-transform: uppercase;">
+                            VALID STRICTLY ON ${presentation.eventDateFormatted.toUpperCase()}
                           </div>
                         </td>
                       </tr>
                     </table>
 
-                    <!-- TICKET META -->
-                    <div style="font-size: 13px; font-family: 'Courier New', Courier, monospace; color: #FDE047; font-weight: bold; margin-bottom: 4px;">
-                      Ticket No: ${this.escapeHtml(data.ticketNumber)}
-                    </div>
-                    <div style="font-size: 13px; color: #FFFFFF; font-weight: 600; margin-bottom: 2px;">
-                      Valid Strictly On: ${dayTheme.fullDateLabel}
-                    </div>
-                    <div style="font-size: 11px; color: #F5E6B3;">
-                      Malaviya Cricket Ground ONGC, Ahmedabad &bull; Gates Open: From 7:00 PM
+                    <div style="font-size: 11px; color: #6E5C50; margin-top: 4px;">
+                      Single-entry credential valid strictly for ${presentation.eventDateFormatted}.
                     </div>
                   </td>
                 </tr>
@@ -1057,18 +1081,17 @@ Reworkzone.com (https://reworkzone.com)
 ONGC NAVRATRI 2026
 Your Daily Entry Pass
 
-Hello ${data.attendeeName},
+Hello ${presentation.attendeeName},
 
 Your entry pass for:
 ${dayTheme.fullDateLabel} (${dayTheme.dayOfWeek})
-DAY ${dayTheme.dayNumber} — ${dayTheme.themeTitle}
+NIGHT ${presentation.nightNumber} — ${presentation.themeTitle}
 is ready.
 
 PASS DETAILS:
-Attendee: ${data.attendeeName}
-Pass Type: ${badgeText}
-Relationship: ${data.relation}
-Ticket No: ${data.ticketNumber}
+Attendee: ${presentation.attendeeName}
+Pass Type: ${presentation.passTypeWithRelation}
+${presentation.isFamily ? `Primary Employee: ${presentation.primaryEmployeeName}\nEmployee CPF: ${presentation.employeeCpf}\nRelationship: ${presentation.relation}\n` : `CPF: ${presentation.employeeCpf}\n`}Ticket No: ${presentation.ticketNumber}
 Date: ${dayTheme.fullDateLabel}
 Venue: Malaviya Cricket Ground ONGC, Ahmedabad
 Gates Open: From 7:00 PM

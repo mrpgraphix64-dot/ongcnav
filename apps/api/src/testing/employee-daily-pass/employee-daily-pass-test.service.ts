@@ -16,6 +16,8 @@ import {
   UserRole,
   DailyPassStatus,
   DailyPassEmailStatus,
+  buildDailyEmployeePassPresentation,
+  DailyEmployeePassPresentation,
 } from '@ongc/shared-types';
 import { resolveBookingDays } from '../../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
@@ -23,6 +25,7 @@ import {
   GenerateTestPassDto,
   SendTestEmailDto,
   ScannerTestDto,
+  DispatchScheduleCheckDto,
 } from './employee-daily-pass-test.dto';
 
 @Injectable()
@@ -117,7 +120,11 @@ export class EmployeeDailyPassTestService {
       where: { id: attendeeIdBigInt },
       include: {
         employee: true,
-        familyMember: true,
+        familyMember: {
+          include: {
+            employee: true,
+          },
+        },
       },
     });
 
@@ -157,13 +164,31 @@ export class EmployeeDailyPassTestService {
       },
     });
 
+    const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
     const attendeeName =
-      attendee.familyMember?.name || attendee.employee?.name || attendee.name || 'Attendee';
+      attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
     const isFamily = !!attendee.familyMember;
+    const relation = attendee.familyMember?.relation || 'Self';
+    const employeeName = primaryEmployee?.name || attendeeName;
+    const employeeCpf = primaryEmployee?.cpf || 'N/A';
+    const department = primaryEmployee?.department || 'EWC Ahmedabad';
     const passType = isFamily
-      ? `Family Member Pass (${attendee.familyMember ? attendee.familyMember.relation : 'Family'})`
+      ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
       : 'ONGC Employee Pass';
     const dayTheme = getEventDayTheme(dto.eventDate);
+
+    const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
+      eventDate: pass.eventDate,
+      ticketNumber: attendee.ticketNumber,
+      qrToken: pass.qrToken,
+      status: pass.status,
+      attendeeName,
+      isFamily,
+      relation,
+      employeeName,
+      employeeCpf,
+      department,
+    });
 
     this.logger.log(
       `[TEST_LAB] Generated isolated test pass ${pass.id} for session ${sessionId} (${attendeeName}, ${dto.eventDate})`,
@@ -176,16 +201,17 @@ export class EmployeeDailyPassTestService {
       attendeeId: attendee.id.toString(),
       attendeeName,
       isFamily,
-      relation: attendee.familyMember?.relation || 'Self',
-      employeeName: attendee.employee?.name || attendeeName,
-      employeeCpf: attendee.employee?.cpf || 'N/A',
-      department: attendee.employee?.department || 'EWC Ahmedabad',
+      relation,
+      employeeName,
+      employeeCpf,
+      department,
       passType,
       ticketNumber: attendee.ticketNumber,
       eventDate: pass.eventDate,
       status: pass.status,
       emailStatus: pass.emailStatus,
       dayTheme,
+      presentation,
       createdAt: pass.createdAt,
     };
   }
@@ -200,7 +226,11 @@ export class EmployeeDailyPassTestService {
         attendee: {
           include: {
             employee: true,
-            familyMember: true,
+            familyMember: {
+              include: {
+                employee: true,
+              },
+            },
           },
         },
       },
@@ -211,10 +241,11 @@ export class EmployeeDailyPassTestService {
     }
 
     const attendee = pass.attendee;
+    const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
     const attendeeName =
-      attendee.familyMember?.name || attendee.employee?.name || attendee.name || 'Attendee';
+      attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
     const relation = attendee.familyMember ? attendee.familyMember.relation : 'Self';
-    const employeeName = attendee.employee?.name || attendeeName;
+    const employeeName = primaryEmployee?.name || attendeeName;
 
     return this.mailService.previewEmployeeDailyPassEmail({
       recipientEmail: 'preview@ongcnavratri.reworkzone.in',
@@ -224,8 +255,8 @@ export class EmployeeDailyPassTestService {
       eventDate: pass.eventDate,
       ticketNumber: attendee.ticketNumber,
       qrToken: pass.qrToken,
-      cpf: attendee.employee?.cpf,
-      department: attendee.employee?.department,
+      cpf: primaryEmployee?.cpf,
+      department: primaryEmployee?.department,
     });
   }
 
@@ -249,7 +280,11 @@ export class EmployeeDailyPassTestService {
         attendee: {
           include: {
             employee: true,
-            familyMember: true,
+            familyMember: {
+              include: {
+                employee: true,
+              },
+            },
           },
         },
       },
@@ -264,10 +299,11 @@ export class EmployeeDailyPassTestService {
     }
 
     const attendee = pass.attendee;
+    const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
     const attendeeName =
-      attendee.familyMember?.name || attendee.employee?.name || attendee.name || 'Attendee';
+      attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
     const relation = attendee.familyMember ? attendee.familyMember.relation : 'Self';
-    const employeeName = attendee.employee?.name || attendeeName;
+    const employeeName = primaryEmployee?.name || attendeeName;
     const dayTheme = getEventDayTheme(pass.eventDate);
 
     // Generate exact PDF ticket for attachment using same qrToken
@@ -288,8 +324,8 @@ export class EmployeeDailyPassTestService {
       eventDate: pass.eventDate,
       ticketNumber: attendee.ticketNumber,
       qrToken: pass.qrToken,
-      cpf: attendee.employee?.cpf,
-      department: attendee.employee?.department,
+      cpf: primaryEmployee?.cpf,
+      department: primaryEmployee?.department,
       pdfBuffer,
       subjectOverride: testSubject,
     });
@@ -558,7 +594,11 @@ export class EmployeeDailyPassTestService {
         attendee: {
           include: {
             employee: true,
-            familyMember: true,
+            familyMember: {
+              include: {
+                employee: true,
+              },
+            },
           },
         },
       },
@@ -566,13 +606,31 @@ export class EmployeeDailyPassTestService {
 
     return passes.map((p) => {
       const attendee = p.attendee;
+      const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
       const attendeeName =
-        attendee.familyMember?.name || attendee.employee?.name || attendee.name || 'Attendee';
+        attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
       const isFamily = !!attendee.familyMember;
+      const relation = attendee.familyMember ? attendee.familyMember.relation : 'Self';
+      const employeeName = primaryEmployee?.name || attendeeName;
+      const employeeCpf = primaryEmployee?.cpf || 'N/A';
+      const department = primaryEmployee?.department || 'EWC Ahmedabad';
       const passType = isFamily
-        ? `Family Member Pass (${attendee.familyMember ? attendee.familyMember.relation : 'Family'})`
+        ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
         : 'ONGC Employee Pass';
       const dayTheme = getEventDayTheme(p.eventDate);
+
+      const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
+        eventDate: p.eventDate,
+        ticketNumber: attendee.ticketNumber,
+        qrToken: p.qrToken,
+        status: p.status,
+        attendeeName,
+        isFamily,
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
+      });
 
       return {
         id: p.id.toString(),
@@ -580,9 +638,10 @@ export class EmployeeDailyPassTestService {
         qrToken: p.qrToken,
         attendeeName,
         isFamily,
-        relation: attendee.familyMember?.relation || 'Self',
-        employeeName: attendee.employee?.name || attendeeName,
-        employeeCpf: attendee.employee?.cpf || 'N/A',
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
         passType,
         ticketNumber: attendee.ticketNumber,
         eventDate: p.eventDate,
@@ -590,8 +649,238 @@ export class EmployeeDailyPassTestService {
         emailStatus: p.emailStatus,
         checkedInAt: p.checkedInAt,
         dayTheme,
+        presentation,
         createdAt: p.createdAt,
       };
     });
+  }
+
+  /**
+   * Evaluates simulated clock against configured daily dispatch schedule.
+   * Super Admin only.
+   * If simulatedDateTime >= configuredDispatchTime:
+   *   Generates isolated test DailyEmployeePass (idempotently).
+   *   Optionally sends test email to safe recipient (idempotently).
+   */
+  async checkAndRunSimulatedDispatch(dto: DispatchScheduleCheckDto, adminUser: any) {
+    if (adminUser?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can run dispatch checks.');
+    }
+
+    if (!dto.simulatedDate || !isOfficialEventDate(dto.simulatedDate)) {
+      throw new BadRequestException(
+        `Invalid simulated date: "${dto.simulatedDate}". Allowed dates: ${OFFICIAL_EVENT_DATES.join(', ')}`,
+      );
+    }
+
+    const simulatedTime = (dto.simulatedTime || '18:00').trim();
+    const configuredDispatchTime = (dto.configuredDispatchTime || '18:00').trim();
+
+    // Parse HH:mm to minutes for comparison
+    const [simH, simM] = simulatedTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const [cfgH, cfgM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
+
+    const simTotalMinutes = simH * 60 + simM;
+    const cfgTotalMinutes = cfgH * 60 + cfgM;
+
+    const isDue = simTotalMinutes >= cfgTotalMinutes;
+
+    if (!isDue) {
+      return {
+        success: true,
+        isDue: false,
+        status: 'NOT_DUE',
+        simulatedDate: dto.simulatedDate,
+        simulatedTime,
+        configuredDispatchTime,
+        message: `NOT DUE: Configured dispatch time is ${configuredDispatchTime}, but simulated time is ${simulatedTime}. Delivery check does not trigger pass generation.`,
+      };
+    }
+
+    // It IS DUE!
+    let generatedPass: any = null;
+    let alreadyDispatched = false;
+    let emailStatus: string = 'PENDING';
+    let message = `DUE: Simulated time ${simulatedTime} has reached or exceeded configured dispatch time ${configuredDispatchTime}.`;
+
+    if (dto.attendeeId) {
+      const attendeeIdBigInt = BigInt(dto.attendeeId);
+      const attendee = await this.prisma.attendee.findUnique({
+        where: { id: attendeeIdBigInt },
+        include: {
+          employee: true,
+          familyMember: {
+            include: {
+              employee: true,
+            },
+          },
+        },
+      });
+
+      if (!attendee) {
+        throw new NotFoundException(`Attendee ${dto.attendeeId} not found`);
+      }
+
+      // Check if test pass already exists for this attendee and this eventDate
+      const existingPass = await this.prisma.dailyEmployeePass.findFirst({
+        where: {
+          attendeeId: attendee.id,
+          eventDate: dto.simulatedDate,
+          isTest: true,
+        },
+      });
+
+      const sessionId =
+        dto.testSessionId?.trim() ||
+        `EMP-SIM-${dto.simulatedDate.replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+      if (existingPass) {
+        // Idempotency: Do NOT recreate DailyEmployeePass record
+        alreadyDispatched = existingPass.emailStatus === DailyPassEmailStatus.SENT;
+        emailStatus = existingPass.emailStatus;
+
+        if (alreadyDispatched) {
+          message += ` Pass was already generated (${existingPass.qrToken.substring(0, 10)}...) and email was already sent. Idempotency preserved (0 duplicate passes created).`;
+        } else if (dto.testRecipientEmail) {
+          const emailRes = await this.sendTestEmail(
+            { token: existingPass.qrToken, recipientEmail: dto.testRecipientEmail },
+            adminUser,
+          );
+          emailStatus = emailRes.emailStatus;
+          message += ` Existing pass reused. Test email dispatched to ${dto.testRecipientEmail}.`;
+        } else {
+          message += ` Existing pass reused.`;
+        }
+
+        const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
+        const attendeeName =
+          attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
+        const isFamily = !!attendee.familyMember;
+        const relation = attendee.familyMember?.relation || 'Self';
+        const employeeName = primaryEmployee?.name || attendeeName;
+        const employeeCpf = primaryEmployee?.cpf || 'N/A';
+        const department = primaryEmployee?.department || 'EWC Ahmedabad';
+        const passType = isFamily
+          ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
+          : 'ONGC Employee Pass';
+        const dayTheme = getEventDayTheme(dto.simulatedDate);
+        const presentation = buildDailyEmployeePassPresentation({
+          eventDate: existingPass.eventDate,
+          ticketNumber: attendee.ticketNumber,
+          qrToken: existingPass.qrToken,
+          status: existingPass.status,
+          attendeeName,
+          isFamily,
+          relation,
+          employeeName,
+          employeeCpf,
+          department,
+        });
+
+        generatedPass = {
+          testPassId: existingPass.id.toString(),
+          testSessionId: existingPass.testSessionId || sessionId,
+          qrToken: existingPass.qrToken,
+          attendeeId: attendee.id.toString(),
+          attendeeName,
+          isFamily,
+          relation,
+          employeeName,
+          employeeCpf,
+          department,
+          passType,
+          ticketNumber: attendee.ticketNumber,
+          eventDate: existingPass.eventDate,
+          status: existingPass.status,
+          emailStatus,
+          dayTheme,
+          presentation,
+          createdAt: existingPass.createdAt,
+        };
+      } else {
+        // Generate new isolated test pass
+        const qrToken = crypto.randomBytes(32).toString('hex');
+        const newPass = await this.prisma.dailyEmployeePass.create({
+          data: {
+            attendeeId: attendee.id,
+            eventDate: dto.simulatedDate,
+            qrToken,
+            status: DailyPassStatus.ACTIVE as any,
+            emailStatus: DailyPassEmailStatus.PENDING as any,
+            isTest: true,
+            testSessionId: sessionId,
+          },
+        });
+
+        const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
+        const attendeeName =
+          attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
+        const isFamily = !!attendee.familyMember;
+        const relation = attendee.familyMember?.relation || 'Self';
+        const employeeName = primaryEmployee?.name || attendeeName;
+        const employeeCpf = primaryEmployee?.cpf || 'N/A';
+        const department = primaryEmployee?.department || 'EWC Ahmedabad';
+        const passType = isFamily
+          ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
+          : 'ONGC Employee Pass';
+        const dayTheme = getEventDayTheme(dto.simulatedDate);
+        const presentation = buildDailyEmployeePassPresentation({
+          eventDate: newPass.eventDate,
+          ticketNumber: attendee.ticketNumber,
+          qrToken: newPass.qrToken,
+          status: newPass.status,
+          attendeeName,
+          isFamily,
+          relation,
+          employeeName,
+          employeeCpf,
+          department,
+        });
+
+        if (dto.testRecipientEmail) {
+          const emailRes = await this.sendTestEmail(
+            { token: newPass.qrToken, recipientEmail: dto.testRecipientEmail },
+            adminUser,
+          );
+          emailStatus = emailRes.emailStatus;
+          message += ` Generated test pass and dispatched test email to ${dto.testRecipientEmail}.`;
+        } else {
+          message += ` Generated date-specific pass for ${attendeeName}.`;
+        }
+
+        generatedPass = {
+          testPassId: newPass.id.toString(),
+          testSessionId: sessionId,
+          qrToken: newPass.qrToken,
+          attendeeId: attendee.id.toString(),
+          attendeeName,
+          isFamily,
+          relation,
+          employeeName,
+          employeeCpf,
+          department,
+          passType,
+          ticketNumber: attendee.ticketNumber,
+          eventDate: newPass.eventDate,
+          status: newPass.status,
+          emailStatus,
+          dayTheme,
+          presentation,
+          createdAt: newPass.createdAt,
+        };
+      }
+    }
+
+    return {
+      success: true,
+      isDue: true,
+      status: 'DUE',
+      simulatedDate: dto.simulatedDate,
+      simulatedTime,
+      configuredDispatchTime,
+      pass: generatedPass,
+      message,
+      alreadyDispatched,
+    };
   }
 }

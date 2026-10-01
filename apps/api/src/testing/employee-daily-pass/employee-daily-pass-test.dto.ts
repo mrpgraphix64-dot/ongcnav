@@ -65,3 +65,34 @@ export class CleanupAllDto {
   @IsBoolean()
   confirm: boolean;
 }
+
+export class DispatchScheduleCheckDto {
+  @ApiProperty({ description: 'Simulated event date (YYYY-MM-DD)', example: '2026-10-12' })
+  @IsString()
+  @IsNotEmpty()
+  simulatedDate: string;
+
+  @ApiProperty({ description: 'Simulated time of day (HH:mm in 24-hr format)', example: '18:00' })
+  @IsString()
+  @IsNotEmpty()
+  simulatedTime: string;
+
+  @ApiPropertyOptional({ description: 'Attendee ID to run simulated dispatch for' })
+  @IsOptional()
+  attendeeId?: string | number;
+
+  @ApiPropertyOptional({ description: 'Configured dispatch time for this date (HH:mm)', example: '18:00' })
+  @IsOptional()
+  @IsString()
+  configuredDispatchTime?: string;
+
+  @ApiPropertyOptional({ description: 'Safe test email recipient', example: 'test@example.com' })
+  @IsOptional()
+  @IsString()
+  testRecipientEmail?: string;
+
+  @ApiPropertyOptional({ description: 'Test session ID' })
+  @IsOptional()
+  @IsString()
+  testSessionId?: string;
+}

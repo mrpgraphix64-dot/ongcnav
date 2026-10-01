@@ -1,6 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { getEventDayTheme, EventDayTheme } from '@ongc/shared-types';
+import {
+  getEventDayTheme,
+  EventDayTheme,
+  buildDailyEmployeePassPresentation,
+  DailyEmployeePassPresentation,
+} from '@ongc/shared-types';
 import * as QRCode from 'qrcode';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const PDFDocument = require('pdfkit');
@@ -20,14 +25,18 @@ export class DailyPassPdfService {
 
     const cleanToken = qrToken.trim();
 
-    // 1. Look up the DailyEmployeePass by qrToken
+    // 1. Look up the DailyEmployeePass by qrToken with full relations
     const pass = await this.prisma.dailyEmployeePass.findUnique({
       where: { qrToken: cleanToken },
       include: {
         attendee: {
           include: {
             employee: true,
-            familyMember: true,
+            familyMember: {
+              include: {
+                employee: true,
+              },
+            },
           },
         },
       },
@@ -38,18 +47,30 @@ export class DailyPassPdfService {
     }
 
     const attendee = pass.attendee;
-    const employee = attendee.employee;
     const familyMember = attendee.familyMember;
+    const primaryEmployee = familyMember?.employee || attendee.employee;
 
-    const attendeeName = familyMember ? familyMember.name : (employee?.name || attendee.name || 'Attendee');
+    const attendeeName = familyMember ? familyMember.name : (primaryEmployee?.name || attendee.name || 'Attendee');
     const isFamily = !!familyMember;
     const relation = familyMember ? familyMember.relation : 'Self';
-    const employeeName = employee?.name || attendeeName;
-    const employeeCpf = employee?.cpf || 'N/A';
-    const department = employee?.department || 'EWC Ahmedabad';
-    const passType = isFamily ? `FAMILY MEMBER PASS (${relation})` : 'ONGC EMPLOYEE PASS';
+    const employeeName = primaryEmployee?.name || attendeeName;
+    const employeeCpf = primaryEmployee?.cpf || 'N/A';
+    const department = primaryEmployee?.department || 'EWC Ahmedabad';
     const ticketNumber = attendee.ticketNumber || `TK-${cleanToken.substring(0, 10).toUpperCase()}`;
-    const dayTheme: EventDayTheme = getEventDayTheme(pass.eventDate);
+
+    const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
+      eventDate: pass.eventDate,
+      ticketNumber,
+      qrToken: pass.qrToken,
+      status: pass.status,
+      attendeeName,
+      isFamily,
+      relation,
+      employeeName,
+      employeeCpf,
+      department,
+    });
+    const dayTheme: EventDayTheme = presentation.theme;
 
     // 2. Generate clean QR code PNG buffer from the EXACT existing qrToken
     const qrBuffer = await QRCode.toBuffer(pass.qrToken, {
@@ -69,9 +90,9 @@ export class DailyPassPdfService {
           size: 'A4',
           margin: 0,
           info: {
-            Title: `ONGC Navratri 2026 - Day ${dayTheme.dayNumber} Pass (${dayTheme.themeTitle})`,
+            Title: `ONGC Navratri 2026 - Night ${presentation.nightNumber} Pass (${presentation.themeTitle})`,
             Author: 'ONGC Navratri Festival & Digant Art',
-            Subject: `Official Entry Pass for ${attendeeName} - ${dayTheme.fullDateLabel}`,
+            Subject: `Official Entry Pass for ${presentation.attendeeName} - ${presentation.eventDateFormatted}`,
             Keywords: 'ONGC, Navratri, Garba, Employee Pass, Entry Ticket',
           },
         });
@@ -94,7 +115,7 @@ export class DailyPassPdfService {
         const cardW = pageWidth - 60;
         const cardH = pageHeight - 60;
 
-        // Card Base
+        // Card Base: Pure white body, no dark gradient block
         doc.roundedRect(cardX, cardY, cardW, cardH, 16).fill('#FFFFFF');
 
         // Outer Accent Border in Day Theme Secondary (Antique Gold)
@@ -162,16 +183,16 @@ export class DailyPassPdfService {
         const themeTextW = cardW - 175;
 
         doc.fillColor(dayTheme.primaryColor)
-          .fontSize(10)
+          .fontSize(11)
           .font('Helvetica-Bold')
-          .text(`DAY ${dayTheme.dayNumber} OF 9  •  ${dayTheme.dayOfWeek.toUpperCase()}`, themeTextX, bannerY + 18, {
+          .text(`NIGHT ${presentation.nightNumber} OF 9  •  ${dayTheme.dayOfWeek.toUpperCase()}`, themeTextX, bannerY + 18, {
             characterSpacing: 1,
           });
 
         doc.fillColor(dayTheme.primaryColor)
           .fontSize(22)
           .font('Helvetica-Bold')
-          .text(dayTheme.themeTitle, themeTextX, bannerY + 34, {
+          .text(presentation.themeTitle, themeTextX, bannerY + 34, {
             width: themeTextW,
             characterSpacing: 1,
           });
@@ -179,31 +200,31 @@ export class DailyPassPdfService {
         doc.fillColor('#5A4A42')
           .fontSize(10)
           .font('Helvetica')
-          .text(`Visual Motif: ${dayTheme.motifName}`, themeTextX, bannerY + 64);
+          .text(`Visual Motif: ${presentation.motifName}`, themeTextX, bannerY + 64);
 
-        doc.fillColor('#7A1930')
-          .fontSize(10)
+        doc.fillColor(dayTheme.primaryColor)
+          .fontSize(10.5)
           .font('Helvetica-Bold')
-          .text(`Valid strictly on: ${dayTheme.fullDateLabel}`, themeTextX, bannerY + 82);
+          .text(`VALID STRICTLY ON: ${presentation.eventDateFormatted.toUpperCase()}`, themeTextX, bannerY + 82);
 
         // ==================== ATTENDEE DETAILS CARD ====================
         const detailsY = bannerY + bannerH + 16;
-        const detailsH = 115;
+        const detailsH = 120;
 
         doc.roundedRect(cardX + 18, detailsY, cardW - 36, detailsH, 10).fill('#FBF9F6');
         doc.roundedRect(cardX + 18, detailsY, cardW - 36, detailsH, 10).lineWidth(1).stroke('#E5DDD3');
 
-        // Attendee Name
-        doc.fillColor('#1A1A1A')
+        // Attendee Name in primary color
+        doc.fillColor(dayTheme.primaryColor)
           .fontSize(18)
           .font('Helvetica-Bold')
-          .text(attendeeName, cardX + 34, detailsY + 16, { width: cardW - 68 });
+          .text(presentation.attendeeName, cardX + 34, detailsY + 14, { width: cardW - 68 });
 
         // Pass Type Badge
-        doc.fillColor(dayTheme.primaryColor)
-          .fontSize(11)
+        doc.fillColor(dayTheme.secondaryColor)
+          .fontSize(10)
           .font('Helvetica-Bold')
-          .text(passType.toUpperCase(), cardX + 34, detailsY + 40, {
+          .text(`PASS HOLDER: ${presentation.passHolderLabel.toUpperCase()}`, cardX + 34, detailsY + 36, {
             characterSpacing: 0.5,
           });
 
@@ -211,21 +232,33 @@ export class DailyPassPdfService {
         const col1X = cardX + 34;
         const col2X = cardX + 280;
 
-        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Ticket Number:', col1X, detailsY + 62);
-        doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(ticketNumber, col1X, detailsY + 74);
+        if (presentation.isFamily) {
+          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Primary Employee:', col1X, detailsY + 54);
+          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.primaryEmployeeName, col1X, detailsY + 65);
 
-        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Employee Reference:', col1X, detailsY + 90);
-        doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica').text(`${employeeName} (CPF: ${employeeCpf})`, col1X, detailsY + 101);
+          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Employee CPF:', col1X, detailsY + 80);
+          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.employeeCpf, col1X, detailsY + 91);
+        } else {
+          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Employee CPF:', col1X, detailsY + 54);
+          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.employeeCpf, col1X, detailsY + 65);
 
-        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Authorized Event Date:', col2X, detailsY + 62);
-        doc.fillColor(dayTheme.primaryColor).fontSize(10).font('Helvetica-Bold').text(dayTheme.fullDateLabel, col2X, detailsY + 74);
+          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Department / Unit:', col1X, detailsY + 80);
+          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica').text(presentation.department, col1X, detailsY + 91);
+        }
 
-        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Department / Unit:', col2X, detailsY + 90);
-        doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica').text(department, col2X, detailsY + 101);
+        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Ticket Number:', col2X, detailsY + 54);
+        doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.ticketNumber, col2X, detailsY + 65);
+
+        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Event Date:', col2X, detailsY + 80);
+        doc.fillColor(dayTheme.primaryColor).fontSize(10).font('Helvetica-Bold').text(presentation.eventDateFormatted, col2X, detailsY + 91);
+
+        // Bottom sub-row
+        doc.fillColor('#66584F').fontSize(8.5).font('Helvetica')
+          .text(`Venue: ${presentation.venue.name}  •  Entry Timing: ${presentation.entryTiming}`, col1X, detailsY + 106, { width: cardW - 68 });
 
         // ==================== CENTERED QR CODE AREA ====================
         const qrContainerY = detailsY + detailsH + 16;
-        const qrContainerH = 240;
+        const qrContainerH = 235;
 
         // Clean White Container for QR
         doc.roundedRect(cardX + 18, qrContainerY, cardW - 36, qrContainerH, 12).fill('#FFFFFF');

@@ -23,10 +23,22 @@ import {
   Send,
   RotateCcw,
   Sparkles,
+  Printer,
+  Play,
+  Zap,
+  Check,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser } from '@/lib/auth-session';
-import { OFFICIAL_EVENT_DATES, EVENT_DAY_THEMES, getEventDayTheme } from '@/types/shared-types';
+import {
+  OFFICIAL_EVENT_DATES,
+  EVENT_DAY_THEMES,
+  getEventDayTheme,
+  DEFAULT_DISPATCH_SCHEDULE,
+  buildDailyEmployeePassPresentation,
+  DailyEmployeePassPresentation,
+} from '@/types/shared-types';
+import DailyEmployeeTicketCard from '@/components/pass/DailyEmployeeTicketCard';
 
 interface EmployeeOption {
   id: string;
@@ -67,6 +79,7 @@ interface TestPassData {
   status: string;
   emailStatus: string;
   dayTheme: any;
+  presentation?: DailyEmployeePassPresentation;
   createdAt: string;
 }
 
@@ -82,6 +95,18 @@ export default function EmployeeDailyPassTestLabPage() {
   const [selectedAttendeeId, setSelectedAttendeeId] = useState<string>('');
   const [selectedAttendeeName, setSelectedAttendeeName] = useState<string>('');
   const [selectedEventDate, setSelectedEventDate] = useState<string>(OFFICIAL_EVENT_DATES[0]);
+
+  // Test Clock Simulator State
+  const [testClockMode, setTestClockMode] = useState<'REAL_TIME' | 'SIMULATED_TIME'>('REAL_TIME');
+  const [simulatedDate, setSimulatedDate] = useState<string>(OFFICIAL_EVENT_DATES[0]);
+  const [simulatedTime, setSimulatedTime] = useState<string>('18:00');
+  const [appliedSimulation, setAppliedSimulation] = useState<{ date: string; time: string } | null>(null);
+  const [realClock, setRealClock] = useState<Date>(new Date());
+
+  // Daily Dispatch Schedule State
+  const [dispatchSchedule, setDispatchSchedule] = useState<Record<string, string>>(DEFAULT_DISPATCH_SCHEDULE);
+  const [checkingDispatch, setCheckingDispatch] = useState(false);
+  const [dispatchCheckResult, setDispatchCheckResult] = useState<any | null>(null);
 
   // Pass Generation State
   const [generating, setGenerating] = useState(false);
@@ -117,7 +142,7 @@ export default function EmployeeDailyPassTestLabPage() {
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  // 1. Super Admin Authorization Guard
+  // 1. Super Admin Authorization Guard & Initial Clock ticker
   useEffect(() => {
     const user = getStoredAuthUser();
     setCurrentUser(user);
@@ -126,6 +151,12 @@ export default function EmployeeDailyPassTestLabPage() {
     if (user?.role === 'SUPER_ADMIN') {
       loadInitialEmployees();
     }
+
+    const interval = setInterval(() => {
+      setRealClock(new Date());
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   async function loadInitialEmployees() {
@@ -179,7 +210,85 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
-  // 2. Generate Test Daily Pass
+  // 2. Test Clock Controllers
+  function handleApplySimulation() {
+    setTestClockMode('SIMULATED_TIME');
+    setAppliedSimulation({ date: simulatedDate, time: simulatedTime });
+    setSelectedEventDate(simulatedDate);
+    setAlert({
+      type: 'success',
+      message: `Simulated Clock Applied: ${simulatedDate} at ${simulatedTime} IST. Real server time remains untouched.`,
+    });
+  }
+
+  function handleResetRealTime() {
+    setTestClockMode('REAL_TIME');
+    setAppliedSimulation(null);
+    setAlert({
+      type: 'success',
+      message: 'Reset to Real System Clock. Simulation disabled.',
+    });
+  }
+
+  function handleQuickDateSelect(dateStr: string) {
+    setSimulatedDate(dateStr);
+    setSelectedEventDate(dateStr);
+    if (testClockMode === 'SIMULATED_TIME') {
+      setAppliedSimulation({ date: dateStr, time: simulatedTime });
+    }
+  }
+
+  // 3. Automated Dispatch Check Trigger
+  async function handleRunDispatchCheck() {
+    try {
+      setCheckingDispatch(true);
+      setDispatchCheckResult(null);
+
+      const targetDate = testClockMode === 'SIMULATED_TIME'
+        ? (appliedSimulation?.date || simulatedDate)
+        : simulatedDate;
+      const targetTime = testClockMode === 'SIMULATED_TIME'
+        ? (appliedSimulation?.time || simulatedTime)
+        : `${String(realClock.getHours()).padStart(2, '0')}:${String(realClock.getMinutes()).padStart(2, '0')}`;
+      const configuredTime = dispatchSchedule[targetDate] || '18:00';
+
+      const payload = {
+        simulatedDate: targetDate,
+        simulatedTime: targetTime,
+        configuredDispatchTime: configuredTime,
+        attendeeId: selectedAttendeeId || undefined,
+        testRecipientEmail: testEmailRecipient.trim() || undefined,
+        testSessionId: testSessionId.trim() || undefined,
+      };
+
+      const result = await fetchApi<any>(
+        '/admin/test-lab/employee-daily-pass/check-dispatch',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+      );
+
+      setDispatchCheckResult(result);
+
+      if (result.pass) {
+        setActiveTestPass(result.pass);
+        setTestSessionId(result.pass.testSessionId);
+        setEmailStatus(result.pass.emailStatus);
+      }
+
+      setAlert({
+        type: result.isDue ? 'success' : 'error',
+        message: result.message,
+      });
+    } catch (err: any) {
+      setAlert({ type: 'error', message: err.message || 'Dispatch check failed' });
+    } finally {
+      setCheckingDispatch(false);
+    }
+  }
+
+  // 4. Generate Test Daily Pass
   async function handleGeneratePass() {
     if (!selectedAttendeeId) {
       setAlert({ type: 'error', message: 'Please select an attendee (employee or family member)' });
@@ -220,7 +329,7 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
-  // 3. Email Preview
+  // 5. Email Preview
   async function handleOpenEmailPreview() {
     if (!activeTestPass) return;
     try {
@@ -239,7 +348,7 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
-  // 4. Send Test Email
+  // 6. Send Test Email
   async function handleSendTestEmail() {
     if (!activeTestPass) return;
     if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
@@ -285,7 +394,7 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
-  // 5. Scanner Validations
+  // 7. Scanner Validations
   async function handleScan(simulatedDate?: string) {
     if (!activeTestPass) return;
 
@@ -339,7 +448,7 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
-  // 6. Cleanup Methods
+  // 8. Cleanup Methods
   async function handleCleanupSession() {
     if (!testSessionId) {
       setAlert({ type: 'error', message: 'No active test session to cleanup' });
@@ -358,6 +467,7 @@ export default function EmployeeDailyPassTestLabPage() {
 
       setActiveTestPass(null);
       setScannerResult(null);
+      setDispatchCheckResult(null);
       setCleanupMessage(
         `Session ${res.sessionId} purged: ${res.deletedPassesCount} passes, ${res.deletedCheckinsCount} checkins, ${res.deletedLogsCount} scan logs removed.`,
       );
@@ -379,6 +489,7 @@ export default function EmployeeDailyPassTestLabPage() {
 
       setActiveTestPass(null);
       setScannerResult(null);
+      setDispatchCheckResult(null);
       setConfirmPurgeAll(false);
       setCleanupMessage(
         `All Test Lab Data Purged: ${res.deletedPassesCount} test passes, ${res.deletedCheckinsCount} test checkins, ${res.deletedLogsCount} test scan logs. Operational data remains intact.`,
@@ -423,6 +534,31 @@ export default function EmployeeDailyPassTestLabPage() {
 
   const selectedTheme = getEventDayTheme(selectedEventDate);
 
+  // Compute attendee details for live card presentation
+  const selectedFm = selectedEmployee?.familyMembers.find((f) => f.attendeeId === selectedAttendeeId);
+  const isSelectedFamily = Boolean(selectedFm);
+  const attendeeRelation = selectedFm ? selectedFm.relation : 'Self';
+  const attendeeDisplayName = selectedFm ? selectedFm.name : selectedEmployee?.name || 'Attendee';
+
+  const previewPresentation: DailyEmployeePassPresentation | null = activeTestPass?.presentation
+    ? activeTestPass.presentation
+    : selectedEmployee
+    ? buildDailyEmployeePassPresentation({
+        eventDate: selectedEventDate,
+        ticketNumber:
+          (selectedFm ? selectedFm.ticketNumber : selectedEmployee.ticketNumber) ||
+          `TK-${selectedEmployee.cpf}-PREVIEW`,
+        qrToken: activeTestPass?.qrToken || 'TEST-SAMPLE-TOKEN',
+        status: activeTestPass?.status || 'ACTIVE',
+        attendeeName: attendeeDisplayName,
+        isFamily: isSelectedFamily,
+        relation: attendeeRelation,
+        employeeName: selectedEmployee.name,
+        employeeCpf: selectedEmployee.cpf,
+        department: selectedEmployee.department,
+      })
+    : null;
+
   return (
     <div className="h-full min-h-0 flex-1 flex flex-col overflow-hidden space-y-3">
       {/* Top Banner & Header */}
@@ -439,7 +575,7 @@ export default function EmployeeDailyPassTestLabPage() {
             </span>
           </div>
           <p className="text-[11px] sm:text-xs text-ink-soft mt-0.5">
-            Test employee date-specific QR passes, ticket previews, PDFs, email delivery and scanner validation without affecting operational employee data.
+            Test date-specific employee QR passes, real-time ticket preview, 9-night themes, daily dispatch schedule simulator, and scanner turnstile validation without affecting production data.
           </p>
         </div>
 
@@ -512,12 +648,107 @@ export default function EmployeeDailyPassTestLabPage() {
         </div>
       )}
 
+      {/* ================= TEST CLOCK CONTROLLER BANNER ================= */}
+      <div className="bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 text-white rounded-2xl p-4 border border-gold/40 shadow-md shrink-0 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-stone-800 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-gold" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gold-light">
+              Super Admin Test Clock Simulator
+            </h2>
+            <span
+              className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider ${
+                testClockMode === 'SIMULATED_TIME'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
+                  : 'bg-stone-800 text-stone-300 border border-stone-700'
+              }`}
+            >
+              {testClockMode === 'SIMULATED_TIME' ? 'Simulated Time Active' : 'Real System Time Active'}
+            </span>
+          </div>
+
+          <div className="text-[11px] font-mono text-stone-300">
+            {testClockMode === 'SIMULATED_TIME' && appliedSimulation ? (
+              <span className="text-amber-300 font-bold">
+                SIMULATED: {getEventDayTheme(appliedSimulation.date).fullDateLabel} &bull; {appliedSimulation.time} IST
+              </span>
+            ) : (
+              <span>
+                REAL TIME: {realClock.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} &bull; {realClock.toLocaleTimeString('en-US', { hour12: false })} IST
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Date Pills & Simulator Inputs */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Quick 9-Day Buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-bold uppercase text-stone-400 mr-1">Quick Date:</span>
+            {OFFICIAL_EVENT_DATES.map((dateStr) => {
+              const th = getEventDayTheme(dateStr);
+              const isActive = (testClockMode === 'SIMULATED_TIME' && appliedSimulation?.date === dateStr) || simulatedDate === dateStr;
+
+              return (
+                <button
+                  key={dateStr}
+                  type="button"
+                  onClick={() => handleQuickDateSelect(dateStr)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all border ${
+                    isActive
+                      ? 'border-gold text-white shadow-xs'
+                      : 'border-stone-700 bg-stone-800/80 text-stone-400 hover:text-stone-200 hover:border-stone-600'
+                  }`}
+                  style={{
+                    backgroundColor: isActive ? th.primaryColor : undefined,
+                  }}
+                >
+                  Oct {th.dayLabel}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Time Picker & Action Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-stone-800 px-2 py-1 rounded-lg border border-stone-700">
+              <span className="text-[10px] text-stone-400 uppercase">Sim Time:</span>
+              <input
+                type="time"
+                value={simulatedTime}
+                onChange={(e) => setSimulatedTime(e.target.value)}
+                className="bg-transparent text-xs font-mono font-bold text-white focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleApplySimulation}
+              className="px-3 py-1 bg-gold text-maroon-deep text-xs font-bold rounded-lg hover:bg-gold-light transition-all flex items-center gap-1"
+            >
+              <Zap className="w-3 h-3" />
+              <span>Apply Simulation</span>
+            </button>
+
+            {testClockMode === 'SIMULATED_TIME' && (
+              <button
+                type="button"
+                onClick={handleResetRealTime}
+                className="px-2.5 py-1 bg-stone-800 text-stone-300 hover:text-white border border-stone-700 text-xs font-medium rounded-lg transition-all"
+              >
+                Reset Real Time
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Scrollable Main Content Container */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-4">
         {/* Grid: Left Column Controls, Right Column Live Pass & Scanner */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* ================= LEFT COLUMN: STEP 1, STEP 2, STEP 3 ================= */}
-          <div className="lg:col-span-5 space-y-4">
+          {/* ================= LEFT COLUMN: STEPS 1-3 & DISPATCH TRIGGER ================= */}
+          <div className="lg:col-span-6 space-y-4">
             {/* STEP 1: SELECT EMPLOYEE */}
             <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
@@ -664,13 +895,13 @@ export default function EmployeeDailyPassTestLabPage() {
               )}
             </div>
 
-            {/* STEP 2: SELECT EVENT DATE */}
+            {/* STEP 2: SELECT EVENT DATE (9-DAY COLOR IDENTITY) */}
             <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-2.5">
               <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
                   2
                 </span>
-                Step 2: Select Event Date to Test
+                Step 2: Select Event Date (9-Night Visual System)
               </span>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-0.5">
@@ -682,7 +913,10 @@ export default function EmployeeDailyPassTestLabPage() {
                     <button
                       key={dateStr}
                       type="button"
-                      onClick={() => setSelectedEventDate(dateStr)}
+                      onClick={() => {
+                        setSelectedEventDate(dateStr);
+                        setSimulatedDate(dateStr);
+                      }}
                       className={`p-1.5 sm:p-2 rounded-xl border text-left transition-all flex items-center gap-2 ${
                         isSelected
                           ? 'border-2 shadow-xs'
@@ -716,380 +950,414 @@ export default function EmployeeDailyPassTestLabPage() {
               </div>
             </div>
 
-            {/* STEP 3: GENERATE TEST PASS */}
+            {/* STEP 3: DISPATCH SCHEDULE & AUTOMATIC TRIGGER SIMULATION */}
             <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
-                  3
+              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
+                    3
+                  </span>
+                  Step 3: Daily Dispatch Schedule &amp; Automatic Trigger
                 </span>
-                Step 3: Generate Test Daily Pass
-              </span>
-
-              <div className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-xs space-y-0.5">
-                <p className="text-stone-700">
-                  Attendee: <strong className="text-ink">{selectedAttendeeName || 'None'}</strong>
-                </p>
-                <p className="text-stone-700">
-                  Target Date: <strong style={{ color: selectedTheme.primaryColor }}>{selectedTheme.fullDateLabel}</strong>
-                </p>
-                <p className="text-[10px] text-stone-500 pt-0.5">
-                  Creates an isolated test <code className="font-mono text-[9px] bg-stone-200 px-1 rounded">DailyEmployeePass</code> record (marked <code className="font-mono text-[9px] bg-amber-100 text-amber-800 px-1 rounded">isTest: true</code>).
-                </p>
+                <span className="text-[10px] text-stone-500 font-mono">
+                  Target: {selectedEventDate}
+                </span>
               </div>
 
-              <button
-                onClick={handleGeneratePass}
-                disabled={generating || !selectedAttendeeId}
-                className="w-full py-2.5 px-4 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
-              >
-                {generating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Generating Secure Test Pass...</span>
-                  </>
-                ) : (
-                  <>
-                    <QrCode className="w-4 h-4" />
-                    <span>Generate Test Pass</span>
-                  </>
-                )}
-              </button>
-            </div>
-        </div>
+              <p className="text-[11px] text-stone-500 leading-relaxed">
+                Configure dispatch times for each Navratri night. When <strong>Simulated Time &ge; Configured Dispatch Time</strong>, the automatic check triggers date-specific pass generation with guaranteed idempotency.
+              </p>
 
-        {/* ================= RIGHT COLUMN: STEP 4, 5, 6, CLEANUP ================= */}
-        <div className="lg:col-span-7 space-y-4">
-          {activeTestPass ? (
-            <>
-              {/* STEP 4: TICKET ACTIONS & PREVIEWS */}
-              <div
-                className="bg-white rounded-2xl p-4 border-2 shadow-xs space-y-3"
-                style={{ borderColor: activeTestPass.dayTheme?.secondaryColor || '#C59B27' }}
-              >
-                <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-                  <div>
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                      Active Test Pass Session
-                    </span>
-                    <h2 className="text-sm sm:text-base font-bold font-cinzel text-ink">
-                      {activeTestPass.attendeeName} &bull; {activeTestPass.dayTheme?.themeTitle}
-                    </h2>
-                  </div>
-                  <span className="text-[10px] font-mono bg-stone-100 px-2 py-0.5 rounded text-stone-700">
-                    {activeTestPass.testSessionId}
-                  </span>
-                </div>
+              {/* Schedule Table */}
+              <div className="grid grid-cols-3 sm:grid-cols-3 gap-1.5 text-xs bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+                {OFFICIAL_EVENT_DATES.map((dateStr) => {
+                  const th = getEventDayTheme(dateStr);
+                  const isTarget = dateStr === (appliedSimulation?.date || selectedEventDate);
 
-                {/* Pass Metadata Badges */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
-                  <div className="p-2 bg-stone-50 rounded-lg">
-                    <span className="text-[9px] text-stone-500 uppercase block">Ticket No</span>
-                    <span className="font-mono font-bold text-stone-800 truncate block text-[11px]">
-                      {activeTestPass.ticketNumber}
-                    </span>
-                  </div>
-                  <div className="p-2 bg-stone-50 rounded-lg">
-                    <span className="text-[9px] text-stone-500 uppercase block">Authorized Date</span>
-                    <span className="font-semibold text-stone-800 truncate block text-[11px]">
-                      {activeTestPass.dayTheme?.dayLabel} {activeTestPass.dayTheme?.monthLabel}
-                    </span>
-                  </div>
-                  <div className="p-2 bg-stone-50 rounded-lg">
-                    <span className="text-[9px] text-stone-500 uppercase block">Pass Status</span>
-                    <span
-                      className={`font-bold uppercase text-[11px] ${
-                        activeTestPass.status === 'ACTIVE'
-                          ? 'text-emerald-700'
-                          : activeTestPass.status === 'USED'
-                          ? 'text-blue-700'
-                          : 'text-red-700'
+                  return (
+                    <div
+                      key={dateStr}
+                      className={`p-1.5 rounded-lg border flex flex-col justify-between ${
+                        isTarget ? 'bg-white border-gold shadow-xs' : 'bg-stone-100/60 border-stone-200'
                       }`}
                     >
-                      {activeTestPass.status}
-                    </span>
-                  </div>
-                  <div className="p-2 bg-stone-50 rounded-lg">
-                    <span className="text-[9px] text-stone-500 uppercase block">Email Status</span>
-                    <span className="font-bold uppercase text-[11px] text-stone-700">
-                      {emailStatus}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Action Buttons: View Ticket, Download PDF, Preview Email */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                  <Link
-                    href={`/employee/daily-pass/${activeTestPass.qrToken}`}
-                    target="_blank"
-                    className="py-2 px-3 rounded-xl bg-white border border-stone-300 text-stone-800 text-xs font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1.5 shadow-xs"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>View Ticket</span>
-                  </Link>
-
-                  <a
-                    href={`${apiBaseUrl}/public/employee/daily-pass/${activeTestPass.qrToken}/pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="py-2 px-3 rounded-xl bg-white border border-stone-300 text-stone-800 text-xs font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1.5 shadow-xs"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download PDF</span>
-                  </a>
-
-                  <button
-                    onClick={handleOpenEmailPreview}
-                    type="button"
-                    className="py-2 px-3 rounded-xl bg-maroon-soft text-maroon-dark border border-maroon/20 text-xs font-bold hover:bg-maroon-soft/80 transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Preview Email</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* STEP 5: TEST EMAIL DISPATCH */}
-              <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-maroon" />
-                    Step 5: Test Email Dispatch
-                  </span>
-                  <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-full">
-                    Isolated Test Recipient
-                  </span>
-                </div>
-
-                <p className="text-[11px] text-stone-500 leading-tight">
-                  Enter an address where you want to receive the test pass. The email will <strong>never</strong> be sent to the employee&apos;s real address.
-                </p>
-
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="email"
-                    placeholder="Enter test recipient (e.g. test@example.com)"
-                    value={testEmailRecipient}
-                    onChange={(e) => setTestEmailRecipient(e.target.value)}
-                    className="flex-1 p-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
-                  />
-                  <button
-                    onClick={handleSendTestEmail}
-                    disabled={sendingEmail || !testEmailRecipient}
-                    className="px-3.5 py-2 bg-maroon text-white text-xs font-bold rounded-xl hover:bg-maroon-dark transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
-                  >
-                    {sendingEmail ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>Sending...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Send Test Email</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {emailMessage && (
-                  <div
-                    className={`p-2 rounded-xl text-xs flex items-center justify-between ${
-                      emailStatus === 'SENT'
-                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                        : 'bg-red-50 text-red-800 border border-red-200'
-                    }`}
-                  >
-                    <span>{emailMessage}</span>
-                    {emailStatus === 'FAILED' && (
-                      <button
-                        onClick={handleSendTestEmail}
-                        className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded hover:bg-red-700"
-                      >
-                        Retry
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* STEP 6: SCANNER TESTING SUITE */}
-              <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                    <ScanLine className="w-3.5 h-3.5 text-maroon" />
-                    Step 6: Scanner Turnstile Validation Suite
-                  </span>
-                  <span className="text-[10px] text-stone-500 font-mono">
-                    Token: {activeTestPass.qrToken.substring(0, 10)}...
-                  </span>
-                </div>
-
-                <p className="text-[11px] text-stone-500">
-                  Exercises real turnstile validation logic without affecting production attendance counts.
-                </p>
-
-                {/* 4 Test Buttons */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                  {/* VALID SCAN */}
-                  <button
-                    onClick={() => handleScan()}
-                    disabled={scanning}
-                    className="p-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-center transition-colors group"
-                  >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                    <div className="text-xs font-bold text-emerald-900">Valid Scan</div>
-                    <div className="text-[9px] text-emerald-700">Expects SUCCESS</div>
-                  </button>
-
-                  {/* DUPLICATE SCAN */}
-                  <button
-                    onClick={() => handleScan()}
-                    disabled={scanning}
-                    className="p-2.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-xl text-center transition-colors group"
-                  >
-                    <RotateCcw className="w-4 h-4 text-blue-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                    <div className="text-xs font-bold text-blue-900">Duplicate Scan</div>
-                    <div className="text-[9px] text-blue-700">ALREADY_CHECKED_IN</div>
-                  </button>
-
-                  {/* WRONG DATE SCAN */}
-                  <button
-                    onClick={() => handleScan(wrongDateTarget)}
-                    disabled={scanning}
-                    className="p-2.5 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-xl text-center transition-colors group"
-                  >
-                    <Calendar className="w-4 h-4 text-amber-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                    <div className="text-xs font-bold text-amber-900">Wrong Date</div>
-                    <div className="text-[9px] text-amber-700">NOT_BOOKED_TODAY</div>
-                  </button>
-
-                  {/* REVOKE / REVOKED SCAN */}
-                  {activeTestPass.status === 'REVOKED' ? (
-                    <button
-                      onClick={() => handleScan()}
-                      disabled={scanning}
-                      className="p-2.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-xl text-center transition-colors group"
-                    >
-                      <XCircle className="w-4 h-4 text-red-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                      <div className="text-xs font-bold text-red-900">Scan Revoked</div>
-                      <div className="text-[9px] text-red-700">ATTENDEE_INACTIVE</div>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleRevokePass}
-                      disabled={scanning}
-                      className="p-2.5 bg-stone-100 border border-stone-300 hover:bg-red-50 hover:border-red-200 rounded-xl text-center transition-colors group"
-                    >
-                      <XCircle className="w-4 h-4 text-stone-500 group-hover:text-red-600 mx-auto mb-1 group-hover:scale-110 transition-transform" />
-                      <div className="text-xs font-bold text-stone-800 group-hover:text-red-900">Revoke Pass</div>
-                      <div className="text-[9px] text-stone-500">Sets status REVOKED</div>
-                    </button>
-                  )}
-                </div>
-
-                {/* Wrong Date Selector for test customization */}
-                <div className="flex items-center gap-2 pt-0.5 text-xs">
-                  <span className="text-stone-500 text-[10px]">Simulated Wrong Date:</span>
-                  <select
-                    value={wrongDateTarget}
-                    onChange={(e) => setWrongDateTarget(e.target.value)}
-                    className="p-1 bg-stone-50 border border-stone-200 rounded-lg text-xs text-ink"
-                  >
-                    {OFFICIAL_EVENT_DATES.filter((d) => d !== activeTestPass.eventDate).map((d) => (
-                      <option key={d} value={d}>
-                        {d} ({getEventDayTheme(d).themeTitle})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Scanner Test Result Card */}
-                {scannerResult && (
-                  <div className="p-3 rounded-xl bg-stone-900 text-white text-xs space-y-1.5">
-                    <div className="flex items-center justify-between border-b border-stone-800 pb-1.5">
-                      <span className="text-[9px] font-bold text-stone-400 uppercase tracking-wider">
-                        Turnstile Scanner API Response
-                      </span>
-                      <span
-                        className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                          scannerResult.scannerResponse?.result === 'SUCCESS'
-                            ? 'bg-emerald-900 text-emerald-300'
-                            : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN'
-                            ? 'bg-blue-900 text-blue-300'
-                            : 'bg-red-900 text-red-300'
-                        }`}
-                      >
-                        {scannerResult.scannerResponse?.result || 'RESULT'}
-                      </span>
-                    </div>
-
-                    <div className="space-y-0.5 text-[10px]">
-                      <p>
-                        Status Code:{' '}
-                        <strong className="text-stone-300">
-                          {scannerResult.scannerResponse?.statusCode || 200}
-                        </strong>
-                      </p>
-                      <p>
-                        Message:{' '}
-                        <strong className="text-stone-200">
-                          {scannerResult.scannerResponse?.message || 'N/A'}
-                        </strong>
-                      </p>
-                      <p>
-                        Simulated Scan Date:{' '}
-                        <span className="text-amber-400 font-mono">
-                          {scannerResult.simulatedScanDate}
-                        </span>{' '}
-                        &bull; Pass Date:{' '}
-                        <span className="text-stone-400 font-mono">
-                          {scannerResult.passEventDate}
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-stone-800">
+                          Night {th.dayNumber} ({th.dayLabel} Oct)
                         </span>
-                      </p>
-                      <p className="text-[9px] text-stone-400 pt-0.5">
-                        Isolated Test Scan Log Recorded &bull; Operational Metrics Unchanged
-                      </p>
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: th.primaryColor }}
+                        />
+                      </div>
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className="text-[9px] text-stone-500">Dispatch:</span>
+                        <input
+                          type="time"
+                          value={dispatchSchedule[dateStr] || '18:00'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDispatchSchedule((prev) => ({ ...prev, [dateStr]: val }));
+                          }}
+                          className="text-[11px] font-mono font-bold bg-white border border-stone-200 rounded px-1 py-0.5 text-ink w-full focus:outline-none focus:border-maroon"
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
 
-              {/* CLEANUP THIS TEST SESSION */}
-              <div className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-200">
-                <div>
-                  <span className="text-xs font-bold text-stone-800 block">
-                    Cleanup Session {activeTestPass.testSessionId}
-                  </span>
-                  <span className="text-[10px] text-stone-500">
-                    Deletes only this session&apos;s test pass, simulated checkins, and scan logs.
-                  </span>
-                </div>
+              {/* Optional Test Recipient Email */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-stone-500 block">
+                  Safe Test Email Recipient (Optional)
+                </label>
+                <input
+                  type="email"
+                  placeholder="e.g. test@example.com (Never real employee)"
+                  value={testEmailRecipient}
+                  onChange={(e) => setTestEmailRecipient(e.target.value)}
+                  className="w-full p-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
+                />
+              </div>
+
+              {/* Action Buttons: Run Automatic Dispatch Check OR Manual Generate */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 <button
-                  onClick={handleCleanupSession}
-                  disabled={cleaningUp}
-                  className="px-3 py-1.5 bg-white border border-stone-300 text-stone-700 text-xs font-semibold rounded-xl hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors shadow-xs"
+                  type="button"
+                  onClick={handleRunDispatchCheck}
+                  disabled={checkingDispatch || !selectedAttendeeId}
+                  className="py-2.5 px-3 rounded-xl bg-gold text-maroon-deep text-xs font-bold hover:bg-gold-light transition-all flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
                 >
-                  {cleaningUp ? 'Cleaning...' : 'Cleanup This Test'}
+                  {checkingDispatch ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-maroon-deep border-t-transparent rounded-full animate-spin" />
+                      <span>Checking Schedule...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Run Automatic Dispatch Check</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleGeneratePass}
+                  disabled={generating || !selectedAttendeeId}
+                  className="py-2.5 px-3 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+                >
+                  {generating ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Generating Pass...</span>
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>Manual Generate Pass</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </>
-          ) : (
-            /* Empty State */
-            <div className="bg-white rounded-2xl p-8 border border-stone-200 shadow-xs text-center space-y-3">
-              <div className="w-12 h-12 bg-cream text-maroon rounded-full flex items-center justify-center mx-auto border border-gold/30">
-                <QrCode className="w-6 h-6" />
-              </div>
-              <h3 className="font-cinzel font-bold text-base text-ink">
-                No Active Test Pass Session
-              </h3>
-              <p className="text-xs text-stone-500 max-w-sm mx-auto">
-                Select an employee, pick one of the 9 official event dates, and click <strong>Generate Test Pass</strong> to begin testing.
-              </p>
+
+              {/* Dispatch Check Result Banner */}
+              {dispatchCheckResult && (
+                <div
+                  className={`p-3 rounded-xl border text-xs space-y-1 ${
+                    dispatchCheckResult.isDue
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-bold">
+                    <span>
+                      {dispatchCheckResult.isDue ? 'STATUS: DUE FOR DISPATCH' : 'STATUS: NOT DUE'}
+                    </span>
+                    <span className="font-mono text-[10px]">
+                      Sim: {dispatchCheckResult.simulatedTime} | Cfg: {dispatchCheckResult.configuredDispatchTime}
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">{dispatchCheckResult.message}</p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* ================= RIGHT COLUMN: LIVE TICKET PREVIEW, PASS ACTIONS, SCANNER ================= */}
+          <div className="lg:col-span-6 space-y-4">
+            {/* LIVE TICKET CARD PREVIEW */}
+            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                <div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-stone-400 block">
+                    {activeTestPass ? 'Active Issued Test Pass' : 'Live Ticket Preview (Pre-Generation)'}
+                  </span>
+                  <h3 className="text-xs sm:text-sm font-bold text-ink">
+                    {selectedTheme.fullDateLabel} &bull; Night {selectedTheme.dayNumber} ({selectedTheme.themeTitle})
+                  </h3>
+                </div>
+
+                {activeTestPass ? (
+                  <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    ISSUED TEST PASS
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full">
+                    DRAFT PREVIEW
+                  </span>
+                )}
+              </div>
+
+              {previewPresentation ? (
+                <div className="space-y-3">
+                  {/* The date-specific Daily Employee Ticket Card */}
+                  <DailyEmployeeTicketCard
+                    presentation={previewPresentation}
+                    qrSvg={null}
+                    showSecurityFooter={true}
+                  />
+
+                  {/* Actions when Active Test Pass Exists */}
+                  {activeTestPass ? (
+                    <div className="space-y-3 pt-1">
+                      {/* Ticket Action Buttons */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <Link
+                          href={`/employee/daily-pass/${activeTestPass.qrToken}`}
+                          target="_blank"
+                          className="py-2 px-2 rounded-xl bg-white border border-stone-300 text-stone-800 text-[11px] font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1 shadow-xs"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>View Pass</span>
+                        </Link>
+
+                        <a
+                          href={`${apiBaseUrl}/public/employee/daily-pass/${activeTestPass.qrToken}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="py-2 px-2 rounded-xl bg-white border border-stone-300 text-stone-800 text-[11px] font-bold hover:border-maroon hover:text-maroon transition-all flex items-center justify-center gap-1 shadow-xs"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>PDF Ticket</span>
+                        </a>
+
+                        <button
+                          onClick={handleOpenEmailPreview}
+                          type="button"
+                          className="py-2 px-2 rounded-xl bg-maroon-soft text-maroon-dark border border-maroon/20 text-[11px] font-bold hover:bg-maroon-soft/80 transition-all flex items-center justify-center gap-1"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Email HTML</span>
+                        </button>
+
+                        <button
+                          onClick={() => window.print()}
+                          type="button"
+                          className="py-2 px-2 rounded-xl bg-gold/20 text-maroon-dark border border-gold/40 text-[11px] font-bold hover:bg-gold/30 transition-all flex items-center justify-center gap-1"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print</span>
+                        </button>
+                      </div>
+
+                      {/* Send Test Email Card */}
+                      <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-ink flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-maroon" />
+                            Dispatch Isolated Test Email
+                          </span>
+                          <span className="text-[10px] font-bold font-mono bg-white px-2 py-0.5 rounded border border-stone-200">
+                            Status: {emailStatus}
+                          </span>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input
+                            type="email"
+                            placeholder="Enter test email address..."
+                            value={testEmailRecipient}
+                            onChange={(e) => setTestEmailRecipient(e.target.value)}
+                            className="flex-1 p-1.5 bg-white border border-stone-200 rounded-lg text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSendTestEmail}
+                            disabled={sendingEmail || !testEmailRecipient}
+                            className="px-3 py-1.5 bg-maroon text-white text-xs font-bold rounded-lg hover:bg-maroon-dark transition-all flex items-center gap-1 shrink-0 disabled:opacity-50"
+                          >
+                            {sendingEmail ? (
+                              <>
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                <span>Sending...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="w-3 h-3" />
+                                <span>Send</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        {emailMessage && (
+                          <div
+                            className={`p-1.5 rounded-lg text-[11px] ${
+                              emailStatus === 'SENT'
+                                ? 'bg-emerald-50 text-emerald-800'
+                                : 'bg-red-50 text-red-800'
+                            }`}
+                          >
+                            {emailMessage}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Turnstile Scanner Testing Suite */}
+                      <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-stone-200 pb-1.5">
+                          <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <ScanLine className="w-3.5 h-3.5 text-maroon" />
+                            Turnstile Scanner Validation Suite
+                          </span>
+                          <span className="text-[10px] font-mono text-stone-500">
+                            Token: {activeTestPass.qrToken.substring(0, 10)}...
+                          </span>
+                        </div>
+
+                        {/* Scanner Actions */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          {/* Valid Scan */}
+                          <button
+                            type="button"
+                            onClick={() => handleScan()}
+                            disabled={scanning}
+                            className="p-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-center transition-colors"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto mb-0.5" />
+                            <div className="text-[11px] font-bold text-emerald-900">Valid Scan</div>
+                            <div className="text-[9px] text-emerald-700">Expects SUCCESS</div>
+                          </button>
+
+                          {/* Duplicate Scan */}
+                          <button
+                            type="button"
+                            onClick={() => handleScan()}
+                            disabled={scanning}
+                            className="p-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg text-center transition-colors"
+                          >
+                            <RotateCcw className="w-4 h-4 text-blue-600 mx-auto mb-0.5" />
+                            <div className="text-[11px] font-bold text-blue-900">Duplicate Scan</div>
+                            <div className="text-[9px] text-blue-700">ALREADY_CHECKED_IN</div>
+                          </button>
+
+                          {/* Wrong Date */}
+                          <button
+                            type="button"
+                            onClick={() => handleScan(wrongDateTarget)}
+                            disabled={scanning}
+                            className="p-2 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg text-center transition-colors"
+                          >
+                            <Calendar className="w-4 h-4 text-amber-600 mx-auto mb-0.5" />
+                            <div className="text-[11px] font-bold text-amber-900">Wrong Date</div>
+                            <div className="text-[9px] text-amber-700">NOT_BOOKED_TODAY</div>
+                          </button>
+
+                          {/* Revoke Pass */}
+                          {activeTestPass.status === 'REVOKED' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleScan()}
+                              disabled={scanning}
+                              className="p-2 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-center transition-colors"
+                            >
+                              <XCircle className="w-4 h-4 text-red-600 mx-auto mb-0.5" />
+                              <div className="text-[11px] font-bold text-red-900">Scan Revoked</div>
+                              <div className="text-[9px] text-red-700">ATTENDEE_INACTIVE</div>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleRevokePass}
+                              disabled={scanning}
+                              className="p-2 bg-stone-100 border border-stone-300 hover:bg-red-50 hover:border-red-200 rounded-lg text-center transition-colors"
+                            >
+                              <XCircle className="w-4 h-4 text-stone-500 mx-auto mb-0.5" />
+                              <div className="text-[11px] font-bold text-stone-800">Revoke Pass</div>
+                              <div className="text-[9px] text-stone-500">Sets REVOKED</div>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Wrong Date Target Dropdown */}
+                        <div className="flex items-center gap-2 text-xs pt-1">
+                          <span className="text-[10px] text-stone-500">Wrong Date to Simulate:</span>
+                          <select
+                            value={wrongDateTarget}
+                            onChange={(e) => setWrongDateTarget(e.target.value)}
+                            className="p-1 bg-white border border-stone-200 rounded-lg text-xs text-ink"
+                          >
+                            {OFFICIAL_EVENT_DATES.filter((d) => d !== activeTestPass.eventDate).map((d) => (
+                              <option key={d} value={d}>
+                                {d} ({getEventDayTheme(d).themeTitle})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Scanner Response Output */}
+                        {scannerResult && (
+                          <div className="p-2.5 rounded-lg bg-stone-900 text-white text-xs space-y-1">
+                            <div className="flex items-center justify-between border-b border-stone-800 pb-1">
+                              <span className="text-[9px] font-bold text-stone-400 uppercase">Scanner Turnstile Result</span>
+                              <span
+                                className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                  scannerResult.scannerResponse?.result === 'SUCCESS'
+                                    ? 'bg-emerald-900 text-emerald-300'
+                                    : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN'
+                                    ? 'bg-blue-900 text-blue-300'
+                                    : 'bg-red-900 text-red-300'
+                                }`}
+                              >
+                                {scannerResult.scannerResponse?.result || 'RESULT'}
+                              </span>
+                            </div>
+                            <div className="space-y-0.5 text-[10px] text-stone-300">
+                              <p>Message: <strong className="text-white">{scannerResult.scannerResponse?.message || 'N/A'}</strong></p>
+                              <p>Scan Date: <span className="text-amber-400 font-mono">{scannerResult.simulatedScanDate}</span> &bull; Pass Date: <span className="text-stone-400 font-mono">{scannerResult.passEventDate}</span></p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Cleanup Session Button */}
+                      <div className="flex items-center justify-between p-2.5 bg-stone-50 rounded-xl border border-stone-200">
+                        <span className="text-xs text-stone-600">
+                          Session <strong>{activeTestPass.testSessionId}</strong>
+                        </span>
+                        <button
+                          onClick={handleCleanupSession}
+                          disabled={cleaningUp}
+                          className="px-2.5 py-1 bg-white border border-stone-300 text-stone-700 text-xs font-semibold rounded-lg hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors shadow-xs"
+                        >
+                          {cleaningUp ? 'Cleaning...' : 'Cleanup This Session'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="py-12 text-center space-y-2 text-stone-400">
+                  <User className="w-8 h-8 mx-auto text-stone-300" />
+                  <p className="text-xs">Select an employee from Step 1 to preview their date-specific ticket.</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
       {/* ================= EMAIL PREVIEW MODAL ================= */}
       {previewModalOpen && (

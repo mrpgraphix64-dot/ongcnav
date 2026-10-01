@@ -16,8 +16,14 @@ import {
   Ticket as TicketIcon,
   CheckCircle2,
 } from 'lucide-react';
+import {
+  PublicDailyPassResponseDto,
+  getEventDayTheme,
+  buildDailyEmployeePassPresentation,
+  DailyEmployeePassPresentation,
+} from '@/types/shared-types';
 import { fetchApi } from '@/lib/api';
-import { PublicDailyPassResponseDto, getEventDayTheme } from '@/types/shared-types';
+import DailyEmployeeTicketCard from '@/components/pass/DailyEmployeeTicketCard';
 
 export default function EmployeeDailyPassPage() {
   const params = useParams();
@@ -90,9 +96,23 @@ export default function EmployeeDailyPassPage() {
     );
   }
 
-  const theme = pass.dayTheme || getEventDayTheme(pass.eventDate);
+  const presentation: DailyEmployeePassPresentation =
+    pass.presentation ||
+    buildDailyEmployeePassPresentation({
+      eventDate: pass.eventDate,
+      ticketNumber: pass.ticketNumber,
+      qrToken: pass.token,
+      status: pass.status,
+      attendeeName: pass.attendeeName,
+      isFamily: pass.isFamily,
+      relation: pass.relation,
+      employeeName: pass.employeeName,
+      employeeCpf: pass.employeeCpf,
+      department: pass.department,
+    });
+
   const waShareText = encodeURIComponent(
-    `Official ONGC Navratri 2026 E-Pass\nDay ${theme.dayNumber}: ${theme.themeTitle} (${theme.fullDateLabel})\nAttendee: ${pass.attendeeName}\nTicket No: ${pass.ticketNumber}\nVenue: Malaviya Cricket Ground ONGC, Ahmedabad\nGates Open: 7:00 PM\n\nView Online: ${typeof window !== 'undefined' ? window.location.href : ''}`
+    `Official ONGC Navratri 2026 E-Pass\nNight ${presentation.nightNumber}: ${presentation.themeTitle} (${presentation.eventDateFormatted})\nAttendee: ${presentation.attendeeName}\nTicket No: ${presentation.ticketNumber}\nVenue: Malaviya Cricket Ground ONGC, Ahmedabad\nGates Open: 7:00 PM\n\nView Online: ${typeof window !== 'undefined' ? window.location.href : ''}`
   );
 
   return (
@@ -130,196 +150,11 @@ export default function EmployeeDailyPassPage() {
         </div>
       </div>
 
-      {/* Main Ticket Card Container */}
-      <div
-        className="bg-white rounded-3xl shadow-xl border-2 overflow-hidden print:shadow-none print:border print:rounded-none"
-        style={{ borderColor: theme.secondaryColor }}
-      >
-        {/* Top Header Banner with Theme Primary Color */}
-        <div
-          className="px-6 py-4 text-center text-white relative"
-          style={{ backgroundColor: theme.primaryColor }}
-        >
-          <p className="text-[10px] sm:text-xs font-semibold tracking-widest uppercase opacity-90">
-            Oil and Natural Gas Corporation Limited
-          </p>
-          <h1 className="font-cinzel text-xl sm:text-2xl font-bold tracking-wide mt-0.5">
-            ONGC NAVRATRI 2026
-          </h1>
-          <p
-            className="text-[11px] sm:text-xs font-bold tracking-wider uppercase mt-1"
-            style={{ color: theme.secondaryColor }}
-          >
-            Official Employee &amp; Family Entry Pass
-          </p>
-        </div>
-
-        {/* Hero Day & Theme Strip */}
-        <div
-          className="border-b px-6 py-4 flex items-center gap-4"
-          style={{
-            backgroundColor: theme.bgColor,
-            borderColor: `${theme.secondaryColor}40`,
-          }}
-        >
-          {/* Day Number Block */}
-          <div
-            className="flex flex-col items-center justify-center rounded-2xl px-3.5 py-2 shrink-0 border"
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderColor: theme.secondaryColor,
-              minWidth: '70px',
-            }}
-          >
-            <span
-              className="text-3xl sm:text-4xl font-black leading-none"
-              style={{ color: theme.primaryColor }}
-            >
-              {theme.dayLabel}
-            </span>
-            <span
-              className="text-[10px] font-bold uppercase tracking-wider mt-0.5"
-              style={{ color: theme.secondaryColor }}
-            >
-              {theme.monthLabel}
-            </span>
-          </div>
-
-          {/* Theme Information */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span
-                className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md tracking-wider text-white"
-                style={{ backgroundColor: theme.primaryColor }}
-              >
-                DAY {theme.dayNumber} OF 9
-              </span>
-              <span className="text-[11px] font-bold text-stone-600 uppercase tracking-wide">
-                {theme.dayOfWeek}
-              </span>
-            </div>
-            <h2
-              className="text-lg sm:text-xl font-bold font-cinzel leading-snug mt-1 truncate"
-              style={{ color: theme.primaryColor }}
-            >
-              {theme.themeTitle}
-            </h2>
-            <p className="text-xs text-stone-600 flex items-center gap-1.5 mt-0.5">
-              <span>Motif:</span>
-              <span className="font-semibold text-stone-800">{theme.motifName}</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Ticket Content Body */}
-        <div className="p-6 space-y-6">
-          {/* Attendee Details Card */}
-          <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-stone-200/80 pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                  Attendee Name
-                </span>
-                <h3 className="text-lg sm:text-xl font-bold text-stone-900 leading-tight">
-                  {pass.attendeeName}
-                </h3>
-              </div>
-              <span
-                className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide border self-start sm:self-auto"
-                style={{
-                  backgroundColor: `${theme.primaryColor}15`,
-                  color: theme.primaryColor,
-                  borderColor: `${theme.primaryColor}30`,
-                }}
-              >
-                {pass.passType}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <p className="text-stone-500 text-[10px] uppercase font-medium">Ticket Number</p>
-                <p className="font-mono font-bold text-stone-800 text-sm mt-0.5">{pass.ticketNumber}</p>
-              </div>
-              <div>
-                <p className="text-stone-500 text-[10px] uppercase font-medium">Valid Date</p>
-                <p className="font-bold text-sm mt-0.5" style={{ color: theme.primaryColor }}>
-                  {theme.fullDateLabel}
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-500 text-[10px] uppercase font-medium">Employee Reference</p>
-                <p className="font-medium text-stone-800 mt-0.5">
-                  {pass.employeeName} <span className="text-stone-500">({pass.employeeCpf})</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-500 text-[10px] uppercase font-medium">Department / Location</p>
-                <p className="font-medium text-stone-800 mt-0.5">{pass.department}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Pure White QR Code Display Box */}
-          <div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border-2 border-dashed border-stone-300 relative">
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 flex items-center justify-center w-56 h-56 max-w-full">
-              {pass.qrSvg ? (
-                <div
-                  className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full"
-                  dangerouslySetInnerHTML={{ __html: pass.qrSvg }}
-                />
-              ) : (
-                <div className="text-xs text-stone-400">QR Code Unavailable</div>
-              )}
-            </div>
-
-            {/* Date-specific Validation Alert Badge */}
-            <div
-              className="mt-4 px-4 py-1.5 rounded-full text-center text-xs font-bold tracking-wide uppercase border flex items-center gap-1.5"
-              style={{
-                backgroundColor: theme.bgColor,
-                color: theme.primaryColor,
-                borderColor: theme.secondaryColor,
-              }}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              <span>Valid strictly on {theme.fullDateLabel}</span>
-            </div>
-
-            <p className="text-[11px] text-stone-500 mt-2 text-center font-medium">
-              Single-scan entry pass for designated employee gates. Non-transferable.
-            </p>
-          </div>
-
-          {/* Venue & Event Guidelines */}
-          <div className="rounded-2xl p-4 bg-amber-50/50 border border-amber-200/60 text-xs space-y-2">
-            <div className="flex items-center gap-1.5 font-bold text-amber-900 uppercase tracking-wide text-[11px]">
-              <MapPin className="w-3.5 h-3.5 text-amber-700" />
-              <span>Venue &amp; Entry Guidelines</span>
-            </div>
-            <p className="font-semibold text-stone-800">
-              {pass.venue.name}, {pass.venue.address}
-            </p>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-stone-600 text-[11px] pt-1 border-t border-amber-200/40">
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3 text-amber-700" /> Gates Open: {pass.venue.gatesOpen}
-              </span>
-              <span>•</span>
-              <span>Organizer: {pass.organizer}</span>
-            </div>
-            <p className="text-[10px] text-amber-800 leading-relaxed pt-1">
-              Important: Please present this digital QR or the printed PDF pass at the gate. Turnstile scanners will reject passes scanned on the wrong date or scanned more than once.
-            </p>
-          </div>
-        </div>
-
-        {/* Footer Security Notice */}
-        <div className="bg-stone-100 px-6 py-3 border-t border-stone-200 text-center">
-          <p className="text-[10px] text-stone-500">
-            Pass Token: <span className="font-mono">{pass.token.substring(0, 16)}...</span> • Official ONGC Entry E-Pass
-          </p>
-        </div>
-      </div>
+      {/* Main Ticket Card Container using Shared Component */}
+      <DailyEmployeeTicketCard
+        presentation={presentation}
+        qrSvg={pass.qrSvg}
+      />
 
       {/* Action Buttons Below Ticket (Hidden in Print) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 print:hidden">

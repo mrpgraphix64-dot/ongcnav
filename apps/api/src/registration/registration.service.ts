@@ -20,6 +20,7 @@ import {
   getEventDayTheme,
   EventDayTheme,
   PublicDailyPassResponseDto,
+  buildDailyEmployeePassPresentation,
 } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as crypto from 'crypto';
@@ -387,7 +388,11 @@ export class RegistrationService {
         attendee: {
           include: {
             employee: true,
-            familyMember: true,
+            familyMember: {
+              include: {
+                employee: true,
+              },
+            },
           },
         },
       },
@@ -398,18 +403,31 @@ export class RegistrationService {
     }
 
     const attendee = pass.attendee;
-    const employee = attendee.employee;
     const familyMember = attendee.familyMember;
+    const primaryEmployee = familyMember?.employee || attendee.employee;
 
-    const attendeeName = familyMember ? familyMember.name : (employee?.name || attendee.name || 'Attendee');
+    const attendeeName = familyMember ? familyMember.name : (primaryEmployee?.name || attendee.name || 'Attendee');
     const isFamily = !!familyMember;
     const relation = familyMember ? familyMember.relation : 'Self';
-    const employeeName = employee?.name || attendeeName;
-    const employeeCpf = employee?.cpf || 'N/A';
-    const department = employee?.department || 'EWC Ahmedabad';
+    const employeeName = primaryEmployee?.name || attendeeName;
+    const employeeCpf = primaryEmployee?.cpf || 'N/A';
+    const department = primaryEmployee?.department || 'EWC Ahmedabad';
     const passType = isFamily ? `Family Member Pass (${relation})` : 'ONGC Employee Pass';
     const ticketNumber = attendee.ticketNumber || `TK-${cleanToken.substring(0, 10).toUpperCase()}`;
     const dayTheme: EventDayTheme = getEventDayTheme(pass.eventDate);
+
+    const presentation = buildDailyEmployeePassPresentation({
+      eventDate: pass.eventDate,
+      ticketNumber,
+      qrToken: pass.qrToken,
+      status: pass.status,
+      attendeeName,
+      isFamily,
+      relation,
+      employeeName,
+      employeeCpf,
+      department,
+    });
 
     let qrSvg: string = '';
     try {
@@ -448,6 +466,7 @@ export class RegistrationService {
       },
       organizer: 'Digant Art',
       eventTitle: 'ONGC NAVRATRI 2026',
+      presentation,
     };
   }
 }

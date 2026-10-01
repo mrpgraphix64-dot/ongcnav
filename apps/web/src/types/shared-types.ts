@@ -1009,6 +1009,138 @@ export function getEventDayTheme(date: string): EventDayTheme {
   };
 }
 
+export const DEFAULT_DISPATCH_SCHEDULE: Record<string, string> = {
+  '2026-10-11': '18:00',
+  '2026-10-12': '17:30',
+  '2026-10-13': '18:15',
+  '2026-10-14': '17:45',
+  '2026-10-15': '18:00',
+  '2026-10-16': '18:00',
+  '2026-10-17': '18:00',
+  '2026-10-18': '18:00',
+  '2026-10-19': '18:00',
+};
+
+export interface DailyEmployeePassPresentation {
+  eventDate: string;
+  eventDateFormatted: string;
+  nightNumber: number;
+  nightLabel: string;
+  dayBadgeLabel: string;
+  themeTitle: string;
+  motifName: string;
+  theme: EventDayTheme;
+
+  attendeeName: string;
+  isFamily: boolean;
+  passHolderLabel: string;
+  passTypeLabel: string;
+  passTypeWithRelation: string;
+  relation: string;
+
+  primaryEmployeeName: string;
+  employeeCpf: string;
+  department: string;
+
+  ticketNumber: string;
+  qrToken: string;
+  status: string;
+
+  venue: {
+    name: string;
+    address: string;
+    gatesOpen: string;
+  };
+  entryTiming: string;
+  organizer: string;
+  eventTitle: string;
+}
+
+export interface BuildDailyPassPresentationInput {
+  eventDate: string;
+  ticketNumber?: string | null;
+  qrToken?: string | null;
+  status?: string | null;
+
+  attendeeName?: string | null;
+  isFamily?: boolean;
+  relation?: string | null;
+
+  employeeName?: string | null;
+  employeeCpf?: string | null;
+  department?: string | null;
+}
+
+export function buildDailyEmployeePassPresentation(
+  input: BuildDailyPassPresentationInput,
+): DailyEmployeePassPresentation {
+  const theme = getEventDayTheme(input.eventDate);
+  const isFamily = Boolean(
+    input.isFamily ||
+      (input.relation &&
+        !['self', 'employee', 'primary employee', 'primary'].includes(
+          input.relation.toLowerCase().trim(),
+        )),
+  );
+
+  const rawRelation = input.relation?.trim() || (isFamily ? 'Family Member' : 'Self');
+  const attendeeName = (
+    input.attendeeName ||
+    (isFamily ? 'Family Member' : input.employeeName) ||
+    'Attendee'
+  ).trim();
+  const primaryEmployeeName = (
+    input.employeeName || (!isFamily ? attendeeName : 'ONGC Employee')
+  ).trim();
+  const employeeCpf = (input.employeeCpf || 'N/A').trim();
+  const department = (input.department || 'ONGC Ahmedabad').trim();
+
+  const passHolderLabel = isFamily ? 'Family Member' : 'ONGC Employee';
+  const passTypeLabel = isFamily ? 'Family Member' : 'ONGC Employee Pass';
+  const passTypeWithRelation = isFamily
+    ? rawRelation && rawRelation.toLowerCase() !== 'family member'
+      ? `Family Member Pass (${rawRelation})`
+      : 'Family Member Pass'
+    : 'ONGC Employee Pass';
+
+  return {
+    eventDate: input.eventDate,
+    eventDateFormatted: theme.fullDateLabel,
+    nightNumber: theme.dayNumber,
+    nightLabel: `NIGHT ${theme.dayNumber}`,
+    dayBadgeLabel: `DAY ${theme.dayNumber} OF 9`,
+    themeTitle: theme.themeTitle,
+    motifName: theme.motifName,
+    theme,
+
+    attendeeName,
+    isFamily,
+    passHolderLabel,
+    passTypeLabel,
+    passTypeWithRelation,
+    relation: rawRelation,
+
+    primaryEmployeeName,
+    employeeCpf,
+    department,
+
+    ticketNumber:
+      input.ticketNumber ||
+      (input.qrToken ? `TK-${input.qrToken.substring(0, 10).toUpperCase()}` : 'TK-ONGC-2026'),
+    qrToken: input.qrToken || '',
+    status: input.status || 'ACTIVE',
+
+    venue: {
+      name: 'Malaviya Cricket Ground ONGC',
+      address: 'Mahavirnagar, ONGC Colony, Chandkheda, Ahmedabad, Gujarat 382424',
+      gatesOpen: '7:00 PM',
+    },
+    entryTiming: '7:00 PM onwards',
+    organizer: 'Digant Art',
+    eventTitle: 'ONGC NAVRATRI 2026',
+  };
+}
+
 export interface PublicDailyPassResponseDto {
   token: string;
   ticketNumber: string;
@@ -1031,4 +1163,5 @@ export interface PublicDailyPassResponseDto {
   };
   organizer: string;
   eventTitle: string;
+  presentation?: DailyEmployeePassPresentation;
 }

@@ -58,7 +58,11 @@ describe('DailyPassPdfService', () => {
         attendee: {
           include: {
             employee: true,
-            familyMember: true,
+            familyMember: {
+              include: {
+                employee: true,
+              },
+            },
           },
         },
       },

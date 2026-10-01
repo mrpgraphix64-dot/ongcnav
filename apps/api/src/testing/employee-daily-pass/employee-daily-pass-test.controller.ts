@@ -22,6 +22,7 @@ import {
   RevokeTestPassDto,
   CleanupSessionDto,
   CleanupAllDto,
+  DispatchScheduleCheckDto,
 } from './employee-daily-pass-test.dto';
 
 @ApiTags('Super Admin Employee Daily Pass Test Lab')
@@ -43,6 +44,13 @@ export class EmployeeDailyPassTestController {
   async getRecentTestPasses(@Req() req: Request) {
     const adminUser = (req as any).user;
     return this.testService.getRecentTestPasses(adminUser);
+  }
+
+  @Post('check-dispatch')
+  @ApiOperation({ summary: 'Simulate automatic daily dispatch trigger based on simulated time and schedule' })
+  async checkAndRunSimulatedDispatch(@Body() dto: DispatchScheduleCheckDto, @Req() req: Request) {
+    const adminUser = (req as any).user;
+    return this.testService.checkAndRunSimulatedDispatch(dto, adminUser);
   }
 
   @Post('generate')
