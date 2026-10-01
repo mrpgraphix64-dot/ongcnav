@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import AdminModal from '@/components/admin/AdminModal';
-import { OFFICIAL_EVENT_DATES } from '@ongc/shared-types';
+import { OFFICIAL_EVENT_DATES, getEventDayTheme } from '@ongc/shared-types';
 
 interface DeliveryStats {
   eventDate: string;
@@ -217,13 +217,41 @@ export default function DailyQrDeliveryPage() {
 
       {/* EVENT DATE SELECTOR TABS */}
       <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs space-y-2">
-        <div className="flex items-center gap-2 text-xs font-bold text-ink uppercase tracking-wider mb-2">
-          <Calendar className="w-4 h-4 text-maroon" />
-          <span>Select Official Event Date:</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-2 text-xs font-bold text-ink uppercase tracking-wider">
+            <Calendar className="w-4 h-4 text-maroon" />
+            <span>Select Official Event Date:</span>
+          </div>
+          {(() => {
+            const currentTheme = getEventDayTheme(selectedDate);
+            const nightIdx = currentTheme.dayNumber;
+            return (
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-colors"
+                style={{
+                  backgroundColor: currentTheme.bgColor,
+                  borderColor: `${currentTheme.primaryColor}40`,
+                  color: currentTheme.primaryColor,
+                }}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: currentTheme.secondaryColor }}
+                />
+                <span className="font-outfit font-extrabold uppercase">
+                  Night {nightIdx} • {currentTheme.themeTitle}
+                </span>
+                <span className="text-[10px] text-stone-500 font-medium hidden sm:inline">
+                  ({currentTheme.motifName.split('/')[0].trim()})
+                </span>
+              </div>
+            );
+          })()}
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
           {OFFICIAL_EVENT_DATES.map((d, idx) => {
             const isSelected = selectedDate === d;
+            const theme = getEventDayTheme(d);
             return (
               <button
                 key={d}
@@ -233,16 +261,43 @@ export default function DailyQrDeliveryPage() {
                   setPage(1);
                   setActionMessage(null);
                 }}
-                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                style={
                   isSelected
-                    ? 'bg-maroon text-white border-maroon shadow-md scale-[1.02]'
-                    : 'bg-cream-light/60 hover:bg-cream border-stone-200 text-ink'
+                    ? {
+                        backgroundColor: theme.primaryColor,
+                        borderColor: theme.primaryColor,
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.16)',
+                      }
+                    : {
+                        backgroundColor: theme.bgColor,
+                        borderColor: `${theme.primaryColor}38`,
+                      }
+                }
+                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden ${
+                  isSelected ? 'scale-[1.02]' : 'hover:scale-[1.01]'
                 }`}
               >
-                <div className={`text-[10px] uppercase font-bold ${isSelected ? 'text-gold-light' : 'text-stone-500'}`}>
-                  Night {idx + 1}
+                <div className="flex items-center justify-center gap-1.5">
+                  <span
+                    className="text-[10px] uppercase font-bold tracking-wider"
+                    style={{
+                      color: isSelected ? theme.secondaryColor : theme.primaryColor,
+                    }}
+                  >
+                    Night {idx + 1}
+                  </span>
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: theme.secondaryColor,
+                    }}
+                  />
                 </div>
-                <div className="font-outfit font-black text-xs sm:text-sm mt-0.5">
+                <div
+                  className={`font-outfit font-black text-xs sm:text-sm mt-0.5 ${
+                    isSelected ? 'text-white' : 'text-stone-800'
+                  }`}
+                >
                   {formatDateDisplay(d)}
                 </div>
               </button>

@@ -883,13 +883,29 @@ export default function AdminLayout({
           {/* Navigation Links (Strictly Role-Filtered matching Laravel hierarchy) */}
           <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
             {(() => {
+              // Determine active navigation item: exact match takes highest priority,
+              // otherwise longest prefix match among visible items wins.
+              const activeNavHref = (() => {
+                const exact = visibleNavItems.find((i) => i.href === pathname);
+                if (exact) return exact.href;
+
+                const prefixMatches = visibleNavItems.filter((i) => {
+                  if (i.href === '/admin') return false;
+                  return pathname.startsWith(`${i.href}/`);
+                });
+
+                if (prefixMatches.length === 0) return null;
+
+                const best = prefixMatches.reduce((longest, curr) =>
+                  curr.href.length > longest.href.length ? curr : longest
+                );
+                return best.href;
+              })();
+
               let lastSection: string | undefined = undefined;
               return visibleNavItems.map((item) => {
                 const Icon = item.icon;
-                const isActive =
-                  item.href === '/admin'
-                    ? pathname === '/admin'
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const isActive = item.href === activeNavHref;
 
                 const sectionToRender = item.section || item.isSectionHeader;
                 const showSectionHeader = Boolean(sectionToRender && sectionToRender !== lastSection);
