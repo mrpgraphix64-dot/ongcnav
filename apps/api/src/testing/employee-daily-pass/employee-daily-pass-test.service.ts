@@ -48,6 +48,8 @@ export class EmployeeDailyPassTestService {
    * falls back to DEFAULT_DISPATCH_SCHEDULE.
    */
   async getEffectiveDispatchSchedule(): Promise<Record<string, string>> {
+    let scheduleMap: Record<string, string> = { ...DEFAULT_DISPATCH_SCHEDULE };
+
     try {
       const setting = await this.prisma.setting.findFirst({
         where: {
@@ -64,14 +66,32 @@ export class EmployeeDailyPassTestService {
       if (setting?.value) {
         const parsed = JSON.parse(setting.value);
         if (typeof parsed === 'object' && parsed !== null) {
-          return { ...DEFAULT_DISPATCH_SCHEDULE, ...parsed };
+          scheduleMap = { ...scheduleMap, ...parsed };
         }
       }
+
+      // Also check any individual per-date schedule settings
+      const perDateSettings = await this.prisma.setting.findMany({
+        where: {
+          key: {
+            startsWith: 'employee.dispatch_schedule.',
+          },
+        },
+      });
+
+      for (const p of perDateSettings) {
+        try {
+          const parsed = JSON.parse(p.value);
+          if (parsed?.eventDate && parsed?.dispatchTime) {
+            scheduleMap[parsed.eventDate] = parsed.dispatchTime;
+          }
+        } catch {}
+      }
     } catch {
-      // In case of non-JSON or missing setting, gracefully fallback to DEFAULT_DISPATCH_SCHEDULE
+      // In case of error, gracefully fallback
     }
 
-    return DEFAULT_DISPATCH_SCHEDULE;
+    return scheduleMap;
   }
 
   /**

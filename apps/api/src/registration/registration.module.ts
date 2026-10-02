@@ -7,18 +7,31 @@ import { BulkUploadController } from './bulk-upload.controller';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
 import { DailyPassPdfService } from './daily-pass-pdf.service';
+import { EmployeeDispatchSchedulerService } from './employee-dispatch-scheduler.service';
 
 import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [MailModule],
-  providers: [RegistrationService, AttendeesService, EmployeesService, DailyPassPdfService],
+  providers: [
+    RegistrationService,
+    AttendeesService,
+    EmployeesService,
+    DailyPassPdfService,
+    EmployeeDispatchSchedulerService,
+  ],
   controllers: [
     RegistrationController,
     AttendeesController,
     BulkUploadController,
     EmployeesController,
   ],
-  exports: [RegistrationService, AttendeesService, EmployeesService, DailyPassPdfService],
+  exports: [
+    RegistrationService,
+    AttendeesService,
+    EmployeesService,
+    DailyPassPdfService,
+    EmployeeDispatchSchedulerService,
+  ],
 })
 export class RegistrationModule {}

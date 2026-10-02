@@ -7,9 +7,13 @@ import {
   Body,
   UseGuards,
   Res,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
+import { EmployeeDispatchSchedulerService } from './employee-dispatch-scheduler.service';
+import { UpsertDispatchScheduleDto } from './dto/dispatch-schedule.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -20,7 +24,50 @@ import { UserRole } from '@ongc/shared-types';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin')
 export class EmployeesController {
-  constructor(private readonly employeesService: EmployeesService) {}
+  constructor(
+    private readonly employeesService: EmployeesService,
+    private readonly dispatchSchedulerService: EmployeeDispatchSchedulerService,
+  ) {}
+
+  @Get('employees/daily-passes/dispatch-schedule')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Get QR pass dispatch schedule for an event date or all dates' })
+  async getDispatchSchedule(@Query('date') date?: string) {
+    if (date) {
+      return this.dispatchSchedulerService.getScheduleForDate(date);
+    }
+    return this.dispatchSchedulerService.getAllSchedules();
+  }
+
+  @Get('employees/daily-passes/dispatch-schedules')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Get QR pass dispatch schedules for all official event dates' })
+  async getAllDispatchSchedules() {
+    return this.dispatchSchedulerService.getAllSchedules();
+  }
+
+  @Post('employees/daily-passes/dispatch-schedule')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Save/Update QR pass dispatch schedule for an official event date' })
+  async upsertDispatchSchedule(
+    @Body() dto: UpsertDispatchScheduleDto,
+    @Req() req: Request,
+  ) {
+    const adminUser = (req as any).user;
+    return this.dispatchSchedulerService.upsertSchedule(dto, adminUser);
+  }
 
   @Get('pass-summary')
   @Roles(

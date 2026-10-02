@@ -30,6 +30,7 @@ import {
   OFFICIAL_EVENT_DATES,
   getEventDayTheme,
   buildDailyEmployeePassPresentation,
+  EmployeeDispatchSchedule,
 } from '@ongc/shared-types';
 import DailyEmployeeTicketCard from '@/components/pass/DailyEmployeeTicketCard';
 
@@ -88,6 +89,13 @@ export default function DailyQrDeliveryPage() {
 
   const [viewPass, setViewPass] = useState<DailyPassItem | null>(null);
 
+  // Dispatch schedule state
+  const [schedule, setSchedule] = useState<EmployeeDispatchSchedule | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleTime, setScheduleTime] = useState('17:00');
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+
   // Load stats for current selected date
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -98,6 +106,23 @@ export default function DailyQrDeliveryPage() {
       console.error('Failed to load stats:', err);
     } finally {
       setStatsLoading(false);
+    }
+  }, [selectedDate]);
+
+  // Load schedule for current selected date
+  const loadSchedule = useCallback(async () => {
+    setScheduleLoading(true);
+    try {
+      const data = await fetchApi<EmployeeDispatchSchedule>(
+        `/admin/employees/daily-passes/dispatch-schedule?date=${selectedDate}`
+      );
+      setSchedule(data);
+      setScheduleTime(data?.dispatchTime || '17:00');
+      setScheduleEnabled(data?.enabled ?? false);
+    } catch (err: any) {
+      console.error('Failed to load dispatch schedule:', err);
+    } finally {
+      setScheduleLoading(false);
     }
   }, [selectedDate]);
 
@@ -134,7 +159,8 @@ export default function DailyQrDeliveryPage() {
   useEffect(() => {
     loadStats();
     loadPasses();
-  }, [loadStats, loadPasses]);
+    loadSchedule();
+  }, [loadStats, loadPasses, loadSchedule]);
 
   // Generate passes for selected date
   const handleGeneratePasses = async () => {
@@ -193,6 +219,87 @@ export default function DailyQrDeliveryPage() {
     });
   };
 
+  const formatTimeTo12Hour = (timeStr: string) => {
+    if (!timeStr) return '';
+    const [hStr, mStr] = timeStr.split(':');
+    const h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    if (isNaN(h) || isNaN(m)) return timeStr;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 || 12;
+    const minuteStr = m < 10 ? `0${m}` : `${m}`;
+    return `${hour12}:${minuteStr} ${ampm}`;
+  };
+
+  // Save schedule for selected date
+  const handleSaveSchedule = async () => {
+    setSavingSchedule(true);
+    try {
+      const res = await fetchApi<{ success: boolean; schedule: EmployeeDispatchSchedule }>(
+        '/admin/employees/daily-passes/dispatch-schedule',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            eventDate: selectedDate,
+            dispatchTime: scheduleTime,
+            enabled: scheduleEnabled,
+          }),
+        }
+      );
+      setSchedule(res.schedule);
+      setScheduleTime(res.schedule.dispatchTime);
+      setScheduleEnabled(res.schedule.enabled);
+      setActionMessage({
+        type: 'success',
+        text: `Dispatch schedule for ${formatDateDisplay(selectedDate)} saved: ${
+          res.schedule.enabled ? 'ON' : 'OFF'
+        } at ${formatTimeTo12Hour(res.schedule.dispatchTime)} IST.`,
+      });
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err.message || 'Failed to save dispatch schedule',
+      });
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const getNextDispatchDisplay = () => {
+    if (!scheduleEnabled) {
+      return {
+        statusText: 'Automatic dispatch is disabled for this date.',
+        colorClass: 'text-stone-500',
+        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
+      };
+    }
+
+    if (schedule?.lastRunStatus === 'SUCCESS' && schedule?.lastRunAt) {
+      const runDate = new Date(schedule.lastRunAt);
+      const runTimeStr = runDate.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      return {
+        statusText: `Automatic dispatch completed at ${runTimeStr} IST (${schedule.lastRunMessage || 'Dispatched successfully'}).`,
+        colorClass: 'text-emerald-700',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      };
+    }
+
+    const d = new Date(`${selectedDate}T00:00:00`);
+    const dayName = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    const timeFormatted = formatTimeTo12Hour(scheduleTime);
+
+    return {
+      statusText: `Automatic dispatch scheduled for ${dayName} at ${timeFormatted} IST.`,
+      colorClass: 'text-amber-800',
+      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+    };
+  };
+
   return (
     <div className="space-y-6">
       {/* ACTION BANNER */}
@@ -228,31 +335,50 @@ export default function DailyQrDeliveryPage() {
             <Calendar className="w-4 h-4 text-maroon" />
             <span>Select Official Event Date:</span>
           </div>
-          {(() => {
-            const currentTheme = getEventDayTheme(selectedDate);
-            const nightIdx = currentTheme.dayNumber;
-            return (
-              <div
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-colors"
-                style={{
-                  backgroundColor: currentTheme.bgColor,
-                  borderColor: `${currentTheme.primaryColor}40`,
-                  color: currentTheme.primaryColor,
-                }}
-              >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: currentTheme.secondaryColor }}
-                />
-                <span className="font-outfit font-extrabold uppercase">
-                  Night {nightIdx} • {currentTheme.themeTitle}
-                </span>
-                <span className="text-[10px] text-stone-500 font-medium hidden sm:inline">
-                  ({currentTheme.motifName.split('/')[0].trim()})
-                </span>
-              </div>
-            );
-          })()}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* COMPACT AUTO-DISPATCH PILL */}
+            <div
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                scheduleEnabled
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-stone-100 text-stone-600 border-stone-200'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>
+                Auto-Dispatch:{' '}
+                {scheduleEnabled
+                  ? `ON (${formatTimeTo12Hour(scheduleTime)} IST)`
+                  : 'OFF'}
+              </span>
+            </div>
+
+            {(() => {
+              const currentTheme = getEventDayTheme(selectedDate);
+              const nightIdx = currentTheme.dayNumber;
+              return (
+                <div
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-colors"
+                  style={{
+                    backgroundColor: currentTheme.bgColor,
+                    borderColor: `${currentTheme.primaryColor}40`,
+                    color: currentTheme.primaryColor,
+                  }}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: currentTheme.secondaryColor }}
+                  />
+                  <span className="font-outfit font-extrabold uppercase">
+                    Night {nightIdx} • {currentTheme.themeTitle}
+                  </span>
+                  <span className="text-[10px] text-stone-500 font-medium hidden sm:inline">
+                    ({currentTheme.motifName.split('/')[0].trim()})
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
           {OFFICIAL_EVENT_DATES.map((d, idx) => {
@@ -369,15 +495,150 @@ export default function DailyQrDeliveryPage() {
         </div>
       </div>
 
-      {/* ACTION TOOLBAR */}
+      {/* QR DISPATCH SCHEDULE CARD */}
+      <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-100 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-maroon" />
+              <h2 className="font-outfit font-black text-base text-ink tracking-tight">
+                QR DISPATCH SCHEDULE
+              </h2>
+            </div>
+            <p className="text-xs text-ink-soft mt-0.5">
+              Automated server-side pass generation and email dispatch for official event dates in Asia/Kolkata (IST).
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border ${
+                scheduleEnabled
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-stone-100 text-stone-600 border-stone-200'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  scheduleEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'
+                }`}
+              />
+              Auto-Dispatch: {scheduleEnabled ? `ON (${formatTimeTo12Hour(scheduleTime)} IST)` : 'OFF'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+          {/* Selected Event Date */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-ink-soft uppercase tracking-wider">
+              Event Date
+            </label>
+            <div className="p-2.5 rounded-xl border border-stone-200 bg-stone-50 font-outfit font-black text-sm text-ink flex items-center justify-between">
+              <span>{formatDateDisplay(selectedDate)}</span>
+              <span className="text-xs text-ink-soft font-normal">{selectedDate}</span>
+            </div>
+          </div>
+
+          {/* Automatic Dispatch Toggle */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-ink-soft uppercase tracking-wider">
+              Automatic Dispatch
+            </label>
+            <div className="p-1 rounded-xl border border-stone-200 bg-stone-50 flex items-center">
+              <button
+                type="button"
+                onClick={() => setScheduleEnabled(true)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  scheduleEnabled
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-ink'
+                }`}
+              >
+                ON
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduleEnabled(false)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  !scheduleEnabled
+                    ? 'bg-stone-600 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-ink'
+                }`}
+              >
+                OFF
+              </button>
+            </div>
+          </div>
+
+          {/* Dispatch Time */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-ink-soft uppercase tracking-wider">
+              Dispatch Time
+            </label>
+            <input
+              type="time"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              className="w-full p-2 rounded-xl border border-stone-200 bg-white font-outfit font-bold text-sm text-ink focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon cursor-pointer"
+            />
+          </div>
+
+          {/* Timezone (Read-only) */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-ink-soft uppercase tracking-wider">
+              Timezone
+            </label>
+            <div className="p-2.5 rounded-xl border border-stone-200 bg-stone-50 font-mono text-xs text-ink font-semibold flex items-center justify-between">
+              <span>Asia/Kolkata</span>
+              <span className="text-stone-500 font-sans font-bold">(IST)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Next Dispatch Status Banner & Save Schedule Button */}
+        {(() => {
+          const nextDispatch = getNextDispatchDisplay();
+          return (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-stone-100">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-bold text-ink-soft">Next Dispatch:</span>
+                <span className={`font-semibold ${nextDispatch.colorClass}`}>
+                  {nextDispatch.statusText}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveSchedule}
+                disabled={savingSchedule || scheduleLoading}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                {savingSchedule ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                )}
+                <span>Save Schedule</span>
+              </button>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ACTION TOOLBAR - MANUAL / ADMIN OVERRIDE */}
       <div className="bg-gradient-to-r from-cream-light to-white p-4 sm:p-5 rounded-2xl border border-gold/40 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         <div>
-          <h2 className="font-outfit font-extrabold text-sm text-ink flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-maroon" />
-            <span>Delivery Actions for {formatDateDisplay(selectedDate)}</span>
-          </h2>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-stone-200 text-stone-700">
+              Admin Override
+            </span>
+            <h2 className="font-outfit font-extrabold text-sm text-ink flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-maroon" />
+              <span>Manual Actions for {formatDateDisplay(selectedDate)}</span>
+            </h2>
+          </div>
           <p className="text-xs text-ink-soft mt-0.5">
-            Step 1 creates unique tokens. Step 2 emails the passes. Deliveries are idempotent.
+            Deliveries are idempotent. Use manual buttons for immediate generation or emailing, or let the automatic dispatch run on schedule.
           </p>
         </div>
 

@@ -528,6 +528,20 @@ export const DEFAULT_DISPATCH_SCHEDULE: Record<string, string> = {
   '2026-10-19': '18:00',
 };
 
+export interface EmployeeDispatchSchedule {
+  eventDate: string;
+  dispatchTime: string;
+  timezone: string;
+  enabled: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  lastRunAt?: string | null;
+  lastRunStatus?: 'SUCCESS' | 'PARTIAL_FAILURE' | 'FAILED' | 'RUNNING' | null;
+  lastRunMessage?: string | null;
+  lastSentCount?: number;
+  lastFailedCount?: number;
+}
+
 export interface DailyEmployeePassPresentation {
   eventDate: string;
   eventDateFormatted: string;
