@@ -94,6 +94,7 @@ describe('EmployeeDailyPassTestService', () => {
       },
       setting: {
         findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
 
@@ -652,6 +653,169 @@ describe('EmployeeDailyPassTestService', () => {
 
       expect(res.isDue).toBe(true);
       expect(res.configuredDispatchTime).toBe('16:30');
+    });
+  });
+
+  describe('Automatic 10-Minute Simulation Window (simulateWindow)', () => {
+    it('rejects non-SUPER_ADMIN users', async () => {
+      await expect(
+        service.simulateWindow(
+          {
+            simulatedDate: '2026-10-11',
+            simulatedStartTime: '15:40',
+            testRecipientEmail: 'tester@example.com',
+          },
+          mockEmployeeAdmin,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects invalid event date', async () => {
+      await expect(
+        service.simulateWindow(
+          {
+            simulatedDate: '2026-10-25',
+            simulatedStartTime: '15:40',
+            testRecipientEmail: 'tester@example.com',
+          },
+          mockSuperAdmin,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('calculates a 10-minute timeline and triggers dispatch when condition is satisfied', async () => {
+      prisma.setting.findFirst.mockResolvedValueOnce({
+        key: 'employee.dispatch_schedule',
+        value: JSON.stringify({ '2026-10-11': '15:45' }),
+      });
+
+      const res = await service.simulateWindow(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedStartTime: '15:40',
+          testRecipientEmail: 'tester@example.com',
+          testSessionId: 'EMP-WIN-TEST-001',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.simulatedStartTime).toBe('15:40');
+      expect(res.simulatedEndTime).toBe('15:50');
+      expect(res.productionDispatchTime).toBe('15:45');
+      expect(res.isDue).toBe(true);
+      expect(res.dispatchSatisfiedMinute).toBe(5);
+      expect(res.dispatchSatisfiedTime).toBe('15:45');
+      expect(res.timeline.length).toBe(11);
+      expect(res.timeline[0]).toEqual({
+        minute: 0,
+        time: '15:40',
+        isDue: false,
+        status: 'WAITING_FOR_DISPATCH',
+      });
+      expect(res.timeline[5]).toEqual({
+        minute: 5,
+        time: '15:45',
+        isDue: true,
+        status: 'DISPATCH_CONDITION_SATISFIED',
+      });
+      expect(res.emailsSentCount).toBe(1);
+      expect(mailService.sendEmployeeDailyPassEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientEmail: 'tester@example.com',
+          subjectOverride: expect.stringContaining('[TEST]'),
+        }),
+      );
+    });
+
+    it('when window does not reach dispatch time, passes are generated in WAITING status without emails', async () => {
+      // Production dispatch is 18:00 (default), window runs from 15:40 to 15:50
+      const res = await service.simulateWindow(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedStartTime: '15:40',
+          testRecipientEmail: 'tester@example.com',
+          testSessionId: 'EMP-WIN-TEST-002',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.isDue).toBe(false);
+      expect(res.dispatchSatisfiedMinute).toBeNull();
+      expect(res.emailsSentCount).toBe(0);
+      expect(res.timeline.every((t) => !t.isDue)).toBe(true);
+    });
+
+    it('performs automatic cleanup of test data when autoCleanup: true', async () => {
+      prisma.setting.findFirst.mockResolvedValueOnce({
+        key: 'employee.dispatch_schedule',
+        value: JSON.stringify({ '2026-10-11': '15:45' }),
+      });
+
+      const res = await service.simulateWindow(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedStartTime: '15:40',
+          testRecipientEmail: 'tester@example.com',
+          testSessionId: 'EMP-WIN-TEST-CLEANUP',
+          autoCleanup: true,
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.cleanedUp).toBe(true);
+      expect(prisma.dailyEmployeePass.deleteMany).toHaveBeenCalledWith({
+        where: {
+          testSessionId: 'EMP-WIN-TEST-CLEANUP',
+          isTest: true,
+        },
+      });
+    });
+
+    it('isolates new test session by purging prior session test passes for selected attendees', async () => {
+      await service.simulateDelivery(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedTime: '15:45',
+          testRecipientEmail: 'tester@example.com',
+          testSessionId: 'EMP-SESSION-NEW',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(prisma.dailyEmployeePass.deleteMany).toHaveBeenCalledWith({
+        where: {
+          attendeeId: { in: [BigInt(100)] },
+          eventDate: '2026-10-11',
+          isTest: true,
+          testSessionId: { not: 'EMP-SESSION-NEW' },
+        },
+      });
+    });
+
+    it('returned test passes contain simulatedDispatchTime distinct from realCreatedAt', async () => {
+      prisma.setting.findFirst.mockResolvedValueOnce({
+        key: 'employee.dispatch_schedule',
+        value: JSON.stringify({ '2026-10-11': '15:45' }),
+      });
+
+      const res = await service.simulateDelivery(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedTime: '15:45',
+          testRecipientEmail: 'tester@example.com',
+          testSessionId: 'EMP-SESSION-TIMESTAMPS',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.passes[0].simulatedDispatchTime).toBe('15:45');
+      expect(res.passes[0].realCreatedAt).toBeDefined();
     });
   });
 });

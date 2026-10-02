@@ -76,6 +76,10 @@ interface TestPassData {
   emailStatus: string;
   dayTheme: any;
   presentation?: DailyEmployeePassPresentation;
+  simulatedDispatchTime?: string | null;
+  simulatedEventTime?: string | null;
+  realCreatedAt?: string;
+  realEmailSentAt?: string | null;
   createdAt: string;
 }
 
@@ -83,11 +87,42 @@ export default function EmployeeDailyPassTestLabPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
-  // TOP CONTROL: SIMULATED DATE & TIME
+  // TOP CONTROL: SELECTED EVENT DATE & PRODUCTION DISPATCH SCHEDULE
   const [testDate, setTestDate] = useState<string>(OFFICIAL_EVENT_DATES[0]);
-  const [testTime, setTestTime] = useState<string>('18:00');
   const [testEmailRecipient, setTestEmailRecipient] = useState<string>('');
   const [dispatchSchedule, setDispatchSchedule] = useState<Record<string, string>>(DEFAULT_DISPATCH_SCHEDULE);
+
+  // Time arithmetic helpers
+  function addMinutes(timeStr: string, mins: number): string {
+    const [h, m] = (timeStr || '15:40').split(':').map((v) => parseInt(v, 10) || 0);
+    const total = ((h * 60 + m + mins) % 1440 + 1440) % 1440;
+    const resH = Math.floor(total / 60);
+    const resM = total % 60;
+    return `${String(resH).padStart(2, '0')}:${String(resM).padStart(2, '0')}`;
+  }
+
+  function subtractMinutes(timeStr: string, mins: number): string {
+    return addMinutes(timeStr, -mins);
+  }
+
+  // Production schedule is the single source of truth for dispatch time
+  const configuredDispatchTime = dispatchSchedule[testDate] || DEFAULT_DISPATCH_SCHEDULE[testDate] || '17:00';
+  const selectedTheme = getEventDayTheme(testDate);
+
+  // 10-Minute Simulation State
+  const [simulationStartTime, setSimulationStartTime] = useState<string>(() =>
+    subtractMinutes(DEFAULT_DISPATCH_SCHEDULE[OFFICIAL_EVENT_DATES[0]] || '18:00', 5),
+  );
+  const [simulatedCurrentTime, setSimulatedCurrentTime] = useState<string>(simulationStartTime);
+  const [simulationMinuteStep, setSimulationMinuteStep] = useState<number>(0);
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [isSimulationPaused, setIsSimulationPaused] = useState<boolean>(false);
+  const [simulationPhase, setSimulationPhase] = useState<'IDLE' | 'WAITING' | 'DISPATCH_SATISFIED' | 'COMPLETED'>('IDLE');
+  const [hasDispatched, setHasDispatched] = useState<boolean>(false);
+  const [simulationSpeedMs, setSimulationSpeedMs] = useState<number>(1000); // 1s per simulated minute
+  const [autoResetOnComplete, setAutoResetOnComplete] = useState<boolean>(true);
+
+  const simulationEndTime = useMemo(() => addMinutes(simulationStartTime, 10), [simulationStartTime]);
 
   // STEP 1: Search & Approved Employees Selection
   const [searchQuery, setSearchQuery] = useState('');
@@ -289,16 +324,135 @@ export default function EmployeeDailyPassTestLabPage() {
     );
   }
 
-  // Delivery evaluation math against live production dispatch schedule (with DEFAULT_DISPATCH_SCHEDULE fallback)
-  const configuredDispatchTime = dispatchSchedule[testDate] || DEFAULT_DISPATCH_SCHEDULE[testDate] || '18:00';
-  const selectedTheme = getEventDayTheme(testDate);
+  // Timeline points for the 10-minute window (0 to 10 minutes)
+  const timelinePoints = useMemo(() => {
+    const [startH, startM] = simulationStartTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const [dispH, dispM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const startMins = startH * 60 + startM;
+    const dispMins = dispH * 60 + dispM;
 
-  const [simH, simM] = (testTime || '18:00').split(':').map((v) => parseInt(v, 10) || 0);
+    const points: Array<{ minute: number; time: string; isDue: boolean }> = [];
+    for (let m = 0; m <= 10; m++) {
+      const stepMins = startMins + m;
+      points.push({
+        minute: m,
+        time: addMinutes(simulationStartTime, m),
+        isDue: stepMins >= dispMins,
+      });
+    }
+    return points;
+  }, [simulationStartTime, configuredDispatchTime]);
+
+  const [currH, currM] = (simulatedCurrentTime || '15:40').split(':').map((v) => parseInt(v, 10) || 0);
   const [cfgH, cfgM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
-  const isDueLive = simH * 60 + simM >= cfgH * 60 + cfgM;
+  const isDueLive = currH * 60 + currM >= cfgH * 60 + cfgM;
 
-  // 2. Primary Simulation Action: Evaluate Delivery Schedule & Auto-Dispatch
-  async function handleSimulateDelivery() {
+  // Auto-synchronize default simulation start time (5 mins before dispatch) when date or schedule changes
+  useEffect(() => {
+    if (!isSimulating && simulationPhase === 'IDLE') {
+      const defStart = subtractMinutes(configuredDispatchTime, 5);
+      setSimulationStartTime(defStart);
+      setSimulatedCurrentTime(defStart);
+    }
+  }, [configuredDispatchTime, isSimulating, simulationPhase]);
+
+  // Automatic 10-Minute Simulation Window Engine
+  useEffect(() => {
+    if (!isSimulating || isSimulationPaused) return;
+
+    const timer = setTimeout(async () => {
+      const nextStep = simulationMinuteStep + 1;
+
+      if (nextStep > 10) {
+        setIsSimulating(false);
+        setSimulationPhase('COMPLETED');
+
+        if (autoResetOnComplete && testSessionId) {
+          try {
+            await fetchApi<any>('/admin/test-lab/employee-daily-pass/cleanup-session', {
+              method: 'POST',
+              body: JSON.stringify({ testSessionId }),
+            });
+            setGeneratedPasses([]);
+            setScannerResult(null);
+            setCleanupMessage(
+              `TEST SESSION COMPLETE: 10-minute simulation window (${simulationStartTime} → ${simulationEndTime}) finished. Test data for session ${testSessionId} reset successfully. Real production data remains untouched.`,
+            );
+          } catch (err: any) {
+            setAlert({ type: 'error', message: err.message || 'Auto-cleanup failed' });
+          }
+        }
+        return;
+      }
+
+      const nextTime = addMinutes(simulationStartTime, nextStep);
+      setSimulationMinuteStep(nextStep);
+      setSimulatedCurrentTime(nextTime);
+
+      const [nextH, nextM] = nextTime.split(':').map((v) => parseInt(v, 10) || 0);
+      const [dispH, dispM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
+      const isDue = nextH * 60 + nextM >= dispH * 60 + dispM;
+
+      if (isDue && !hasDispatched) {
+        setHasDispatched(true);
+        setSimulationPhase('DISPATCH_SATISFIED');
+
+        try {
+          const result = await fetchApi<any>(
+            '/admin/test-lab/employee-daily-pass/simulate-delivery',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                employeeIds: selectedEmployeeIds,
+                simulatedDate: testDate,
+                simulatedTime: nextTime,
+                configuredDispatchTime,
+                testRecipientEmail: testEmailRecipient.trim() || undefined,
+                testSessionId,
+              }),
+            },
+          );
+
+          const passesList: TestPassData[] = result.passes || [result];
+          setGeneratedPasses(passesList);
+          setIneligibleAttendees(result.ineligible || []);
+          setGenerationSummary({
+            newlyGenerated: result.newlyGeneratedCount ?? passesList.length,
+            alreadyExisted: result.existingCount ?? 0,
+            emailsSent: result.emailsSentCount ?? 0,
+            total: passesList.length,
+          });
+
+          if (passesList.length > 0) {
+            setSelectedPassForScan(passesList[0].qrToken);
+          }
+        } catch (err: any) {
+          setAlert({ type: 'error', message: err.message || 'Dispatch evaluation failed' });
+        }
+      } else if (!isDue) {
+        setSimulationPhase('WAITING');
+      }
+    }, simulationSpeedMs);
+
+    return () => clearTimeout(timer);
+  }, [
+    isSimulating,
+    isSimulationPaused,
+    simulationMinuteStep,
+    simulationStartTime,
+    simulationEndTime,
+    configuredDispatchTime,
+    hasDispatched,
+    autoResetOnComplete,
+    simulationSpeedMs,
+    selectedEmployeeIds,
+    testDate,
+    testEmailRecipient,
+    testSessionId,
+  ]);
+
+  // 2. Primary Simulation Actions
+  async function handleStartSimulation() {
     if (selectedEmployeeIds.length === 0) {
       setAlert({ type: 'error', message: 'Please select at least one employee from the roster.' });
       return;
@@ -312,54 +466,146 @@ export default function EmployeeDailyPassTestLabPage() {
       return;
     }
 
+    const newSessionId = `EMP-SIM-${Date.now().toString(36).toUpperCase()}`;
+    setTestSessionId(newSessionId);
+    setGeneratedPasses([]);
+    setIneligibleAttendees([]);
+    setGenerationSummary(null);
+    setSimulationResultBanner(null);
+    setScannerResult(null);
+    setAlert(null);
+    setCleanupMessage(null);
+
+    setSimulationMinuteStep(0);
+    setSimulatedCurrentTime(simulationStartTime);
+    setIsSimulating(true);
+    setIsSimulationPaused(false);
+
+    // Check if start time itself satisfies dispatch condition (e.g. start at or after dispatch)
+    const [startH, startM] = simulationStartTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const [dispH, dispM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const dueAtStart = startH * 60 + startM >= dispH * 60 + dispM;
+
+    if (dueAtStart) {
+      setHasDispatched(true);
+      setSimulationPhase('DISPATCH_SATISFIED');
+      try {
+        const result = await fetchApi<any>(
+          '/admin/test-lab/employee-daily-pass/simulate-delivery',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              employeeIds: selectedEmployeeIds,
+              simulatedDate: testDate,
+              simulatedTime: simulationStartTime,
+              configuredDispatchTime,
+              testRecipientEmail: testEmailRecipient.trim() || undefined,
+              testSessionId: newSessionId,
+            }),
+          },
+        );
+        const passesList: TestPassData[] = result.passes || [result];
+        setGeneratedPasses(passesList);
+        setIneligibleAttendees(result.ineligible || []);
+        setGenerationSummary({
+          newlyGenerated: result.newlyGeneratedCount ?? passesList.length,
+          alreadyExisted: result.existingCount ?? 0,
+          emailsSent: result.emailsSentCount ?? 0,
+          total: passesList.length,
+        });
+        if (passesList.length > 0) {
+          setSelectedPassForScan(passesList[0].qrToken);
+        }
+      } catch (err: any) {
+        setAlert({ type: 'error', message: err.message || 'Dispatch evaluation failed' });
+      }
+    } else {
+      setHasDispatched(false);
+      setSimulationPhase('WAITING');
+    }
+  }
+
+  function handleTogglePause() {
+    setIsSimulationPaused((prev) => !prev);
+  }
+
+  async function handleResetSimulation() {
+    setIsSimulating(false);
+    setIsSimulationPaused(false);
+    setSimulationPhase('IDLE');
+    setSimulationMinuteStep(0);
+    setSimulatedCurrentTime(simulationStartTime);
+    setHasDispatched(false);
+
+    if (testSessionId) {
+      try {
+        setCleaningUp(true);
+        await fetchApi<any>('/admin/test-lab/employee-daily-pass/cleanup-session', {
+          method: 'POST',
+          body: JSON.stringify({ testSessionId }),
+        });
+        setGeneratedPasses([]);
+        setGenerationSummary(null);
+        setScannerResult(null);
+        setCleanupMessage(`Simulation reset. Test session ${testSessionId} cleaned up.`);
+      } catch (err: any) {
+        setAlert({ type: 'error', message: err.message || 'Failed to cleanup session' });
+      } finally {
+        setCleaningUp(false);
+      }
+    }
+  }
+
+  async function handleRunInstantWindow() {
+    if (selectedEmployeeIds.length === 0) {
+      setAlert({ type: 'error', message: 'Please select at least one employee from the roster.' });
+      return;
+    }
+    if (eligiblePeople.length === 0) {
+      setAlert({
+        type: 'error',
+        message: `None of the selected people registered for ${selectedTheme.fullDateLabel}.`,
+      });
+      return;
+    }
+
     try {
       setSimulating(true);
       setAlert(null);
-      setScannerResult(null);
+      const newSessionId = `EMP-WIN-${Date.now().toString(36).toUpperCase()}`;
+      setTestSessionId(newSessionId);
 
-      const payload = {
-        employeeIds: selectedEmployeeIds,
-        simulatedDate: testDate,
-        simulatedTime: testTime,
-        configuredDispatchTime,
-        testRecipientEmail: testEmailRecipient.trim() || undefined,
-        testSessionId: testSessionId.trim() || undefined,
-      };
-
-      const result = await fetchApi<any>(
-        '/admin/test-lab/employee-daily-pass/simulate-delivery',
+      const res = await fetchApi<any>(
+        '/admin/test-lab/employee-daily-pass/simulate-window',
         {
           method: 'POST',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            employeeIds: selectedEmployeeIds,
+            simulatedDate: testDate,
+            simulatedStartTime: simulationStartTime,
+            testRecipientEmail: testEmailRecipient.trim() || undefined,
+            testSessionId: newSessionId,
+            autoCleanup: false,
+          }),
         },
       );
 
-      const passesList: TestPassData[] = result.passes || [result];
-      setGeneratedPasses(passesList);
-      setIneligibleAttendees(result.ineligible || []);
-      setTestSessionId(result.testSessionId || passesList[0]?.testSessionId || '');
+      setGeneratedPasses(res.passes || []);
+      setSimulatedCurrentTime(res.dispatchSatisfiedTime || res.simulatedEndTime);
+      setSimulationPhase(res.isDue ? 'DISPATCH_SATISFIED' : 'WAITING');
+      setHasDispatched(res.isDue);
       setGenerationSummary({
-        newlyGenerated: result.newlyGeneratedCount ?? passesList.length,
-        alreadyExisted: result.existingCount ?? 0,
-        emailsSent: result.emailsSentCount ?? 0,
-        total: passesList.length,
+        newlyGenerated: res.passes?.length || 0,
+        alreadyExisted: 0,
+        emailsSent: res.emailsSentCount || 0,
+        total: res.passes?.length || 0,
       });
-
-      setSimulationResultBanner({
-        isDue: result.isDue,
-        text: result.message,
-      });
-
-      if (passesList.length > 0) {
-        setSelectedPassForScan(passesList[0].qrToken);
+      if (res.passes && res.passes.length > 0) {
+        setSelectedPassForScan(res.passes[0].qrToken);
       }
-
-      setAlert({
-        type: 'success',
-        message: result.message,
-      });
+      setAlert({ type: 'success', message: res.message });
     } catch (err: any) {
-      setAlert({ type: 'error', message: err.message || 'Delivery simulation failed' });
+      setAlert({ type: 'error', message: err.message || 'Window simulation failed' });
     } finally {
       setSimulating(false);
     }
@@ -702,27 +948,37 @@ export default function EmployeeDailyPassTestLabPage() {
 
       {/* Scrollable Container */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
-        {/* ================= COMPACT TEST DATE & TIME CONTROL (TOP) ================= */}
+        {/* ================= SIMULATION CONTROLS & PRODUCTION DISPATCH (TOP) ================= */}
         <div className="bg-stone-900 text-white rounded-2xl p-4 border border-gold/40 shadow-sm space-y-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-b border-stone-800 pb-2.5">
             <div className="flex items-center gap-2 flex-wrap">
               <Clock className="w-4 h-4 text-gold shrink-0" />
               <span className="text-xs font-bold uppercase tracking-wider text-gold-light font-cinzel">
-                TEST DATE & TIME
+                SIMULATION CONTROLS & PRODUCTION DISPATCH
               </span>
               <span
                 className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                  isDueLive
+                  simulationPhase === 'DISPATCH_SATISFIED'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : simulationPhase === 'WAITING'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : simulationPhase === 'COMPLETED'
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                    : 'bg-stone-700 text-stone-300 border border-stone-600'
                 }`}
               >
-                {isDueLive ? '✓ Delivery Due' : 'Waiting for Delivery Time'}
+                {simulationPhase === 'DISPATCH_SATISFIED'
+                  ? '✓ QR Delivery Condition Satisfied'
+                  : simulationPhase === 'WAITING'
+                  ? 'Waiting for Dispatch'
+                  : simulationPhase === 'COMPLETED'
+                  ? '✓ Test Session Complete'
+                  : 'Ready to Simulate'}
               </span>
             </div>
             <div className="text-[11px] text-stone-300 flex items-center gap-2 flex-wrap">
               <span>
-                Simulation time: <strong className="text-white">{selectedTheme.fullDateLabel}, {testTime}</strong>
+                Simulated Clock: <strong className="text-white font-mono">{selectedTheme.fullDateLabel}, {simulatedCurrentTime}</strong>
               </span>
               <span className="text-stone-600 hidden sm:inline">&bull;</span>
               <span className="text-stone-400 text-[10px] italic">
@@ -731,52 +987,82 @@ export default function EmployeeDailyPassTestLabPage() {
             </div>
           </div>
 
-          {/* Three Compact Inputs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Test Date Selector */}
+          {/* 4 Compact Inputs / Status Blocks */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Official Event Date Selector */}
             <div>
               <label className="text-[10px] font-bold uppercase text-stone-400 block mb-1">
-                Test Date (Official Event Dates)
+                Official Event Date
               </label>
               <select
                 value={testDate}
+                disabled={isSimulating}
                 onChange={(e) => setTestDate(e.target.value)}
-                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold font-medium cursor-pointer"
+                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold font-medium cursor-pointer disabled:opacity-60"
               >
                 {OFFICIAL_EVENT_DATES.map((dateStr) => {
                   const th = getEventDayTheme(dateStr);
                   return (
                     <option key={dateStr} value={dateStr}>
-                      {dateStr} — Night {th.dayNumber} ({th.fullDateLabel})
+                      {dateStr} — Night {th.dayNumber} ({th.themeTitle})
                     </option>
                   );
                 })}
               </select>
             </div>
 
-            {/* Test Time Input */}
+            {/* 2. Simulation Start Time (User chooses start point only) */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[10px] font-bold uppercase text-stone-400 block">
-                  Test Time (HH:mm)
+                  Simulation Start Time
                 </label>
-                <span className="text-[10px] text-stone-400 font-mono">
-                  Configured: <strong className="text-gold-light">{configuredDispatchTime}</strong>
+                <span className="text-[9px] text-stone-400 font-mono">
+                  Window: 10 mins
                 </span>
               </div>
               <input
                 type="time"
-                value={testTime}
-                onChange={(e) => setTestTime(e.target.value)}
-                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold font-mono font-bold"
+                value={simulationStartTime}
+                disabled={isSimulating}
+                onChange={(e) => {
+                  setSimulationStartTime(e.target.value);
+                  setSimulatedCurrentTime(e.target.value);
+                }}
+                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold font-mono font-bold disabled:opacity-60"
               />
+              <span className="text-[9px] text-stone-400 block mt-0.5">
+                Starting point of the simulated clock
+              </span>
             </div>
 
-            {/* Safe Test Email Recipient */}
+            {/* 3. Production Dispatch Time (Read-only single source of truth) */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[10px] font-bold uppercase text-stone-400 block">
-                  Safe Test Recipient Email
+                  Production Dispatch Time
+                </label>
+                <span className="text-[9px] text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                  Single Source of Truth
+                </span>
+              </div>
+              <div className="w-full p-2 bg-stone-800/90 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 font-mono font-bold flex items-center justify-between">
+                <span>{configuredDispatchTime}</span>
+                <span className="text-[9px] uppercase tracking-wider text-stone-400 font-sans font-semibold">
+                  Read-only
+                </span>
+              </div>
+              <span className="text-[9px] text-stone-400 block mt-0.5 truncate">
+                Source: Production QR Dispatch Schedule
+              </span>
+            </div>
+
+            {/* 4. Safe Test Recipient Email */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-bold uppercase text-stone-400 block">
+                  Safe Test Recipient
                 </label>
                 <span className="text-[9px] text-amber-400 font-bold">
                   Never contacts real employees
@@ -786,9 +1072,159 @@ export default function EmployeeDailyPassTestLabPage() {
                 type="email"
                 placeholder="admin@example.com"
                 value={testEmailRecipient}
+                disabled={isSimulating}
                 onChange={(e) => setTestEmailRecipient(e.target.value)}
-                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold"
+                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold disabled:opacity-60"
               />
+              <span className="text-[9px] text-stone-400 block mt-0.5 truncate">
+                Receives actual employee pass email
+              </span>
+            </div>
+          </div>
+
+          {/* Live Status and Timeline Progression Banner */}
+          <div className="bg-stone-950/80 rounded-xl p-3 border border-stone-800 space-y-2">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold text-stone-300 uppercase tracking-wider">
+                    SIMULATION: <strong className="text-white font-mono">{simulationStartTime} → {simulationEndTime}</strong>
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-stone-800 text-stone-300 border border-stone-700">
+                    Window: 10 minutes (Minute {simulationMinuteStep}/10)
+                  </span>
+                </div>
+
+                {/* Status Lines matching exact requirement */}
+                {simulationPhase === 'IDLE' && (
+                  <div className="text-xs text-stone-400">
+                    Ready to run 10-minute simulation. Simulation will evaluate production dispatch at <strong className="text-white font-mono">{configuredDispatchTime}</strong>.
+                  </div>
+                )}
+
+                {simulationPhase === 'WAITING' && (
+                  <div className="text-xs space-y-0.5">
+                    <div className="font-bold text-amber-400 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 animate-spin" />
+                      WAITING FOR DISPATCH
+                    </div>
+                    <div className="text-[11px] text-stone-300 font-mono">
+                      Simulation: <strong className="text-white">{simulatedCurrentTime}</strong> &bull; Production dispatch: <strong className="text-amber-300">{configuredDispatchTime}</strong>
+                    </div>
+                  </div>
+                )}
+
+                {simulationPhase === 'DISPATCH_SATISFIED' && (
+                  <div className="text-xs space-y-0.5">
+                    <div className="font-bold text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      QR DELIVERY CONDITION SATISFIED
+                    </div>
+                    <div className="text-[11px] text-stone-300 font-mono">
+                      Simulation: <strong className="text-white">{simulatedCurrentTime}</strong> &bull; Production dispatch: <strong className="text-emerald-300">{configuredDispatchTime}</strong>
+                    </div>
+                    <div className="text-[10px] text-emerald-300 font-bold">
+                      {generatedPasses.length} eligible pass{generatedPasses.length === 1 ? '' : 'es'} &bull; {generationSummary?.emailsSent ?? 0} test email{generationSummary?.emailsSent === 1 ? '' : 's'} sent
+                    </div>
+                  </div>
+                )}
+
+                {simulationPhase === 'COMPLETED' && (
+                  <div className="text-xs space-y-0.5">
+                    <div className="font-bold text-blue-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      TEST SESSION COMPLETE
+                    </div>
+                    <div className="text-[11px] text-stone-400">
+                      Test data reset successfully.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                {!isSimulating ? (
+                  <button
+                    type="button"
+                    onClick={handleStartSimulation}
+                    disabled={selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Start 10-Minute Simulation</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleTogglePause}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                        isSimulationPaused
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-amber-600 hover:bg-amber-700 text-white'
+                      }`}
+                    >
+                      {isSimulationPaused ? '▶ Resume' : '⏸ Pause'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetSimulation}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset & Cleanup</span>
+                    </button>
+                  </>
+                )}
+
+                {/* Instant Quick Run */}
+                {!isSimulating && (
+                  <button
+                    type="button"
+                    onClick={handleRunInstantWindow}
+                    disabled={simulating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
+                    className="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    title="Evaluate 10-minute window instantly without animation"
+                  >
+                    <span>Instant Run</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 11-Minute Visual Timeline Progress Track */}
+            <div className="pt-1">
+              <div className="grid grid-cols-11 gap-1">
+                {timelinePoints.map((pt) => {
+                  const isCurrent = isSimulating && pt.minute === simulationMinuteStep;
+                  const isPassed = isSimulating && pt.minute < simulationMinuteStep;
+                  const isDispatchTarget = pt.time === configuredDispatchTime;
+
+                  return (
+                    <div
+                      key={pt.minute}
+                      className={`text-center p-1 rounded-lg border text-[9px] font-mono transition-all ${
+                        isCurrent
+                          ? 'bg-gold/20 border-gold text-gold font-bold ring-2 ring-gold/40'
+                          : isPassed
+                          ? pt.isDue
+                            ? 'bg-emerald-950/40 border-emerald-700 text-emerald-400'
+                            : 'bg-amber-950/40 border-amber-800 text-amber-400'
+                          : pt.isDue
+                          ? 'bg-emerald-950/20 border-emerald-900/60 text-emerald-600'
+                          : 'bg-stone-900 border-stone-800 text-stone-500'
+                      }`}
+                      title={`${pt.time} (Min ${pt.minute}) ${pt.isDue ? '— Dispatch Satisfied' : '— Waiting'}`}
+                    >
+                      <div className="font-bold truncate">{pt.time}</div>
+                      <div className="text-[8px] truncate mt-0.5 opacity-80">
+                        {isDispatchTarget ? '🎯 DISPATCH' : `+${pt.minute}m`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -987,7 +1423,7 @@ export default function EmployeeDailyPassTestLabPage() {
                   <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
                     3
                   </span>
-                  Delivery Simulation Evaluation
+                  10-Minute Simulation Workflow
                 </span>
                 <span className="text-[10px] text-stone-500">
                   Target: <strong>{selectedTheme.fullDateLabel}</strong>
@@ -1017,52 +1453,47 @@ export default function EmployeeDailyPassTestLabPage() {
                     )}
                   </span>
                   <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/80 border border-stone-200">
-                    Sim: {testTime} &bull; Due: {configuredDispatchTime}
+                    Sim: {simulatedCurrentTime} &bull; Due: {configuredDispatchTime}
                   </span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-stone-700">
                   {isDueLive ? (
                     <>
-                      Simulated time (<strong>{testTime}</strong>) &ge; configured dispatch time (<strong>{configuredDispatchTime}</strong>).
-                      Passes will be generated and test emails will automatically be dispatched to{' '}
-                      <strong>{testEmailRecipient || 'safe recipient'}</strong>. Idempotent delivery prevents duplicate emails.
+                      Simulated time (<strong>{simulatedCurrentTime}</strong>) &ge; production dispatch time (<strong>{configuredDispatchTime}</strong>).
+                      Passes are generated for this session and test emails dispatched to <strong>{testEmailRecipient || 'safe recipient'}</strong> using the official event day theme.
                     </>
                   ) : (
                     <>
-                      Simulated time (<strong>{testTime}</strong>) is before configured dispatch time (<strong>{configuredDispatchTime}</strong>).
-                      Passes will be generated in <code className="font-mono bg-white/80 px-1 rounded">PENDING</code> email status. Test emails will NOT be dispatched until simulated time reaches delivery time.
+                      Simulated time (<strong>{simulatedCurrentTime}</strong>) is before production dispatch time (<strong>{configuredDispatchTime}</strong>).
+                      Simulation will automatically trigger pass generation when the clock reaches <strong>{configuredDispatchTime}</strong>.
                     </>
                   )}
                 </p>
               </div>
 
-              {/* Primary Action Button */}
-              <button
-                type="button"
-                onClick={handleSimulateDelivery}
-                disabled={simulating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
-                className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isDueLive
-                    ? 'bg-maroon hover:bg-maroon-dark text-white'
-                    : 'bg-amber-700 hover:bg-amber-800 text-white'
-                }`}
-              >
-                {simulating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Evaluating Schedule & Processing Passes...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4 text-gold-light" />
-                    <span>
-                      {isDueLive
-                        ? `Simulate QR Delivery & Send Test Emails (${eligiblePeople.length} eligible)`
-                        : `Generate Test Passes in Pending State (${eligiblePeople.length} eligible)`}
-                    </span>
-                  </>
-                )}
-              </button>
+              {/* Simulation Controls in Step 3 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleStartSimulation}
+                  disabled={isSimulating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
+                  className="py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-maroon hover:bg-maroon-dark text-white"
+                >
+                  <Zap className="w-4 h-4 text-gold-light" />
+                  <span>
+                    {isSimulating ? 'Simulation in Progress...' : `Start 10-Min Simulation (${eligiblePeople.length} eligible)`}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRunInstantWindow}
+                  disabled={simulating || isSimulating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
+                  className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <span>Instant Run (Full Window)</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1112,6 +1543,7 @@ export default function EmployeeDailyPassTestLabPage() {
                     <th className="py-2.5 px-3">Event Date</th>
                     <th className="py-2.5 px-3">Pass Status</th>
                     <th className="py-2.5 px-3">Email Status</th>
+                    <th className="py-2.5 px-3">Delivery Time</th>
                     <th className="py-2.5 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1191,6 +1623,16 @@ export default function EmployeeDailyPassTestLabPage() {
                             {p.emailStatus === 'SENT' && <Check className="w-3 h-3 text-emerald-600" />}
                             {p.emailStatus}
                           </span>
+                        </td>
+
+                        {/* Delivery Time (Simulated vs Real) */}
+                        <td className="py-2.5 px-3">
+                          <div className="font-mono text-[11px] font-bold text-ink">
+                            Simulated: {p.simulatedDispatchTime || configuredDispatchTime}
+                          </div>
+                          <div className="text-[9px] text-stone-400 font-mono">
+                            Real: {p.realCreatedAt ? new Date(p.realCreatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : (p.createdAt ? new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—')}
+                          </div>
                         </td>
 
                         {/* Actions */}

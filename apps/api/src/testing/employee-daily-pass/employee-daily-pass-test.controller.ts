@@ -25,6 +25,7 @@ import {
   CleanupAllDto,
   DispatchScheduleCheckDto,
   SimulateDeliveryDto,
+  SimulateWindowDto,
 } from './employee-daily-pass-test.dto';
 
 @ApiTags('Super Admin Employee Daily Pass Test Lab')
@@ -43,9 +44,9 @@ export class EmployeeDailyPassTestController {
 
   @Get('recent-passes')
   @ApiOperation({ summary: 'List recent test passes generated in the test lab' })
-  async getRecentTestPasses(@Req() req: Request) {
+  async getRecentTestPasses(@Query('sessionId') sessionId: string | undefined, @Req() req: Request) {
     const adminUser = (req as any).user;
-    return this.testService.getRecentTestPasses(adminUser);
+    return this.testService.getRecentTestPasses(adminUser, sessionId);
   }
 
   @Get('dispatch-schedule')
@@ -66,6 +67,13 @@ export class EmployeeDailyPassTestController {
   async simulateDelivery(@Body() dto: SimulateDeliveryDto, @Req() req: Request) {
     const adminUser = (req as any).user;
     return this.testService.simulateDelivery(dto, adminUser);
+  }
+
+  @Post('simulate-window')
+  @ApiOperation({ summary: 'Simulate automatic 10-minute test window progressing minute-by-minute against production dispatch schedule' })
+  async simulateWindow(@Body() dto: SimulateWindowDto, @Req() req: Request) {
+    const adminUser = (req as any).user;
+    return this.testService.simulateWindow(dto, adminUser);
   }
 
   @Post('generate')

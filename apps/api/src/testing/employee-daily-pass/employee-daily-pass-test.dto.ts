@@ -75,6 +75,41 @@ export class SimulateDeliveryDto {
   testSessionId?: string;
 }
 
+export class SimulateWindowDto {
+  @ApiPropertyOptional({ description: 'Array of employee IDs selected' })
+  @IsOptional()
+  employeeIds?: (string | number)[];
+
+  @ApiPropertyOptional({ description: 'ID of single attendee for backward compatibility' })
+  @IsOptional()
+  attendeeId?: string | number;
+
+  @ApiProperty({ description: 'Simulated event date (YYYY-MM-DD)', example: '2026-10-11' })
+  @IsString()
+  @IsNotEmpty()
+  simulatedDate: string;
+
+  @ApiProperty({ description: 'Simulation start time (HH:mm)', example: '15:40' })
+  @IsString()
+  @IsNotEmpty()
+  simulatedStartTime: string;
+
+  @ApiPropertyOptional({ description: 'Designated safe test email recipient', example: 'admin@example.com' })
+  @IsOptional()
+  @IsString()
+  testRecipientEmail?: string;
+
+  @ApiPropertyOptional({ description: 'Test session ID' })
+  @IsOptional()
+  @IsString()
+  testSessionId?: string;
+
+  @ApiPropertyOptional({ description: 'Whether to auto-cleanup test passes after 10-minute window evaluation', example: true })
+  @IsOptional()
+  @IsBoolean()
+  autoCleanup?: boolean;
+}
+
 export class SendTestEmailDto {
   @ApiProperty({ description: 'QR Token of the generated test daily pass' })
   @IsString()

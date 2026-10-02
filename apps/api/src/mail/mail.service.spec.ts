@@ -664,4 +664,150 @@ describe('MailService (Hostinger Mail API)', () => {
       errorSpy.mockRestore();
     });
   });
+
+  describe('Employee Daily Pass Email Template & Event Day Themes', () => {
+    let testService: MailService;
+
+    beforeEach(async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          MailService,
+          {
+            provide: ConfigService,
+            useValue: {
+              get: jest.fn((key: string) => {
+                if (key === 'HOSTINGER_MAIL_API_KEY') return 'mock_key';
+                if (key === 'HOSTINGER_MAILBOX') return 'ticket@ongcnavratri.tech';
+                if (key === 'APP_URL') return 'https://ongcnavratri.reworkzone.in';
+                if (key === 'API_URL') return 'https://api-ongcnavratri.reworkzone.in';
+                return undefined;
+              }),
+            },
+          },
+        ],
+      }).compile();
+
+      testService = module.get<MailService>(MailService);
+    });
+
+    it('renders Oct 11 SHUBH AARAMBH theme with #7A1930 and #C59B27', async () => {
+      const preview = await testService.previewEmployeeDailyPassEmail({
+        recipientEmail: 'emp@ongc.co.in',
+        employeeName: 'Rajesh Kumar',
+        attendeeName: 'Rajesh Kumar',
+        relation: 'Self',
+        cpf: '12345',
+        department: 'Drilling',
+        eventDate: '2026-10-11',
+        ticketNumber: 'TK-EMP-20261011-0001',
+        qrToken: 'tok_rajesh_11',
+      });
+
+      expect(preview.subject).toContain('Night 1');
+      expect(preview.subject).toContain('11 October 2026');
+      expect(preview.html).toContain('#7A1930'); // Primary
+      expect(preview.html).toContain('#C59B27'); // Secondary/accent
+      expect(preview.html).toContain('SHUBH AARAMBH');
+      expect(preview.html).toContain('PASS HOLDER: EMPLOYEE');
+      expect(preview.html).toContain('Rajesh Kumar');
+      expect(preview.html).toContain('12345');
+      expect(preview.html).toContain('TK-EMP-20261011-0001');
+      expect(preview.html).toContain('VALID STRICTLY ON 11 OCTOBER 2026');
+    });
+
+    it('renders Oct 13 RAAS RANG theme with #0D5C5A and #D4AF37, not using #7A1930', async () => {
+      const preview = await testService.previewEmployeeDailyPassEmail({
+        recipientEmail: 'emp@ongc.co.in',
+        employeeName: 'Rajesh Kumar',
+        attendeeName: 'Rajesh Kumar',
+        relation: 'Self',
+        cpf: '12345',
+        department: 'Drilling',
+        eventDate: '2026-10-13',
+        ticketNumber: 'TK-EMP-20261013-0002',
+        qrToken: 'tok_rajesh_13',
+      });
+
+      expect(preview.subject).toContain('Night 3');
+      expect(preview.subject).toContain('13 October 2026');
+      expect(preview.html).toContain('#0D5C5A'); // Primary peacock teal
+      expect(preview.html).toContain('#D4AF37'); // Secondary gold
+      expect(preview.html).toContain('RAAS RANG');
+      // Must NOT use default maroon for guidelines or borders
+      expect(preview.html).not.toContain('color: #7A1930');
+      expect(preview.html).not.toContain('border-top: 6px solid #7A1930');
+      expect(preview.html).toContain('border-top: 6px solid #0D5C5A');
+      expect(preview.html).toContain('border: 1px solid #D4AF37; border-left: 4px solid #0D5C5A');
+    });
+
+    it('renders Oct 15 AHMEDABAD HERITAGE theme with #1B2E5D and #C59B27', async () => {
+      const preview = await testService.previewEmployeeDailyPassEmail({
+        recipientEmail: 'priya@example.com',
+        employeeName: 'Rajesh Kumar',
+        attendeeName: 'Priya Kumar',
+        relation: 'Spouse',
+        cpf: '12345',
+        department: 'Drilling',
+        eventDate: '2026-10-15',
+        ticketNumber: 'TK-EMP-20261015-0003',
+        qrToken: 'tok_priya_15',
+      });
+
+      expect(preview.subject).toContain('Night 5');
+      expect(preview.subject).toContain('15 October 2026');
+      expect(preview.html).toContain('#1B2E5D'); // Primary indigo
+      expect(preview.html).toContain('#C59B27'); // Secondary antique gold
+      expect(preview.html).toContain('AHMEDABAD HERITAGE');
+      expect(preview.html).toContain('PASS HOLDER: FAMILY MEMBER');
+      expect(preview.html).toContain('Priya Kumar');
+      expect(preview.html).toContain('Primary Employee:');
+      expect(preview.html).toContain('Rajesh Kumar');
+      expect(preview.html).toContain('Employee CPF:');
+      expect(preview.html).toContain('12345');
+      expect(preview.html).toContain('Relationship:');
+      expect(preview.html).toContain('Spouse');
+      expect(preview.html).toContain('VALID STRICTLY ON 15 OCTOBER 2026');
+    });
+
+    it('renders Oct 19 GRAND FINALE theme with #540D24 and #C59B27', async () => {
+      const preview = await testService.previewEmployeeDailyPassEmail({
+        recipientEmail: 'emp@ongc.co.in',
+        employeeName: 'Rajesh Kumar',
+        attendeeName: 'Rajesh Kumar',
+        relation: 'Self',
+        cpf: '12345',
+        department: 'Drilling',
+        eventDate: '2026-10-19',
+        ticketNumber: 'TK-EMP-20261019-0009',
+        qrToken: 'tok_rajesh_19',
+      });
+
+      expect(preview.subject).toContain('Night 9');
+      expect(preview.subject).toContain('19 October 2026');
+      expect(preview.html).toContain('#540D24'); // Primary burgundy
+      expect(preview.html).toContain('#C59B27'); // Secondary antique gold
+      expect(preview.html).toContain('GRAND FINALE');
+      expect(preview.html).toContain('border-top: 6px solid #540D24');
+      expect(preview.html).toContain('VALID STRICTLY ON 19 OCTOBER 2026');
+    });
+
+    it('does not include morning assumptions or fixed delivery time phrases in email copy', async () => {
+      const preview = await testService.previewEmployeeDailyPassEmail({
+        recipientEmail: 'emp@ongc.co.in',
+        employeeName: 'Rajesh Kumar',
+        attendeeName: 'Rajesh Kumar',
+        relation: 'Self',
+        cpf: '12345',
+        department: 'Drilling',
+        eventDate: '2026-10-13',
+        ticketNumber: 'TK-EMP-20261013-0002',
+        qrToken: 'tok_rajesh_13',
+      });
+
+      expect(preview.html.toLowerCase()).not.toContain('each event morning');
+      expect(preview.html.toLowerCase()).not.toContain('this morning');
+      expect(preview.text.toLowerCase()).not.toContain('each event morning');
+      expect(preview.text.toLowerCase()).not.toContain('this morning');
+    });
+  });
 });

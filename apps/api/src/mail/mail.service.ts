@@ -892,7 +892,7 @@ Reworkzone.com (https://reworkzone.com)
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FAF6EF; padding: 24px 12px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA; border-top: 6px solid ${dayTheme.primaryColor};">
           <!-- BRAND HEADER -->
           <tr>
             <td style="background-color: #FFFFFF; border-top: 4px solid ${dayTheme.primaryColor}; border-bottom: 2px solid ${dayTheme.secondaryColor}; padding: 24px 20px 18px 20px; text-align: center;">
@@ -957,17 +957,21 @@ Reworkzone.com (https://reworkzone.com)
                       ${this.escapeHtml(presentation.attendeeName)}
                     </div>
                     <div style="font-size: 11px; font-weight: 800; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">
-                      PASS HOLDER: ${presentation.passHolderLabel.toUpperCase()}
+                      PASS HOLDER: ${presentation.isFamily ? 'FAMILY MEMBER' : 'EMPLOYEE'}
                     </div>
 
                     <!-- ATTENDEE / PRIMARY EMPLOYEE METADATA -->
                     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #FAF8F5; border-radius: 10px; border: 1px solid #EADDCF; margin-bottom: 14px; text-align: left;">
                       <tr>
                         <td style="padding: 10px 14px; font-size: 11px; line-height: 1.6; color: #4A3B32;">
+                          <div><strong>Pass Holder:</strong> <span style="color: ${dayTheme.primaryColor}; font-weight: 800;">${presentation.isFamily ? 'FAMILY MEMBER' : 'EMPLOYEE'}</span></div>
                           ${presentation.isFamily ? `
+                            <div><strong>Attendee Name:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.attendeeName)}</span></div>
+                            <div><strong>Relationship:</strong> <span style="color: #1A1A1A;">${this.escapeHtml(presentation.relation)}</span></div>
                             <div><strong>Primary Employee:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.primaryEmployeeName)}</span></div>
                             <div><strong>Employee CPF:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.employeeCpf)}</span></div>
                           ` : `
+                            <div><strong>Employee Name:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.attendeeName)}</span></div>
                             <div><strong>Employee CPF:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.employeeCpf)}</span></div>
                             <div><strong>Department:</strong> <span style="color: #1A1A1A;">${this.escapeHtml(presentation.department)}</span></div>
                           `}
@@ -1034,14 +1038,14 @@ Reworkzone.com (https://reworkzone.com)
                 <p style="font-size: 13px; font-weight: 700; color: #2A1810; margin: 0 0 4px 0;">
                   Please show this QR at the entry gate.
                 </p>
-                <p style="font-size: 12px; font-weight: 600; color: #8A2846; margin: 0;">
+                <p style="font-size: 12px; font-weight: 600; color: ${dayTheme.primaryColor}; margin: 0;">
                   This QR is valid only for the date shown on the ticket (${dayTheme.fullDateLabel}).
                 </p>
               </div>
 
               <!-- GUIDELINES -->
-              <div style="background-color: #FAF5F0; border: 1px solid #D4AF37; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px;">
-                <h4 style="font-size: 12px; font-weight: 800; color: #7A1930; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">
+              <div style="background-color: #FAF5F0; border: 1px solid ${dayTheme.secondaryColor}; border-left: 4px solid ${dayTheme.primaryColor}; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px;">
+                <h4 style="font-size: 12px; font-weight: 800; color: ${dayTheme.primaryColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">
                   ENTRY GUIDELINES
                 </h4>
                 <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #4A3B32; line-height: 1.6;">

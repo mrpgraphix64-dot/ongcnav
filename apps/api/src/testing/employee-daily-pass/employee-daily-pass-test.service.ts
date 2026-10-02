@@ -29,6 +29,7 @@ import {
   ScannerTestDto,
   DispatchScheduleCheckDto,
   SimulateDeliveryDto,
+  SimulateWindowDto,
 } from './employee-daily-pass-test.dto';
 
 @Injectable()
@@ -934,14 +935,20 @@ export class EmployeeDailyPassTestService {
 
   /**
    * Retrieves active test passes generated in the test lab.
+   * If testSessionId is provided, restricts results strictly to the specified session.
    */
-  async getRecentTestPasses(adminUser: any) {
+  async getRecentTestPasses(adminUser: any, testSessionId?: string) {
     if (adminUser?.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Only SUPER_ADMIN can view test lab passes.');
     }
 
+    const where: any = { isTest: true };
+    if (testSessionId && testSessionId.trim()) {
+      where.testSessionId = testSessionId.trim();
+    }
+
     const passes = await this.prisma.dailyEmployeePass.findMany({
-      where: { isTest: true },
+      where,
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: {
@@ -1370,6 +1377,20 @@ export class EmployeeDailyPassTestService {
       dto.testSessionId?.trim() ||
       `EMP-SIM-${dto.simulatedDate.replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 
+    // Session isolation: purge stale test passes from prior sessions for these attendees on this date
+    // so older timestamps and older SENT statuses never leak into the new session.
+    const eligibleAttendeeIds = eligibleAttendees.map((a) => a.id);
+    if (eligibleAttendeeIds.length > 0) {
+      await this.prisma.dailyEmployeePass.deleteMany({
+        where: {
+          attendeeId: { in: eligibleAttendeeIds },
+          eventDate: dto.simulatedDate,
+          isTest: true,
+          testSessionId: { not: sessionId },
+        },
+      });
+    }
+
     const resultPasses: any[] = [];
     let newlyGeneratedCount = 0;
     let existingCount = 0;
@@ -1377,12 +1398,13 @@ export class EmployeeDailyPassTestService {
     let emailsSkippedCount = 0;
 
     for (const attendee of eligibleAttendees) {
-      // Idempotency: reuse existing test pass if already generated for this attendee, date, and isTest: true
+      // Reuse pass if already generated in THIS specific test session (idempotency within current session)
       const existingPass = await this.prisma.dailyEmployeePass.findFirst({
         where: {
           attendeeId: attendee.id,
           eventDate: dto.simulatedDate,
           isTest: true,
+          testSessionId: sessionId,
         },
       });
 
@@ -1489,6 +1511,10 @@ export class EmployeeDailyPassTestService {
         emailStatus,
         dayTheme,
         presentation,
+        simulatedDispatchTime: isDue ? configuredDispatchTime : null,
+        simulatedEventTime: simulatedTime,
+        realCreatedAt: pass.createdAt,
+        realEmailSentAt: pass.emailSentAt,
         createdAt: pass.createdAt,
       });
     }
@@ -1518,6 +1544,7 @@ export class EmployeeDailyPassTestService {
       simulatedDate: dto.simulatedDate,
       simulatedTime,
       configuredDispatchTime,
+      simulatedDispatchTime: isDue ? configuredDispatchTime : null,
       passes: resultPasses,
       ineligible: ineligibleAttendees,
       totalEmployees,
@@ -1530,6 +1557,130 @@ export class EmployeeDailyPassTestService {
       emailsSkippedCount,
       message,
       testSessionId: sessionId,
+    };
+  }
+
+  /**
+   * Automatically evaluates the 10-minute simulation test window from simulatedStartTime to simulatedStartTime + 10 mins.
+   * Progresses simulated time minute-by-minute against the official production dispatch schedule.
+   * When simulatedTime reaches or exceeds production dispatch time, generates passes and sends test emails to safe recipient.
+   * When window completes, optionally auto-cleans up test passes.
+   */
+  async simulateWindow(dto: SimulateWindowDto, adminUser: any) {
+    if (adminUser?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can run simulated window.');
+    }
+
+    if (!dto.simulatedDate || !isOfficialEventDate(dto.simulatedDate)) {
+      throw new BadRequestException(
+        `Invalid simulated date: "${dto.simulatedDate}". Allowed dates: ${OFFICIAL_EVENT_DATES.join(', ')}`,
+      );
+    }
+
+    const effectiveSchedule = await this.getEffectiveDispatchSchedule();
+    const productionDispatchTime = (
+      effectiveSchedule[dto.simulatedDate] ||
+      DEFAULT_DISPATCH_SCHEDULE[dto.simulatedDate] ||
+      '18:00'
+    ).trim();
+
+    const startTimeStr = (dto.simulatedStartTime || '15:40').trim();
+    const [startH, startM] = startTimeStr.split(':').map((v) => parseInt(v, 10) || 0);
+    const [dispH, dispM] = productionDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
+
+    const startTotalMinutes = startH * 60 + startM;
+    const dispTotalMinutes = dispH * 60 + dispM;
+
+    const sessionId =
+      dto.testSessionId?.trim() ||
+      `EMP-WIN-${dto.simulatedDate.replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+    // Helper to format minutes back to HH:mm
+    const formatMinutes = (totalMins: number) => {
+      const normalized = ((totalMins % 1440) + 1440) % 1440;
+      const h = Math.floor(normalized / 60);
+      const m = normalized % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    // Construct 10-minute timeline (minutes 0 through 10)
+    const timeline: Array<{
+      minute: number;
+      time: string;
+      isDue: boolean;
+      status: string;
+    }> = [];
+
+    let dispatchSatisfiedMinute: number | null = null;
+    let dispatchSatisfiedTime: string | null = null;
+
+    for (let m = 0; m <= 10; m++) {
+      const stepMinutes = startTotalMinutes + m;
+      const timeStr = formatMinutes(stepMinutes);
+      const isDue = stepMinutes >= dispTotalMinutes;
+
+      if (isDue && dispatchSatisfiedMinute === null) {
+        dispatchSatisfiedMinute = m;
+        dispatchSatisfiedTime = timeStr;
+      }
+
+      timeline.push({
+        minute: m,
+        time: timeStr,
+        isDue,
+        status: isDue ? 'DISPATCH_CONDITION_SATISFIED' : 'WAITING_FOR_DISPATCH',
+      });
+    }
+
+    // Execute delivery simulation at the dispatch time if condition was satisfied,
+    // or at start time in WAITING status if condition was not satisfied.
+    const evaluationTime = dispatchSatisfiedTime || startTimeStr;
+    const deliveryResult = await this.simulateDelivery(
+      {
+        employeeIds: dto.employeeIds,
+        attendeeId: dto.attendeeId,
+        simulatedDate: dto.simulatedDate,
+        simulatedTime: evaluationTime,
+        configuredDispatchTime: productionDispatchTime,
+        testRecipientEmail: dto.testRecipientEmail,
+        testSessionId: sessionId,
+      },
+      adminUser,
+    );
+
+    let cleanedUp = false;
+    if (dto.autoCleanup) {
+      await this.cleanupTestSession(sessionId, adminUser);
+      cleanedUp = true;
+    }
+
+    const dayTheme = getEventDayTheme(dto.simulatedDate);
+    const endTimeStr = timeline[10].time;
+
+    let message: string;
+    if (dispatchSatisfiedMinute !== null) {
+      message = `Automatic 10-minute simulation window (${startTimeStr} → ${endTimeStr}) complete for ${dayTheme.fullDateLabel}. Production dispatch condition satisfied at ${dispatchSatisfiedTime} (production: ${productionDispatchTime}). ${deliveryResult.emailsSentCount || 0} test email(s) dispatched to safe recipient.`;
+    } else {
+      message = `Automatic 10-minute simulation window (${startTimeStr} → ${endTimeStr}) complete for ${dayTheme.fullDateLabel}. Production dispatch time (${productionDispatchTime}) was not reached. 0 passes dispatched.`;
+    }
+
+    return {
+      success: true,
+      testSessionId: sessionId,
+      eventDate: dto.simulatedDate,
+      productionDispatchTime,
+      simulatedStartTime: startTimeStr,
+      simulatedEndTime: endTimeStr,
+      dispatchSatisfiedMinute,
+      dispatchSatisfiedTime,
+      isDue: dispatchSatisfiedMinute !== null,
+      timeline,
+      passes: deliveryResult.passes || [],
+      emailsSentCount: deliveryResult.emailsSentCount || 0,
+      totalEligible: deliveryResult.totalEligible || 0,
+      totalPasses: deliveryResult.totalPasses || 0,
+      message,
+      cleanedUp,
     };
   }
 }
