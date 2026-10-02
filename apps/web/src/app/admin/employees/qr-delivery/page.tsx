@@ -91,10 +91,17 @@ export default function DailyQrDeliveryPage() {
 
   // Dispatch schedule state
   const [schedule, setSchedule] = useState<EmployeeDispatchSchedule | null>(null);
-  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [scheduleTime, setScheduleTime] = useState('17:00');
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
+
+  // Active date tracking to prevent out-of-order race conditions
+  const activeDateRef = React.useRef(selectedDate);
+  useEffect(() => {
+    activeDateRef.current = selectedDate;
+  }, [selectedDate]);
 
   // Load stats for current selected date
   const loadStats = useCallback(async () => {
@@ -111,18 +118,52 @@ export default function DailyQrDeliveryPage() {
 
   // Load schedule for current selected date
   const loadSchedule = useCallback(async () => {
+    const targetDate = selectedDate;
     setScheduleLoading(true);
+    setScheduleError(null);
     try {
-      const data = await fetchApi<EmployeeDispatchSchedule>(
-        `/admin/employees/daily-passes/dispatch-schedule?date=${selectedDate}`
-      );
-      setSchedule(data);
-      setScheduleTime(data?.dispatchTime || '17:00');
-      setScheduleEnabled(data?.enabled ?? false);
+      const res = await fetchApi<{
+        schedule?: EmployeeDispatchSchedule | null;
+        defaultDispatchTime?: string;
+        dispatchTime?: string;
+        enabled?: boolean;
+      }>(`/admin/employees/daily-passes/dispatch-schedule?date=${targetDate}`);
+
+      // Avoid overwriting if user already switched date
+      if (activeDateRef.current !== targetDate) {
+        return;
+      }
+
+      // Check whether response was { schedule } or direct object
+      const loadedSchedule =
+        res && 'schedule' in res
+          ? res.schedule
+          : res && typeof res === 'object' && 'dispatchTime' in res
+          ? (res as unknown as EmployeeDispatchSchedule)
+          : null;
+
+      const fallbackTime = res?.defaultDispatchTime || '17:00';
+
+      if (loadedSchedule) {
+        setSchedule(loadedSchedule);
+        setScheduleTime(loadedSchedule.dispatchTime || fallbackTime);
+        setScheduleEnabled(Boolean(loadedSchedule.enabled));
+      } else {
+        // No schedule configured yet
+        setSchedule(null);
+        setScheduleTime(fallbackTime);
+        setScheduleEnabled(false);
+      }
     } catch (err: any) {
-      console.error('Failed to load dispatch schedule:', err);
+      if (activeDateRef.current === targetDate) {
+        console.error('Failed to load dispatch schedule:', err);
+        setScheduleError(err.message || 'Failed to load schedule');
+        setSchedule(null);
+      }
     } finally {
-      setScheduleLoading(false);
+      if (activeDateRef.current === targetDate) {
+        setScheduleLoading(false);
+      }
     }
   }, [selectedDate]);
 
@@ -235,7 +276,13 @@ export default function DailyQrDeliveryPage() {
   const handleSaveSchedule = async () => {
     setSavingSchedule(true);
     try {
-      const res = await fetchApi<{ success: boolean; schedule: EmployeeDispatchSchedule }>(
+      const res = await fetchApi<{
+        success?: boolean;
+        message?: string;
+        schedule?: EmployeeDispatchSchedule;
+        dispatchTime?: string;
+        enabled?: boolean;
+      }>(
         '/admin/employees/daily-passes/dispatch-schedule',
         {
           method: 'POST',
@@ -246,15 +293,40 @@ export default function DailyQrDeliveryPage() {
           }),
         }
       );
-      setSchedule(res.schedule);
-      setScheduleTime(res.schedule.dispatchTime);
-      setScheduleEnabled(res.schedule.enabled);
-      setActionMessage({
-        type: 'success',
-        text: `Dispatch schedule for ${formatDateDisplay(selectedDate)} saved: ${
-          res.schedule.enabled ? 'ON' : 'OFF'
-        } at ${formatTimeTo12Hour(res.schedule.dispatchTime)} IST.`,
-      });
+
+      const savedSchedule =
+        res && 'schedule' in res && res.schedule
+          ? res.schedule
+          : res && typeof res === 'object' && 'dispatchTime' in res
+          ? (res as unknown as EmployeeDispatchSchedule)
+          : null;
+
+      if (savedSchedule) {
+        setSchedule(savedSchedule);
+        setScheduleTime(savedSchedule.dispatchTime);
+        setScheduleEnabled(Boolean(savedSchedule.enabled));
+        setActionMessage({
+          type: 'success',
+          text: `Dispatch schedule for ${formatDateDisplay(selectedDate)} saved: ${
+            savedSchedule.enabled ? 'ON' : 'OFF'
+          } at ${formatTimeTo12Hour(savedSchedule.dispatchTime)} IST.`,
+        });
+      } else {
+        const fallbackSched: EmployeeDispatchSchedule = {
+          eventDate: selectedDate,
+          dispatchTime: scheduleTime,
+          timezone: 'Asia/Kolkata',
+          enabled: scheduleEnabled,
+          updatedAt: new Date().toISOString(),
+        };
+        setSchedule(fallbackSched);
+        setActionMessage({
+          type: 'success',
+          text: `Dispatch schedule for ${formatDateDisplay(selectedDate)} saved: ${
+            scheduleEnabled ? 'ON' : 'OFF'
+          } at ${formatTimeTo12Hour(scheduleTime)} IST.`,
+        });
+      }
     } catch (err: any) {
       setActionMessage({
         type: 'error',
@@ -266,6 +338,32 @@ export default function DailyQrDeliveryPage() {
   };
 
   const getNextDispatchDisplay = () => {
+    if (scheduleLoading) {
+      return {
+        statusText: 'Loading schedule configuration...',
+        colorClass: 'text-stone-500',
+        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
+      };
+    }
+
+    if (scheduleError) {
+      return {
+        statusText: `Error loading schedule: ${scheduleError}`,
+        colorClass: 'text-rose-600',
+        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+      };
+    }
+
+    // No schedule saved in database yet
+    if (!schedule) {
+      return {
+        statusText: 'Automatic dispatch is not configured for this date.',
+        colorClass: 'text-stone-500',
+        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
+      };
+    }
+
+    // Saved schedule exists, but is disabled
     if (!scheduleEnabled) {
       return {
         statusText: 'Automatic dispatch is disabled for this date.',
@@ -274,7 +372,16 @@ export default function DailyQrDeliveryPage() {
       };
     }
 
-    if (schedule?.lastRunStatus === 'SUCCESS' && schedule?.lastRunAt) {
+    // Saved schedule is enabled — check execution state
+    if (schedule.lastRunStatus === 'RUNNING') {
+      return {
+        statusText: 'Automatic dispatch is currently running...',
+        colorClass: 'text-blue-700 animate-pulse',
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+      };
+    }
+
+    if (schedule.lastRunStatus === 'SUCCESS' && schedule.lastRunAt) {
       const runDate = new Date(schedule.lastRunAt);
       const runTimeStr = runDate.toLocaleTimeString('en-IN', {
         timeZone: 'Asia/Kolkata',
@@ -289,9 +396,52 @@ export default function DailyQrDeliveryPage() {
       };
     }
 
+    if (schedule.lastRunStatus === 'PARTIAL_FAILURE') {
+      return {
+        statusText: `Automatic dispatch partially failed: ${schedule.lastFailedCount || 0} email(s) failed.`,
+        colorClass: 'text-amber-700',
+        badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+      };
+    }
+
+    if (schedule.lastRunStatus === 'FAILED') {
+      return {
+        statusText: `Automatic dispatch execution failed: ${schedule.lastRunMessage || 'Check server logs'}.`,
+        colorClass: 'text-rose-700',
+        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+      };
+    }
+
+    // Scheduled, has not run yet — compare selectedDate with current IST date
     const d = new Date(`${selectedDate}T00:00:00`);
     const dayName = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
     const timeFormatted = formatTimeTo12Hour(scheduleTime);
+
+    // Compute current IST date string (YYYY-MM-DD)
+    const istParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const istYear = istParts.find((p) => p.type === 'year')?.value || '';
+    const istMonth = istParts.find((p) => p.type === 'month')?.value || '';
+    const istDay = istParts.find((p) => p.type === 'day')?.value || '';
+    const currentIstDate = `${istYear}-${istMonth}-${istDay}`;
+
+    if (selectedDate === currentIstDate) {
+      return {
+        statusText: `Automatic dispatch scheduled for Today at ${timeFormatted} IST.`,
+        colorClass: 'text-emerald-800 font-bold',
+        badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+      };
+    } else if (selectedDate < currentIstDate) {
+      return {
+        statusText: `Event date has passed (${formatDateDisplay(selectedDate)}).`,
+        colorClass: 'text-stone-500',
+        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
+      };
+    }
 
     return {
       statusText: `Automatic dispatch scheduled for ${dayName} at ${timeFormatted} IST.`,
@@ -339,17 +489,28 @@ export default function DailyQrDeliveryPage() {
             {/* COMPACT AUTO-DISPATCH PILL */}
             <div
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
-                scheduleEnabled
+                scheduleLoading
+                  ? 'bg-stone-100 text-stone-500 border-stone-200'
+                  : scheduleError
+                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : !schedule
+                  ? 'bg-stone-100 text-stone-600 border-stone-200'
+                  : schedule.enabled
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   : 'bg-stone-100 text-stone-600 border-stone-200'
               }`}
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className={`w-3.5 h-3.5 ${scheduleLoading ? 'animate-spin' : ''}`} />
               <span>
-                Auto-Dispatch:{' '}
-                {scheduleEnabled
-                  ? `ON (${formatTimeTo12Hour(scheduleTime)} IST)`
-                  : 'OFF'}
+                {scheduleLoading
+                  ? 'Auto-Dispatch: Loading...'
+                  : scheduleError
+                  ? 'Auto-Dispatch: Error'
+                  : !schedule
+                  ? 'Auto-Dispatch: Not Configured'
+                  : schedule.enabled
+                  ? `Auto-Dispatch: ON (${formatTimeTo12Hour(schedule.dispatchTime || scheduleTime)} IST)`
+                  : 'Auto-Dispatch: OFF'}
               </span>
             </div>
 
@@ -512,17 +673,39 @@ export default function DailyQrDeliveryPage() {
           <div className="flex items-center gap-2">
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold border ${
-                scheduleEnabled
+                scheduleLoading
+                  ? 'bg-stone-100 text-stone-500 border-stone-200'
+                  : scheduleError
+                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : !schedule
+                  ? 'bg-stone-100 text-stone-600 border-stone-200'
+                  : scheduleEnabled
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   : 'bg-stone-100 text-stone-600 border-stone-200'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full shrink-0 ${
-                  scheduleEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'
+                  scheduleLoading
+                    ? 'bg-stone-400 animate-pulse'
+                    : scheduleError
+                    ? 'bg-rose-500'
+                    : !schedule
+                    ? 'bg-stone-400'
+                    : scheduleEnabled
+                    ? 'bg-emerald-500 animate-pulse'
+                    : 'bg-stone-400'
                 }`}
               />
-              Auto-Dispatch: {scheduleEnabled ? `ON (${formatTimeTo12Hour(scheduleTime)} IST)` : 'OFF'}
+              {scheduleLoading
+                ? 'Loading...'
+                : scheduleError
+                ? 'Error'
+                : !schedule
+                ? 'Not Configured'
+                : scheduleEnabled
+                ? `Auto-Dispatch: ON (${formatTimeTo12Hour(scheduleTime)} IST)`
+                : 'Auto-Dispatch: OFF'}
             </span>
           </div>
         </div>
@@ -547,8 +730,9 @@ export default function DailyQrDeliveryPage() {
             <div className="p-1 rounded-xl border border-stone-200 bg-stone-50 flex items-center">
               <button
                 type="button"
+                disabled={scheduleLoading}
                 onClick={() => setScheduleEnabled(true)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
                   scheduleEnabled
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-stone-600 hover:text-ink'
@@ -558,8 +742,9 @@ export default function DailyQrDeliveryPage() {
               </button>
               <button
                 type="button"
+                disabled={scheduleLoading}
                 onClick={() => setScheduleEnabled(false)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
                   !scheduleEnabled
                     ? 'bg-stone-600 text-white shadow-xs'
                     : 'text-stone-600 hover:text-ink'
@@ -578,8 +763,9 @@ export default function DailyQrDeliveryPage() {
             <input
               type="time"
               value={scheduleTime}
+              disabled={scheduleLoading}
               onChange={(e) => setScheduleTime(e.target.value)}
-              className="w-full p-2 rounded-xl border border-stone-200 bg-white font-outfit font-bold text-sm text-ink focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon cursor-pointer"
+              className="w-full p-2 rounded-xl border border-stone-200 bg-white font-outfit font-bold text-sm text-ink focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon cursor-pointer disabled:opacity-50"
             />
           </div>
 

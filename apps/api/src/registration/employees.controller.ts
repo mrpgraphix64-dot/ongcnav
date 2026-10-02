@@ -17,7 +17,7 @@ import { UpsertDispatchScheduleDto } from './dto/dispatch-schedule.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@ongc/shared-types';
+import { UserRole, DEFAULT_DISPATCH_SCHEDULE } from '@ongc/shared-types';
 
 @ApiTags('Admin Employees & Pass Registry')
 @ApiBearerAuth()
@@ -38,9 +38,15 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Get QR pass dispatch schedule for an event date or all dates' })
   async getDispatchSchedule(@Query('date') date?: string) {
     if (date) {
-      return this.dispatchSchedulerService.getScheduleForDate(date);
+      const schedule = await this.dispatchSchedulerService.getScheduleForDate(date);
+      const defaultDispatchTime = DEFAULT_DISPATCH_SCHEDULE[date] || '17:00';
+      return {
+        schedule,
+        defaultDispatchTime,
+      };
     }
-    return this.dispatchSchedulerService.getAllSchedules();
+    const schedules = await this.dispatchSchedulerService.getAllSchedules();
+    return { schedules };
   }
 
   @Get('employees/daily-passes/dispatch-schedules')
@@ -51,7 +57,8 @@ export class EmployeesController {
   )
   @ApiOperation({ summary: 'Get QR pass dispatch schedules for all official event dates' })
   async getAllDispatchSchedules() {
-    return this.dispatchSchedulerService.getAllSchedules();
+    const schedules = await this.dispatchSchedulerService.getAllSchedules();
+    return { schedules };
   }
 
   @Post('employees/daily-passes/dispatch-schedule')
@@ -66,7 +73,12 @@ export class EmployeesController {
     @Req() req: Request,
   ) {
     const adminUser = (req as any).user;
-    return this.dispatchSchedulerService.upsertSchedule(dto, adminUser);
+    const schedule = await this.dispatchSchedulerService.upsertSchedule(dto, adminUser);
+    return {
+      success: true,
+      message: `Dispatch schedule for ${dto.eventDate} saved successfully`,
+      schedule,
+    };
   }
 
   @Get('pass-summary')

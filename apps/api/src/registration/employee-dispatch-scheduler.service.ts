@@ -93,9 +93,9 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
 
   /**
    * Retrieves the dispatch schedule for a specific event date.
-   * If not yet saved in database, returns default schedule settings based on DEFAULT_DISPATCH_SCHEDULE.
+   * Returns null if no schedule has been configured yet in the database.
    */
-  async getScheduleForDate(eventDate: string): Promise<EmployeeDispatchSchedule> {
+  async getScheduleForDate(eventDate: string): Promise<EmployeeDispatchSchedule | null> {
     if (!eventDate || !isOfficialEventDate(eventDate)) {
       throw new BadRequestException(
         `Invalid event date: "${eventDate}". Allowed dates: ${OFFICIAL_EVENT_DATES.join(', ')}`,
@@ -110,47 +110,39 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
     if (setting?.value) {
       try {
         const parsed = JSON.parse(setting.value);
-        return {
-          eventDate,
-          dispatchTime: parsed.dispatchTime || DEFAULT_DISPATCH_SCHEDULE[eventDate] || '18:00',
-          timezone: parsed.timezone || 'Asia/Kolkata',
-          enabled: Boolean(parsed.enabled),
-          createdAt: parsed.createdAt || null,
-          updatedAt: parsed.updatedAt || null,
-          lastRunAt: parsed.lastRunAt || null,
-          lastRunStatus: parsed.lastRunStatus || null,
-          lastRunMessage: parsed.lastRunMessage || null,
-          lastSentCount: parsed.lastSentCount ?? 0,
-          lastFailedCount: parsed.lastFailedCount ?? 0,
-        };
+        if (parsed && typeof parsed === 'object') {
+          return {
+            eventDate,
+            dispatchTime: parsed.dispatchTime || DEFAULT_DISPATCH_SCHEDULE[eventDate] || '17:00',
+            timezone: parsed.timezone || 'Asia/Kolkata',
+            enabled: Boolean(parsed.enabled),
+            createdAt: parsed.createdAt || null,
+            updatedAt: parsed.updatedAt || null,
+            lastRunAt: parsed.lastRunAt || null,
+            lastRunStatus: parsed.lastRunStatus || null,
+            lastRunMessage: parsed.lastRunMessage || null,
+            lastSentCount: parsed.lastSentCount ?? 0,
+            lastFailedCount: parsed.lastFailedCount ?? 0,
+          };
+        }
       } catch {
-        // Fall through to default if invalid JSON
+        // Fall through to null if invalid JSON
       }
     }
 
-    return {
-      eventDate,
-      dispatchTime: DEFAULT_DISPATCH_SCHEDULE[eventDate] || '18:00',
-      timezone: 'Asia/Kolkata',
-      enabled: false,
-      createdAt: null,
-      updatedAt: null,
-      lastRunAt: null,
-      lastRunStatus: null,
-      lastRunMessage: null,
-      lastSentCount: 0,
-      lastFailedCount: 0,
-    };
+    return null;
   }
 
   /**
-   * Retrieves dispatch schedules for all official event dates.
+   * Retrieves dispatch schedules for all official event dates that have been configured.
    */
   async getAllSchedules(): Promise<EmployeeDispatchSchedule[]> {
     const list: EmployeeDispatchSchedule[] = [];
     for (const date of OFFICIAL_EVENT_DATES) {
       const item = await this.getScheduleForDate(date);
-      list.push(item);
+      if (item) {
+        list.push(item);
+      }
     }
     return list;
   }
@@ -182,13 +174,13 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
       dispatchTime,
       timezone: 'Asia/Kolkata',
       enabled: Boolean(dto.enabled),
-      createdAt: existing.createdAt || nowIso,
+      createdAt: existing?.createdAt || nowIso,
       updatedAt: nowIso,
-      lastRunAt: existing.lastRunAt || null,
-      lastRunStatus: existing.lastRunStatus || null,
-      lastRunMessage: existing.lastRunMessage || null,
-      lastSentCount: existing.lastSentCount ?? 0,
-      lastFailedCount: existing.lastFailedCount ?? 0,
+      lastRunAt: existing?.lastRunAt || null,
+      lastRunStatus: existing?.lastRunStatus || null,
+      lastRunMessage: existing?.lastRunMessage || null,
+      lastSentCount: existing?.lastSentCount ?? 0,
+      lastFailedCount: existing?.lastFailedCount ?? 0,
     };
 
     await this.prisma.setting.upsert({
@@ -215,7 +207,9 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
     const map: Record<string, string> = { ...DEFAULT_DISPATCH_SCHEDULE };
     for (const d of OFFICIAL_EVENT_DATES) {
       const sched = await this.getScheduleForDate(d);
-      map[d] = sched.dispatchTime;
+      if (sched?.dispatchTime) {
+        map[d] = sched.dispatchTime;
+      }
     }
 
     try {
@@ -271,7 +265,19 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
     }
 
     // Step 3: Record dispatch execution result in the date's persistent schedule record
-    const schedule = await this.getScheduleForDate(eventDate);
+    const schedule = (await this.getScheduleForDate(eventDate)) || {
+      eventDate,
+      dispatchTime: DEFAULT_DISPATCH_SCHEDULE[eventDate] || '17:00',
+      timezone: 'Asia/Kolkata',
+      enabled: false,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      lastRunAt: null,
+      lastRunStatus: null,
+      lastRunMessage: null,
+      lastSentCount: 0,
+      lastFailedCount: 0,
+    };
     schedule.lastRunAt = now.toISOString();
     schedule.lastRunStatus = status;
     schedule.lastRunMessage = summaryMessage;
@@ -326,6 +332,12 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
 
       const schedule = await this.getScheduleForDate(currentDate);
 
+      // Schedule must be configured
+      if (!schedule) {
+        skippedDates.push(`${currentDate} (not configured)`);
+        return { checked: true, executedDates, skippedDates };
+      }
+
       // Schedule must be enabled
       if (!schedule.enabled) {
         skippedDates.push(`${currentDate} (disabled)`);
@@ -342,12 +354,27 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
         return { checked: true, executedDates, skippedDates };
       }
 
-      // Check if already executed successfully today in IST
-      if (schedule.lastRunAt && schedule.lastRunStatus === 'SUCCESS') {
+      // Check execution status for today in IST
+      if (schedule.lastRunAt) {
         const lastRunIst = getCurrentIstDateTime(new Date(schedule.lastRunAt));
         if (lastRunIst.currentDate === currentDate) {
-          skippedDates.push(`${currentDate} (already executed today at ${schedule.lastRunAt})`);
-          return { checked: true, executedDates, skippedDates };
+          if (schedule.lastRunStatus === 'SUCCESS') {
+            skippedDates.push(`${currentDate} (already executed today at ${schedule.lastRunAt})`);
+            return { checked: true, executedDates, skippedDates };
+          }
+          if (schedule.lastRunStatus === 'RUNNING') {
+            skippedDates.push(`${currentDate} (currently running)`);
+            return { checked: true, executedDates, skippedDates };
+          }
+          // Cooldown check for FAILED / PARTIAL_FAILURE to avoid hammering SMTP every 30s
+          const diffMs = (overrideNow || new Date()).getTime() - new Date(schedule.lastRunAt).getTime();
+          const cooldownMs = 15 * 60 * 1000;
+          if (diffMs < cooldownMs) {
+            skippedDates.push(
+              `${currentDate} (recently attempted at ${schedule.lastRunAt}; awaiting retry cooldown)`,
+            );
+            return { checked: true, executedDates, skippedDates };
+          }
         }
       }
 

@@ -95,17 +95,16 @@ describe('EmployeeDispatchSchedulerService', () => {
       expect(updated.enabled).toBe(false);
 
       const loaded = await service.getScheduleForDate('2026-10-11');
-      expect(loaded.dispatchTime).toBe('18:30');
-      expect(loaded.enabled).toBe(false);
+      expect(loaded).not.toBeNull();
+      expect(loaded?.dispatchTime).toBe('18:30');
+      expect(loaded?.enabled).toBe(false);
     });
   });
 
   describe('3. Load schedule by event date', () => {
-    it('returns saved schedule for a date or fallback default if not saved', async () => {
-      const defaultSchedule = await service.getScheduleForDate('2026-10-12');
-      expect(defaultSchedule.eventDate).toBe('2026-10-12');
-      expect(defaultSchedule.enabled).toBe(false);
-      expect(defaultSchedule.timezone).toBe('Asia/Kolkata');
+    it('returns null when no schedule has been configured yet, and returns saved schedule when configured', async () => {
+      const unconfigured = await service.getScheduleForDate('2026-10-12');
+      expect(unconfigured).toBeNull();
 
       await service.upsertSchedule({
         eventDate: '2026-10-12',
@@ -114,8 +113,10 @@ describe('EmployeeDispatchSchedulerService', () => {
       });
 
       const loaded = await service.getScheduleForDate('2026-10-12');
-      expect(loaded.dispatchTime).toBe('16:00');
-      expect(loaded.enabled).toBe(true);
+      expect(loaded).not.toBeNull();
+      expect(loaded?.dispatchTime).toBe('16:00');
+      expect(loaded?.enabled).toBe(true);
+      expect(loaded?.timezone).toBe('Asia/Kolkata');
     });
   });
 
@@ -129,12 +130,12 @@ describe('EmployeeDispatchSchedulerService', () => {
       const s12 = await service.getScheduleForDate('2026-10-12');
       const s13 = await service.getScheduleForDate('2026-10-13');
 
-      expect(s11.dispatchTime).toBe('17:00');
-      expect(s11.enabled).toBe(true);
-      expect(s12.dispatchTime).toBe('16:30');
-      expect(s12.enabled).toBe(true);
-      expect(s13.dispatchTime).toBe('18:00');
-      expect(s13.enabled).toBe(false);
+      expect(s11?.dispatchTime).toBe('17:00');
+      expect(s11?.enabled).toBe(true);
+      expect(s12?.dispatchTime).toBe('16:30');
+      expect(s12?.enabled).toBe(true);
+      expect(s13?.dispatchTime).toBe('18:00');
+      expect(s13?.enabled).toBe(false);
     });
   });
 
@@ -175,8 +176,9 @@ describe('EmployeeDispatchSchedulerService', () => {
       expect(employeesService.sendDailyPassEmails).toHaveBeenCalledWith('2026-10-11');
 
       const schedule = await service.getScheduleForDate('2026-10-11');
-      expect(schedule.lastRunStatus).toBe('SUCCESS');
-      expect(schedule.lastRunAt).toBeDefined();
+      expect(schedule).not.toBeNull();
+      expect(schedule?.lastRunStatus).toBe('SUCCESS');
+      expect(schedule?.lastRunAt).toBeDefined();
     });
   });
 
@@ -259,8 +261,9 @@ describe('EmployeeDispatchSchedulerService', () => {
       expect(res.failedCount).toBe(2);
 
       const schedule = await service.getScheduleForDate('2026-10-11');
-      expect(schedule.lastRunStatus).toBe('PARTIAL_FAILURE');
-      expect(schedule.lastFailedCount).toBe(2);
+      expect(schedule).not.toBeNull();
+      expect(schedule?.lastRunStatus).toBe('PARTIAL_FAILURE');
+      expect(schedule?.lastFailedCount).toBe(2);
     });
   });
 
@@ -279,7 +282,8 @@ describe('EmployeeDispatchSchedulerService', () => {
       expect(res.failedCount).toBe(0);
 
       const schedule = await service.getScheduleForDate('2026-10-11');
-      expect(schedule.lastRunStatus).toBe('SUCCESS');
+      expect(schedule).not.toBeNull();
+      expect(schedule?.lastRunStatus).toBe('SUCCESS');
     });
   });
 
@@ -303,9 +307,10 @@ describe('EmployeeDispatchSchedulerService', () => {
       const newService = newModule.get<EmployeeDispatchSchedulerService>(EmployeeDispatchSchedulerService);
       const loaded = await newService.getScheduleForDate('2026-10-15');
 
-      expect(loaded.dispatchTime).toBe('15:45');
-      expect(loaded.enabled).toBe(true);
-      expect(loaded.timezone).toBe('Asia/Kolkata');
+      expect(loaded).not.toBeNull();
+      expect(loaded?.dispatchTime).toBe('15:45');
+      expect(loaded?.enabled).toBe(true);
+      expect(loaded?.timezone).toBe('Asia/Kolkata');
     });
   });
 
@@ -390,6 +395,44 @@ describe('EmployeeDispatchSchedulerService', () => {
           enabled: true,
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('20. Regression test: No saved schedule for selected date does not crash', () => {
+    it('handles dates with no saved schedule without crashing and returns null', async () => {
+      // 1. Oct 11 has a saved schedule
+      await service.upsertSchedule({
+        eventDate: '2026-10-11',
+        dispatchTime: '17:00',
+        enabled: true,
+      });
+
+      // 2. Oct 12 has NO saved schedule
+      const oct12Schedule = await service.getScheduleForDate('2026-10-12');
+      expect(oct12Schedule).toBeNull();
+
+      // 3. Oct 11 schedule remains intact and returns correctly
+      const oct11Schedule = await service.getScheduleForDate('2026-10-11');
+      expect(oct11Schedule).not.toBeNull();
+      expect(oct11Schedule?.dispatchTime).toBe('17:00');
+      expect(oct11Schedule?.enabled).toBe(true);
+
+      // 4. Switching to Oct 12 again does not crash and returns null
+      const oct12Again = await service.getScheduleForDate('2026-10-12');
+      expect(oct12Again).toBeNull();
+
+      // 5. Switching back to Oct 11 restores its exact schedule
+      const oct11Restored = await service.getScheduleForDate('2026-10-11');
+      expect(oct11Restored?.dispatchTime).toBe('17:00');
+    });
+
+    it('scheduler tick safely skips unconfigured dates without error', async () => {
+      // Mock time on Oct 12 (unconfigured)
+      const mockNow = new Date('2026-10-12T12:00:00Z');
+      const result = await service.checkAndExecuteScheduledDispatches(mockNow);
+      expect(result.checked).toBe(true);
+      expect(result.executedDates).toHaveLength(0);
+      expect(result.skippedDates.some((s) => s.includes('not configured'))).toBe(true);
     });
   });
 });
