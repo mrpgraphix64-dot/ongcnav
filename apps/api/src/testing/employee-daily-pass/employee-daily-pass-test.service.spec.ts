@@ -81,6 +81,7 @@ describe('EmployeeDailyPassTestService', () => {
       dailyEmployeePass: {
         create: jest.fn().mockResolvedValue(mockTestPass),
         findUnique: jest.fn().mockResolvedValue(mockTestPass),
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([mockTestPass]),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
         update: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ ...mockTestPass, ...data })),
@@ -340,6 +341,198 @@ describe('EmployeeDailyPassTestService', () => {
       expect(prisma.scanLog.deleteMany).toHaveBeenCalledWith({
         where: { isLoadTest: true },
       });
+    });
+  });
+
+  describe('Date Eligibility and Multi-Person Batching (Cases 1-10)', () => {
+    it('CASE 1: Employee selected date, Family did not -> Employee eligible, Family not eligible', async () => {
+      const res = await service.generateTestPass(
+        { employeeIds: ['10'], eventDate: '2026-10-11' },
+        mockSuperAdmin,
+      );
+
+      expect(res.totalEligible).toBe(1);
+      expect(res.passes.length).toBe(1);
+      expect(res.passes[0].attendeeName).toBe('Amit Sharma');
+      expect(res.passes[0].isFamily).toBe(false);
+      expect(res.ineligible.length).toBe(1);
+      expect(res.ineligible[0].attendeeName).toBe('Sunita Sharma');
+      expect(res.ineligible[0].reason).toBe('Did not select this date');
+    });
+
+    it('CASE 2: Family selected date, Employee did not -> Family eligible, Employee not eligible', async () => {
+      const res = await service.generateTestPass(
+        { employeeIds: ['10'], eventDate: '2026-10-13' },
+        mockSuperAdmin,
+      );
+
+      expect(res.totalEligible).toBe(1);
+      expect(res.passes.length).toBe(1);
+      expect(res.passes[0].attendeeName).toBe('Sunita Sharma');
+      expect(res.passes[0].isFamily).toBe(true);
+      expect(res.ineligible.length).toBe(1);
+      expect(res.ineligible[0].attendeeName).toBe('Amit Sharma');
+    });
+
+    it('CASE 3: Both selected date -> Both eligible', async () => {
+      const empWithBoth = {
+        ...mockEmployee,
+        attendees: [
+          { ...mockEmployee.attendees[0], bookingDays: ['2026-10-12'] },
+          { ...mockEmployee.attendees[1], bookingDays: ['2026-10-12'] },
+        ],
+      };
+      prisma.employee.findMany.mockResolvedValueOnce([empWithBoth]);
+
+      const res = await service.generateTestPass(
+        { employeeIds: ['10'], eventDate: '2026-10-12' },
+        mockSuperAdmin,
+      );
+
+      expect(res.totalEligible).toBe(2);
+      expect(res.passes.length).toBe(2);
+      expect(res.ineligible.length).toBe(0);
+    });
+
+    it('CASE 4: Neither selected date -> Neither eligible (0 passes generated)', async () => {
+      const res = await service.generateTestPass(
+        { employeeIds: ['10'], eventDate: '2026-10-15' },
+        mockSuperAdmin,
+      );
+
+      expect(res.totalEligible).toBe(0);
+      expect(res.passes.length).toBe(0);
+      expect(res.ineligible.length).toBe(2);
+    });
+
+    it('CASE 5: Multiple family members with different dates -> Only matching people generated', async () => {
+      const empWithMultipleFamily = {
+        ...mockEmployee,
+        attendees: [
+          { ...mockEmployee.attendees[0], bookingDays: ['2026-10-11'] },
+          { ...mockEmployee.attendees[1], bookingDays: ['2026-10-13'] },
+          {
+            id: BigInt(102),
+            ticketNumber: 'TK-EMP-F2-001',
+            familyMemberId: BigInt(21),
+            bookingDays: ['2026-10-14'],
+            employee: { name: 'Amit Sharma', cpf: '123456', department: 'EWC Ahmedabad' },
+            familyMember: { id: BigInt(21), name: 'Rohan Sharma', relation: 'Son' },
+          },
+        ],
+      };
+      prisma.employee.findMany.mockResolvedValueOnce([empWithMultipleFamily]);
+
+      const res = await service.generateTestPass(
+        { employeeIds: ['10'], eventDate: '2026-10-14' },
+        mockSuperAdmin,
+      );
+
+      expect(res.totalEligible).toBe(1);
+      expect(res.passes.length).toBe(1);
+      expect(res.passes[0].attendeeName).toBe('Rohan Sharma');
+      expect(res.ineligible.length).toBe(2);
+    });
+
+    it('CASE 6: Same person/date generated twice -> Idempotent, no duplicates created', async () => {
+      prisma.dailyEmployeePass.findFirst.mockResolvedValueOnce(mockTestPass);
+
+      const res = await service.generateTestPass(
+        { employeeIds: ['10'], eventDate: '2026-10-11' },
+        mockSuperAdmin,
+      );
+
+      expect(res.existingCount).toBe(1);
+      expect(res.newlyGeneratedCount).toBe(0);
+      expect(res.passes.length).toBe(1);
+      // create should not be called because existing pass was reused
+      expect(prisma.dailyEmployeePass.create).not.toHaveBeenCalled();
+    });
+
+    it('CASE 7: Test pass scanned once -> Returns SUCCESS and status becomes USED', async () => {
+      prisma.dailyEmployeePass.findUnique
+        .mockResolvedValueOnce(mockTestPass)
+        .mockResolvedValueOnce({ ...mockTestPass, status: 'USED', checkedInAt: new Date() });
+
+      checkinService.processCheckin.mockResolvedValueOnce({
+        success: true,
+        result: CheckinResult.SUCCESS,
+        message: 'CHECK-IN ACCEPTED',
+        statusCode: 200,
+      });
+
+      const res = await service.testScan(
+        { token: 'test-qr-token-superadmin-12345' },
+        mockSuperAdmin,
+      );
+
+      expect(res.scannerResponse.result).toBe(CheckinResult.SUCCESS);
+      expect(res.passStatus).toBe('USED');
+    });
+
+    it('CASE 8: Same pass scanned again -> Returns ALREADY_CHECKED_IN', async () => {
+      prisma.dailyEmployeePass.findUnique.mockResolvedValue(mockTestPass);
+
+      checkinService.processCheckin.mockResolvedValueOnce({
+        success: false,
+        result: CheckinResult.ALREADY_CHECKED_IN,
+        message: 'Attendee already checked in for this date',
+        statusCode: 409,
+      });
+
+      const res = await service.testScan(
+        { token: 'test-qr-token-superadmin-12345' },
+        mockSuperAdmin,
+      );
+
+      expect(res.scannerResponse.result).toBe(CheckinResult.ALREADY_CHECKED_IN);
+    });
+
+    it('CASE 9: Reset Test Pass -> Returns ACTIVE and deletes test checkin', async () => {
+      prisma.dailyEmployeePass.findUnique.mockResolvedValueOnce({
+        ...mockTestPass,
+        status: 'USED',
+        checkedInAt: new Date(),
+      });
+      prisma.dailyEmployeePass.update.mockResolvedValueOnce({
+        ...mockTestPass,
+        status: 'ACTIVE',
+        checkedInAt: null,
+      });
+
+      const res = await service.resetScannerState(
+        'test-qr-token-superadmin-12345',
+        mockSuperAdmin,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.status).toBe('ACTIVE');
+      expect(res.checkedInAt).toBeNull();
+      expect(prisma.dailyCheckin.deleteMany).toHaveBeenCalledWith({
+        where: {
+          attendeeId: BigInt(100),
+          eventDate: '2026-10-11',
+          isLoadTest: true,
+        },
+      });
+    });
+
+    it('CASE 10: Wrong date -> Returns NOT_BOOKED_TODAY', async () => {
+      prisma.dailyEmployeePass.findUnique.mockResolvedValue(mockTestPass);
+
+      checkinService.processCheckin.mockResolvedValueOnce({
+        success: false,
+        result: CheckinResult.NOT_BOOKED_TODAY,
+        message: 'Pass is not valid for today',
+        statusCode: 403,
+      });
+
+      const res = await service.testScan(
+        { token: 'test-qr-token-superadmin-12345', scanDate: '2026-10-18' },
+        mockSuperAdmin,
+      );
+
+      expect(res.scannerResponse.result).toBe(CheckinResult.NOT_BOOKED_TODAY);
     });
   });
 });

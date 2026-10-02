@@ -146,12 +146,28 @@ export class EmployeeDailyPassTestService {
         throw new NotFoundException(`Attendee with ID ${dto.attendeeId} not found`);
       }
 
+      const bookingDays = resolveBookingDays(attendee);
+      if (!bookingDays.includes(dto.eventDate)) {
+        throw new BadRequestException(
+          `Attendee ${attendee.id} did not select event date ${dto.eventDate}.`,
+        );
+      }
+
       // Clean up any prior test pass for this exact attendee, date, and isTest: true
       await this.prisma.dailyEmployeePass.deleteMany({
         where: {
           attendeeId: attendee.id,
           eventDate: dto.eventDate,
           isTest: true,
+        },
+      });
+
+      // Also clean up any prior test checkin so scanner starts fresh in ACTIVE state
+      await this.prisma.dailyCheckin.deleteMany({
+        where: {
+          attendeeId: attendee.id,
+          eventDate: dto.eventDate,
+          isLoadTest: true,
         },
       });
 
@@ -218,7 +234,10 @@ export class EmployeeDailyPassTestService {
       return {
         ...singlePass,
         passes: [singlePass],
+        ineligible: [],
         totalEmployees: 1,
+        totalSelectedPeople: 1,
+        totalEligible: 1,
         totalPasses: 1,
         newlyGeneratedCount: 1,
         existingCount: 0,
@@ -276,11 +295,43 @@ export class EmployeeDailyPassTestService {
       throw new NotFoundException('No attendees found for the specified selection.');
     }
 
+    // Filter attendees into eligible and ineligible for this specific event date
+    const eligibleAttendees: any[] = [];
+    const ineligibleAttendees: any[] = [];
+
+    for (const att of targetAttendees) {
+      const bookingDays = resolveBookingDays(att);
+      const primaryEmployee = att.familyMember?.employee || att.employee;
+      const attendeeName =
+        att.familyMember?.name || primaryEmployee?.name || att.name || 'Attendee';
+      const isFamily = !!att.familyMember;
+      const relation = att.familyMember?.relation || 'Self';
+      const employeeName = primaryEmployee?.name || attendeeName;
+      const employeeCpf = primaryEmployee?.cpf || 'N/A';
+      const department = primaryEmployee?.department || 'EWC Ahmedabad';
+
+      if (bookingDays.includes(dto.eventDate)) {
+        eligibleAttendees.push(att);
+      } else {
+        ineligibleAttendees.push({
+          attendeeId: att.id.toString(),
+          attendeeName,
+          isFamily,
+          relation,
+          employeeName,
+          employeeCpf,
+          department,
+          reason: 'Did not select this date',
+          selectedDates: bookingDays,
+        });
+      }
+    }
+
     const resultPasses: any[] = [];
     let newlyGeneratedCount = 0;
     let existingCount = 0;
 
-    for (const attendee of targetAttendees) {
+    for (const attendee of eligibleAttendees) {
       // Idempotency check: Reuse existing test pass if already generated for this attendee, date, and isTest: true
       const existingPass = await this.prisma.dailyEmployeePass.findFirst({
         where: {
@@ -292,6 +343,25 @@ export class EmployeeDailyPassTestService {
 
       let pass = existingPass;
       if (pass) {
+        // Reset pass to ACTIVE and clear checkedInAt if it was scanned in a previous test run
+        if (pass.status !== DailyPassStatus.ACTIVE || pass.checkedInAt) {
+          pass = await this.prisma.dailyEmployeePass.update({
+            where: { id: pass.id },
+            data: {
+              status: DailyPassStatus.ACTIVE as any,
+              checkedInAt: null,
+              testSessionId: sessionId,
+            },
+          });
+          // Clean up prior test checkin for this test pass so scanner starts fresh
+          await this.prisma.dailyCheckin.deleteMany({
+            where: {
+              attendeeId: attendee.id,
+              eventDate: dto.eventDate,
+              isLoadTest: true,
+            },
+          });
+        }
         existingCount++;
       } else {
         const qrToken = crypto.randomBytes(32).toString('hex');
@@ -358,14 +428,17 @@ export class EmployeeDailyPassTestService {
     }
 
     this.logger.log(
-      `[TEST_LAB] Processed ${resultPasses.length} test passes for session ${sessionId} (${newlyGeneratedCount} new, ${existingCount} reused) on ${dto.eventDate}`,
+      `[TEST_LAB] Processed ${resultPasses.length} eligible test passes for session ${sessionId} (${newlyGeneratedCount} new, ${existingCount} reused, ${ineligibleAttendees.length} not registered) on ${dto.eventDate}`,
     );
 
     const firstPass = resultPasses[0] || {};
     return {
       ...firstPass,
       passes: resultPasses,
+      ineligible: ineligibleAttendees,
       totalEmployees,
+      totalSelectedPeople: targetAttendees.length,
+      totalEligible: eligibleAttendees.length,
       totalPasses: resultPasses.length,
       newlyGeneratedCount,
       existingCount,
@@ -625,6 +698,72 @@ export class EmployeeDailyPassTestService {
       success: true,
       status: updated.status,
       token: updated.qrToken,
+    };
+  }
+
+  /**
+   * Resets a test pass and its simulated scanner checkin state back to ACTIVE.
+   * Cleans up any test checkin or test scan logs for this test pass.
+   * Operates strictly on isTest: true passes.
+   */
+  async resetScannerState(token: string, adminUser: any) {
+    if (adminUser?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can reset test scanner state.');
+    }
+
+    if (!token || !token.trim()) {
+      throw new BadRequestException('QR token is required to reset scanner state.');
+    }
+
+    const pass = await this.prisma.dailyEmployeePass.findUnique({
+      where: { qrToken: token.trim() },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Test pass not found');
+    }
+
+    if (!pass.isTest) {
+      throw new BadRequestException('Cannot reset an operational pass via Test Lab.');
+    }
+
+    // 1. Reset pass status to ACTIVE and nullify checkedInAt
+    const updated = await this.prisma.dailyEmployeePass.update({
+      where: { id: pass.id },
+      data: {
+        status: DailyPassStatus.ACTIVE as any,
+        checkedInAt: null,
+      },
+    });
+
+    // 2. Remove test checkins and test scan logs for this attendee on this date
+    const checkinDel = await this.prisma.dailyCheckin.deleteMany({
+      where: {
+        attendeeId: pass.attendeeId,
+        eventDate: pass.eventDate,
+        isLoadTest: true,
+      },
+    });
+
+    const scanLogDel = await this.prisma.scanLog.deleteMany({
+      where: {
+        attendeeId: pass.attendeeId,
+        isLoadTest: true,
+      },
+    });
+
+    this.logger.log(
+      `[TEST_LAB] Reset scanner state for test pass ${pass.id} (${pass.qrToken}): status ACTIVE, ${checkinDel.count} checkins deleted, ${scanLogDel.count} scan logs deleted.`,
+    );
+
+    return {
+      success: true,
+      status: updated.status,
+      checkedInAt: updated.checkedInAt,
+      token: updated.qrToken,
+      deletedCheckinsCount: checkinDel.count,
+      deletedScanLogsCount: scanLogDel.count,
+      message: 'Test pass and scanner state reset to ACTIVE (test data only).',
     };
   }
 

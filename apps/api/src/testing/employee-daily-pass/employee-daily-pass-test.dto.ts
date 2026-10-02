@@ -104,3 +104,10 @@ export class DispatchScheduleCheckDto {
   @IsString()
   testSessionId?: string;
 }
+
+export class ResetScannerDto {
+  @ApiProperty({ description: 'QR Token of the test pass to reset to ACTIVE state' })
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+}

@@ -20,6 +20,7 @@ import {
   SendTestEmailDto,
   ScannerTestDto,
   RevokeTestPassDto,
+  ResetScannerDto,
   CleanupSessionDto,
   CleanupAllDto,
   DispatchScheduleCheckDto,
@@ -94,6 +95,13 @@ export class EmployeeDailyPassTestController {
   async revokeTestPass(@Body() dto: RevokeTestPassDto, @Req() req: Request) {
     const adminUser = (req as any).user;
     return this.testService.revokeTestPass(dto.token, adminUser);
+  }
+
+  @Post('reset-scanner')
+  @ApiOperation({ summary: 'Reset test pass and scanner state back to ACTIVE' })
+  async resetScannerState(@Body() dto: ResetScannerDto, @Req() req: Request) {
+    const adminUser = (req as any).user;
+    return this.testService.resetScannerState(dto.token, adminUser);
   }
 
   @Post('cleanup-session')

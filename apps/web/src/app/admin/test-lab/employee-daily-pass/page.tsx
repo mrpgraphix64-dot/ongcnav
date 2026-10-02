@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   Search,
   CheckCircle2,
+  AlertCircle,
   AlertTriangle,
   XCircle,
   ExternalLink,
@@ -101,6 +102,7 @@ export default function EmployeeDailyPassTestLabPage() {
   const [generating, setGenerating] = useState(false);
   const [generatedPasses, setGeneratedPasses] = useState<TestPassData[]>([]);
   const [testSessionId, setTestSessionId] = useState('');
+  const [ineligibleAttendees, setIneligibleAttendees] = useState<any[]>([]);
   const [generationSummary, setGenerationSummary] = useState<{
     newlyGenerated: number;
     alreadyExisted: number;
@@ -207,6 +209,58 @@ export default function EmployeeDailyPassTestLabPage() {
     }, 0);
   }, [selectedEmployees]);
 
+  // People eligibility breakdown for the selected event night
+  const peopleForSelectedDate = useMemo(() => {
+    const list: Array<{
+      id: string;
+      name: string;
+      role: string;
+      isFamily: boolean;
+      employeeName: string;
+      employeeCpf: string;
+      isEligible: boolean;
+      selectedDates: string[];
+    }> = [];
+
+    for (const emp of selectedEmployees) {
+      // Primary employee
+      list.push({
+        id: emp.attendeeId || `emp-${emp.id}`,
+        name: emp.name,
+        role: 'Employee',
+        isFamily: false,
+        employeeName: emp.name,
+        employeeCpf: emp.cpf,
+        isEligible: (emp.bookingDays || []).includes(selectedEventDate),
+        selectedDates: emp.bookingDays || [],
+      });
+
+      // Family members
+      for (const fm of emp.familyMembers || []) {
+        list.push({
+          id: fm.attendeeId || `fm-${fm.id}`,
+          name: fm.name,
+          role: fm.relation || 'Family Member',
+          isFamily: true,
+          employeeName: emp.name,
+          employeeCpf: emp.cpf,
+          isEligible: (fm.bookingDays || []).includes(selectedEventDate),
+          selectedDates: fm.bookingDays || [],
+        });
+      }
+    }
+
+    return list;
+  }, [selectedEmployees, selectedEventDate]);
+
+  const eligiblePeople = useMemo(() => {
+    return peopleForSelectedDate.filter((p) => p.isEligible);
+  }, [peopleForSelectedDate]);
+
+  const ineligiblePeople = useMemo(() => {
+    return peopleForSelectedDate.filter((p) => !p.isEligible);
+  }, [peopleForSelectedDate]);
+
   const allVisibleSelected =
     employeeResults.length > 0 &&
     employeeResults.every((emp) => selectedEmployeeIds.includes(emp.id));
@@ -232,6 +286,14 @@ export default function EmployeeDailyPassTestLabPage() {
       return;
     }
 
+    if (eligiblePeople.length === 0) {
+      setAlert({
+        type: 'error',
+        message: `None of the selected people registered for ${selectedTheme.fullDateLabel}. Please select a different event night or employee.`,
+      });
+      return;
+    }
+
     try {
       setGenerating(true);
       setAlert(null);
@@ -254,6 +316,7 @@ export default function EmployeeDailyPassTestLabPage() {
 
       const passesList: TestPassData[] = result.passes || [result];
       setGeneratedPasses(passesList);
+      setIneligibleAttendees(result.ineligible || []);
       setTestSessionId(result.testSessionId || passesList[0]?.testSessionId || '');
       setGenerationSummary({
         newlyGenerated: result.newlyGeneratedCount ?? passesList.length,
@@ -409,6 +472,49 @@ export default function EmployeeDailyPassTestLabPage() {
       setAlert({ type: 'success', message: 'Pass status updated to REVOKED.' });
     } catch (err: any) {
       setAlert({ type: 'error', message: err.message || 'Failed to revoke pass' });
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function handleDuplicateScan() {
+    if (!selectedPassForScan) {
+      setAlert({ type: 'error', message: 'Please select a pass to scan.' });
+      return;
+    }
+    const currentPass = generatedPasses.find((p) => p.qrToken === selectedPassForScan);
+    // If pass is ACTIVE, scan once to mark it USED, then scan again to trigger DUPLICATE
+    if (currentPass?.status === 'ACTIVE') {
+      await handleScan();
+    }
+    await handleScan();
+  }
+
+  async function handleResetScannerState() {
+    if (!selectedPassForScan) {
+      setAlert({ type: 'error', message: 'Please select a pass to reset.' });
+      return;
+    }
+
+    try {
+      setScanning(true);
+      await fetchApi<any>('/admin/test-lab/employee-daily-pass/reset-scanner', {
+        method: 'POST',
+        body: JSON.stringify({ token: selectedPassForScan }),
+      });
+
+      setGeneratedPasses((prev) =>
+        prev.map((p) =>
+          p.qrToken === selectedPassForScan ? { ...p, status: 'ACTIVE' } : p,
+        ),
+      );
+      setScannerResult(null);
+      setAlert({
+        type: 'success',
+        message: 'Pass status reset to ACTIVE and test scan history cleared (test data only).',
+      });
+    } catch (err: any) {
+      setAlert({ type: 'error', message: err.message || 'Failed to reset scanner state' });
     } finally {
       setScanning(false);
     }
@@ -738,7 +844,7 @@ export default function EmployeeDailyPassTestLabPage() {
           {/* STEP 2 — SELECT EVENT NIGHT & STEP 3 — GENERATE */}
           <div className="lg:col-span-7 space-y-4">
             {/* STEP 2: SELECT EVENT NIGHT */}
-            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-2.5">
+            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
               <div className="flex items-center justify-between border-b border-stone-100 pb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
@@ -790,6 +896,67 @@ export default function EmployeeDailyPassTestLabPage() {
                   );
                 })}
               </div>
+
+              {/* PEOPLE FOR THIS DATE BREAKDOWN */}
+              {selectedEmployees.length > 0 && (
+                <div className="mt-2 p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs border-b border-stone-200/80 pb-2">
+                    <span className="font-bold text-ink uppercase tracking-wider text-[11px]">
+                      People for this date
+                    </span>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="text-stone-500">
+                        Selected group: <strong>{selectedEmployees.length} employee{selectedEmployees.length !== 1 ? 's' : ''} &bull; {totalPeopleCount} registered {totalPeopleCount === 1 ? 'person' : 'people'}</strong>
+                      </span>
+                      <span className="text-stone-300">|</span>
+                      <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        Eligible for this date: {eligiblePeople.length} {eligiblePeople.length === 1 ? 'person' : 'people'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                    {peopleForSelectedDate.map((person) => (
+                      <div
+                        key={person.id}
+                        className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${
+                          person.isEligible
+                            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                            : 'bg-stone-100/60 border-stone-200 text-stone-500 opacity-80'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {person.isEligible ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <span className="w-4 h-4 rounded-full border border-stone-400 text-stone-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5">
+                              ○
+                            </span>
+                          )}
+                          <div>
+                            <div className="font-bold text-ink text-xs">{person.name}</div>
+                            <div className="text-[10px] text-stone-500">
+                              {person.role} &bull; {person.employeeName} ({person.employeeCpf})
+                            </div>
+                            <div className={`text-[10px] font-semibold mt-0.5 ${person.isEligible ? 'text-emerald-700' : 'text-stone-400'}`}>
+                              {person.isEligible ? 'Selected this date' : 'Not selected for this date'}
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${
+                            person.isEligible
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-stone-200 text-stone-600 border-stone-300'
+                          }`}
+                        >
+                          {person.isEligible ? 'Eligible' : 'Not Eligible'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* STEP 3 — GENERATE TEST PASSES */}
@@ -807,11 +974,11 @@ export default function EmployeeDailyPassTestLabPage() {
               </div>
 
               {/* Clear Summary Box */}
-              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs space-y-1">
-                <div className="flex items-center justify-between font-bold text-ink">
-                  <span>Selected Attendees:</span>
-                  <span className="text-maroon font-bold">
-                    {selectedEmployees.length} employee{selectedEmployees.length !== 1 ? 's' : ''} &bull; {totalPeopleCount} total {totalPeopleCount === 1 ? 'person' : 'people'}
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs space-y-1.5">
+                <div className="flex items-center justify-between text-stone-600 text-[11px]">
+                  <span>Selected employee group:</span>
+                  <span className="font-semibold text-ink">
+                    {selectedEmployees.length} employee{selectedEmployees.length !== 1 ? 's' : ''} &bull; {totalPeopleCount} registered {totalPeopleCount === 1 ? 'person' : 'people'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-stone-600 text-[11px]">
@@ -820,8 +987,14 @@ export default function EmployeeDailyPassTestLabPage() {
                     Night {selectedTheme.dayNumber} &bull; {selectedTheme.themeTitle} ({selectedTheme.fullDateLabel})
                   </span>
                 </div>
+                <div className="flex items-center justify-between font-bold text-xs pt-1.5 border-t border-stone-200">
+                  <span>Eligible for selected date:</span>
+                  <span className="text-emerald-700 font-extrabold text-sm">
+                    {eligiblePeople.length} {eligiblePeople.length === 1 ? 'person' : 'people'}
+                  </span>
+                </div>
                 <p className="text-[10px] text-stone-500 pt-1 border-t border-stone-200/80">
-                  Generates date-specific isolated test <code className="font-mono bg-stone-200 px-1 rounded">DailyEmployeePass</code> records. Operational metrics and real attendance remain untouched.
+                  Generates date-specific isolated test <code className="font-mono bg-stone-200 px-1 rounded">DailyEmployeePass</code> records strictly for eligible attendees who selected this night.
                 </p>
               </div>
 
@@ -829,8 +1002,8 @@ export default function EmployeeDailyPassTestLabPage() {
               <button
                 type="button"
                 onClick={handleGenerateTestPasses}
-                disabled={generating || selectedEmployeeIds.length === 0}
-                className="w-full py-2.5 px-4 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:opacity-50"
+                disabled={generating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
+                className="w-full py-2.5 px-4 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {generating ? (
                   <>
@@ -840,7 +1013,9 @@ export default function EmployeeDailyPassTestLabPage() {
                 ) : (
                   <>
                     <QrCode className="w-4 h-4 text-gold-light" />
-                    <span>Generate Test Passes ({totalPeopleCount} passes)</span>
+                    <span>
+                      Generate Test Passes ({eligiblePeople.length} eligible {eligiblePeople.length === 1 ? 'person' : 'people'})
+                    </span>
                   </>
                 )}
               </button>
@@ -854,10 +1029,10 @@ export default function EmployeeDailyPassTestLabPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-stone-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-                  &check;
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 </div>
                 <h2 className="text-sm font-bold text-ink font-cinzel">
-                  {generatedPasses.length} Test Daily Passes Generated
+                  ✓ {generatedPasses.length} TEST DAILY PASS{generatedPasses.length === 1 ? '' : 'ES'} GENERATED
                 </h2>
                 {generationSummary && (
                   <span className="text-[10px] font-mono bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full">
@@ -1002,6 +1177,28 @@ export default function EmployeeDailyPassTestLabPage() {
               </table>
             </div>
 
+            {/* NON-ELIGIBLE PEOPLE NOT INCLUDED */}
+            {ineligiblePeople.length > 0 && (
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
+                <div className="text-[10px] font-bold text-stone-500 uppercase tracking-wider font-cinzel">
+                  NOT INCLUDED FOR {selectedTheme.dayLabel} {selectedTheme.monthLabel.toUpperCase()}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {ineligiblePeople.map((p) => (
+                    <span
+                      key={p.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-200/80 text-stone-700 text-[11px] border border-stone-300"
+                    >
+                      <span className="font-semibold text-ink">{p.name}</span>
+                      <span className="text-stone-500 text-[10px]">({p.role})</span>
+                      <span className="text-stone-400">&mdash;</span>
+                      <span className="text-stone-500 text-[10px]">Did not select this date</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Test Email Delivery & Turnstile Scanner Testing Suite */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-stone-100">
               {/* TEST EMAIL DELIVERY */}
@@ -1065,35 +1262,77 @@ export default function EmployeeDailyPassTestLabPage() {
               </div>
 
               {/* TEST TURNSTILE SCANNER */}
-              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-ink flex items-center gap-1.5">
                     <ScanLine className="w-3.5 h-3.5 text-maroon" />
                     Turnstile Scanner Suite
                   </span>
                   <span className="text-[10px] font-mono text-stone-500">
-                    Isolated Test Log
+                    Test data only
                   </span>
                 </div>
 
-                <select
-                  value={selectedPassForScan}
-                  onChange={(e) => setSelectedPassForScan(e.target.value)}
-                  className="w-full p-1.5 bg-white border border-stone-200 rounded-lg text-xs font-medium text-ink"
-                >
-                  {generatedPasses.map((p) => (
-                    <option key={p.qrToken} value={p.qrToken}>
-                      {p.attendeeName} ({p.passType}) &bull; {p.ticketNumber}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <select
+                    value={selectedPassForScan}
+                    onChange={(e) => {
+                      setSelectedPassForScan(e.target.value);
+                      setScannerResult(null);
+                    }}
+                    className="w-full p-1.5 bg-white border border-stone-200 rounded-lg text-xs font-medium text-ink"
+                  >
+                    {generatedPasses.map((p) => (
+                      <option key={p.qrToken} value={p.qrToken}>
+                        {p.attendeeName} ({p.passType}) &bull; {p.ticketNumber} [{p.status}]
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Pass Status & Reset State Header */}
+                  {(() => {
+                    const currentPass =
+                      generatedPasses.find((p) => p.qrToken === selectedPassForScan) ||
+                      generatedPasses[0];
+                    const passStatus = currentPass?.status || 'ACTIVE';
+
+                    return (
+                      <div className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-stone-200">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-stone-500 font-medium">Pass Status:</span>
+                          <span
+                            className={`font-bold uppercase text-[10px] px-1.5 py-0.5 rounded ${
+                              passStatus === 'ACTIVE'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : passStatus === 'USED'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {passStatus}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResetScannerState}
+                          disabled={scanning}
+                          className="text-[10px] font-bold text-stone-600 hover:text-maroon hover:bg-stone-50 border border-stone-300 rounded px-2 py-0.5 flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                          title="Reset pass status to ACTIVE and remove test checkin"
+                        >
+                          <RotateCcw className="w-3 h-3 text-stone-500" />
+                          Reset Scanner State
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
 
                 <div className="grid grid-cols-4 gap-1.5">
                   <button
                     type="button"
                     onClick={() => handleScan()}
                     disabled={scanning}
-                    className="p-1.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-center transition-colors cursor-pointer"
+                    className="p-1.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-center transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mx-auto" />
                     <div className="text-[10px] font-bold text-emerald-900 mt-0.5">Valid</div>
@@ -1101,9 +1340,9 @@ export default function EmployeeDailyPassTestLabPage() {
 
                   <button
                     type="button"
-                    onClick={() => handleScan()}
+                    onClick={handleDuplicateScan}
                     disabled={scanning}
-                    className="p-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg text-center transition-colors cursor-pointer"
+                    className="p-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg text-center transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-blue-600 mx-auto" />
                     <div className="text-[10px] font-bold text-blue-900 mt-0.5">Duplicate</div>
@@ -1113,7 +1352,7 @@ export default function EmployeeDailyPassTestLabPage() {
                     type="button"
                     onClick={() => handleScan(wrongDateTarget)}
                     disabled={scanning}
-                    className="p-1.5 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg text-center transition-colors cursor-pointer"
+                    className="p-1.5 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg text-center transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <Calendar className="w-3.5 h-3.5 text-amber-600 mx-auto" />
                     <div className="text-[10px] font-bold text-amber-900 mt-0.5">Wrong Date</div>
@@ -1123,28 +1362,61 @@ export default function EmployeeDailyPassTestLabPage() {
                     type="button"
                     onClick={handleRevokePass}
                     disabled={scanning}
-                    className="p-1.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-center transition-colors cursor-pointer"
+                    className="p-1.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-center transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <XCircle className="w-3.5 h-3.5 text-red-600 mx-auto" />
                     <div className="text-[10px] font-bold text-red-900 mt-0.5">Revoke</div>
                   </button>
                 </div>
 
-                {scannerResult && (
-                  <div className="p-2 rounded-lg bg-stone-900 text-white text-[10px] space-y-0.5">
-                    <div className="flex items-center justify-between border-b border-stone-800 pb-1">
-                      <span className="text-stone-400 uppercase font-bold">Scanner Response</span>
-                      <span
-                        className={`font-mono font-bold px-1 rounded ${
-                          scannerResult.scannerResponse?.result === 'SUCCESS'
-                            ? 'bg-emerald-900 text-emerald-300'
-                            : 'bg-red-900 text-red-300'
-                        }`}
-                      >
-                        {scannerResult.scannerResponse?.result || 'RESULT'}
+                {/* Explicit Scanner Result Display */}
+                {scannerResult ? (
+                  <div
+                    className={`p-2.5 rounded-xl border text-[11px] space-y-1 ${
+                      scannerResult.scannerResponse?.result === 'SUCCESS'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN'
+                        ? 'bg-amber-50 border-amber-200 text-amber-900'
+                        : 'bg-rose-50 border-rose-200 text-rose-900'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="flex items-center gap-1.5">
+                        {scannerResult.scannerResponse?.result === 'SUCCESS' ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>✓ VALID SCAN</span>
+                          </>
+                        ) : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN' ? (
+                          <>
+                            <RotateCcw className="w-4 h-4 text-amber-600" />
+                            <span>DUPLICATE SCAN</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-4 h-4 text-rose-600" />
+                            <span>SCAN REJECTED</span>
+                          </>
+                        )}
+                      </span>
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white/80 border border-stone-200">
+                        {scannerResult.scannerResponse?.result}
                       </span>
                     </div>
-                    <p className="text-stone-200">{scannerResult.scannerResponse?.message}</p>
+                    <p className="text-stone-700 text-xs">
+                      {scannerResult.scannerResponse?.result === 'SUCCESS'
+                        ? 'Pass accepted. Pass status is now USED.'
+                        : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN'
+                        ? 'Already checked in for this date.'
+                        : scannerResult.scannerResponse?.message}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-2 rounded-lg bg-white border border-stone-200 text-[10px] text-stone-500 flex items-center justify-between">
+                    <span>
+                      SCANNER TEST: <strong className="text-stone-700">Ready to test</strong>
+                    </span>
+                    <span className="font-mono text-[9px] text-stone-400">Test data only</span>
                   </div>
                 )}
               </div>
