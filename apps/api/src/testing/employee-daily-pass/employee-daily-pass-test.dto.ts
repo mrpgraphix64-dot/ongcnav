@@ -23,6 +23,56 @@ export class GenerateTestPassDto {
   @IsString()
   @IsOptional()
   testSessionId?: string;
+
+  @ApiPropertyOptional({ description: 'Simulated time of day (HH:mm)', example: '18:00' })
+  @IsString()
+  @IsOptional()
+  simulatedTime?: string;
+
+  @ApiPropertyOptional({ description: 'Configured dispatch time override (HH:mm)', example: '18:00' })
+  @IsString()
+  @IsOptional()
+  configuredDispatchTime?: string;
+
+  @ApiPropertyOptional({ description: 'Designated safe test email recipient', example: 'test@example.com' })
+  @IsString()
+  @IsOptional()
+  testRecipientEmail?: string;
+}
+
+export class SimulateDeliveryDto {
+  @ApiPropertyOptional({ description: 'Array of employee IDs selected' })
+  @IsOptional()
+  employeeIds?: (string | number)[];
+
+  @ApiPropertyOptional({ description: 'ID of single attendee for backward compatibility' })
+  @IsOptional()
+  attendeeId?: string | number;
+
+  @ApiProperty({ description: 'Simulated event date (YYYY-MM-DD)', example: '2026-10-11' })
+  @IsString()
+  @IsNotEmpty()
+  simulatedDate: string;
+
+  @ApiProperty({ description: 'Simulated time (HH:mm)', example: '18:00' })
+  @IsString()
+  @IsNotEmpty()
+  simulatedTime: string;
+
+  @ApiPropertyOptional({ description: 'Configured dispatch time override (HH:mm)', example: '18:00' })
+  @IsOptional()
+  @IsString()
+  configuredDispatchTime?: string;
+
+  @ApiPropertyOptional({ description: 'Designated safe test email recipient', example: 'admin@example.com' })
+  @IsOptional()
+  @IsString()
+  testRecipientEmail?: string;
+
+  @ApiPropertyOptional({ description: 'Test session ID' })
+  @IsOptional()
+  @IsString()
+  testSessionId?: string;
 }
 
 export class SendTestEmailDto {

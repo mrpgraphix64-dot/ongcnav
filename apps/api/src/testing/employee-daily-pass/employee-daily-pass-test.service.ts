@@ -16,6 +16,8 @@ import {
   UserRole,
   DailyPassStatus,
   DailyPassEmailStatus,
+  RegistrationStatus,
+  DEFAULT_DISPATCH_SCHEDULE,
   buildDailyEmployeePassPresentation,
   DailyEmployeePassPresentation,
 } from '@ongc/shared-types';
@@ -26,6 +28,7 @@ import {
   SendTestEmailDto,
   ScannerTestDto,
   DispatchScheduleCheckDto,
+  SimulateDeliveryDto,
 } from './employee-daily-pass-test.dto';
 
 @Injectable()
@@ -40,11 +43,46 @@ export class EmployeeDailyPassTestService {
   ) {}
 
   /**
+   * Resolves the configured dispatch schedule from the production system configuration.
+   * Checks database settings first ('employee.dispatch_schedule', 'qr.dispatch_schedule', 'dispatch_schedule');
+   * falls back to DEFAULT_DISPATCH_SCHEDULE.
+   */
+  async getEffectiveDispatchSchedule(): Promise<Record<string, string>> {
+    try {
+      const setting = await this.prisma.setting.findFirst({
+        where: {
+          key: {
+            in: [
+              'employee.dispatch_schedule',
+              'qr.dispatch_schedule',
+              'dispatch_schedule',
+            ],
+          },
+        },
+      });
+
+      if (setting?.value) {
+        const parsed = JSON.parse(setting.value);
+        if (typeof parsed === 'object' && parsed !== null) {
+          return { ...DEFAULT_DISPATCH_SCHEDULE, ...parsed };
+        }
+      }
+    } catch {
+      // In case of non-JSON or missing setting, gracefully fallback to DEFAULT_DISPATCH_SCHEDULE
+    }
+
+    return DEFAULT_DISPATCH_SCHEDULE;
+  }
+
+  /**
    * Search existing real employees for test selection.
    * Strictly reads from existing records; never allows creating fake employees.
+   * Only returns APPROVED employee registrations.
    */
   async searchEmployees(search?: string) {
-    const where: any = {};
+    const where: any = {
+      registrationStatus: RegistrationStatus.APPROVED,
+    };
 
     if (search && search.trim()) {
       const q = search.trim();
@@ -970,7 +1008,13 @@ export class EmployeeDailyPassTestService {
     }
 
     const simulatedTime = (dto.simulatedTime || '18:00').trim();
-    const configuredDispatchTime = (dto.configuredDispatchTime || '18:00').trim();
+    const effectiveSchedule = await this.getEffectiveDispatchSchedule();
+    const configuredDispatchTime = (
+      dto.configuredDispatchTime?.trim() ||
+      effectiveSchedule[dto.simulatedDate] ||
+      DEFAULT_DISPATCH_SCHEDULE[dto.simulatedDate] ||
+      '18:00'
+    ).trim();
 
     // Parse HH:mm to minutes for comparison
     const [simH, simM] = simulatedTime.split(':').map((v) => parseInt(v, 10) || 0);
@@ -1177,6 +1221,295 @@ export class EmployeeDailyPassTestService {
       pass: generatedPass,
       message,
       alreadyDispatched,
+    };
+  }
+
+  /**
+   * Evaluates simulated clock against configured daily dispatch schedule for selected employee(s).
+   * Generates date-specific test passes for eligible attendees and automatically sends test emails if due.
+   * If simulated time < configured dispatch time: passes are created in PENDING status, emails NOT sent.
+   * If simulated time >= configured dispatch time: passes are generated and test emails dispatched to safe recipient.
+   * Fully idempotent (no duplicate passes, no re-sending to already SENT passes).
+   */
+  async simulateDelivery(dto: SimulateDeliveryDto, adminUser: any) {
+    if (adminUser?.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can run simulated delivery.');
+    }
+
+    if (!dto.simulatedDate || !isOfficialEventDate(dto.simulatedDate)) {
+      throw new BadRequestException(
+        `Invalid simulated date: "${dto.simulatedDate}". Allowed dates: ${OFFICIAL_EVENT_DATES.join(', ')}`,
+      );
+    }
+
+    const effectiveSchedule = await this.getEffectiveDispatchSchedule();
+    const configuredDispatchTime = (
+      dto.configuredDispatchTime?.trim() ||
+      effectiveSchedule[dto.simulatedDate] ||
+      DEFAULT_DISPATCH_SCHEDULE[dto.simulatedDate] ||
+      '18:00'
+    ).trim();
+
+    const simulatedTime = (dto.simulatedTime || '18:00').trim();
+
+    // Parse HH:mm to minutes for comparison
+    const [simH, simM] = simulatedTime.split(':').map((v) => parseInt(v, 10) || 0);
+    const [cfgH, cfgM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
+
+    const isDue = simH * 60 + simM >= cfgH * 60 + cfgM;
+
+    // Resolve target attendees
+    let targetAttendees: any[] = [];
+    let totalEmployees = 0;
+
+    if (dto.employeeIds && dto.employeeIds.length > 0) {
+      const empIds = dto.employeeIds.map((id) => BigInt(id));
+      const employees = await this.prisma.employee.findMany({
+        where: { id: { in: empIds } },
+        include: {
+          familyMembers: true,
+          attendees: {
+            include: {
+              employee: true,
+              familyMember: {
+                include: {
+                  employee: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      totalEmployees = employees.length;
+      for (const emp of employees) {
+        for (const att of emp.attendees) {
+          targetAttendees.push(att);
+        }
+      }
+    } else if (dto.attendeeId) {
+      const attendeeIdBigInt = BigInt(dto.attendeeId);
+      const attendee = await this.prisma.attendee.findUnique({
+        where: { id: attendeeIdBigInt },
+        include: {
+          employee: true,
+          familyMember: {
+            include: {
+              employee: true,
+            },
+          },
+        },
+      });
+
+      if (!attendee) {
+        throw new NotFoundException(`Attendee with ID ${dto.attendeeId} not found`);
+      }
+      targetAttendees.push(attendee);
+      totalEmployees = 1;
+    } else {
+      throw new BadRequestException('Either employeeIds or attendeeId must be provided.');
+    }
+
+    if (targetAttendees.length === 0) {
+      throw new NotFoundException('No attendees found for the specified selection.');
+    }
+
+    // Filter attendees into eligible and ineligible for this specific event date
+    const eligibleAttendees: any[] = [];
+    const ineligibleAttendees: any[] = [];
+
+    for (const att of targetAttendees) {
+      const bookingDays = resolveBookingDays(att);
+      const primaryEmployee = att.familyMember?.employee || att.employee;
+      const attendeeName =
+        att.familyMember?.name || primaryEmployee?.name || att.name || 'Attendee';
+      const isFamily = !!att.familyMember;
+      const relation = att.familyMember?.relation || 'Self';
+      const employeeName = primaryEmployee?.name || attendeeName;
+      const employeeCpf = primaryEmployee?.cpf || 'N/A';
+      const department = primaryEmployee?.department || 'EWC Ahmedabad';
+
+      if (bookingDays.includes(dto.simulatedDate)) {
+        eligibleAttendees.push(att);
+      } else {
+        ineligibleAttendees.push({
+          attendeeId: att.id.toString(),
+          attendeeName,
+          isFamily,
+          relation,
+          employeeName,
+          employeeCpf,
+          department,
+          reason: 'Did not select this date',
+          selectedDates: bookingDays,
+        });
+      }
+    }
+
+    const sessionId =
+      dto.testSessionId?.trim() ||
+      `EMP-SIM-${dto.simulatedDate.replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+    const resultPasses: any[] = [];
+    let newlyGeneratedCount = 0;
+    let existingCount = 0;
+    let emailsSentCount = 0;
+    let emailsSkippedCount = 0;
+
+    for (const attendee of eligibleAttendees) {
+      // Idempotency: reuse existing test pass if already generated for this attendee, date, and isTest: true
+      const existingPass = await this.prisma.dailyEmployeePass.findFirst({
+        where: {
+          attendeeId: attendee.id,
+          eventDate: dto.simulatedDate,
+          isTest: true,
+        },
+      });
+
+      let pass = existingPass;
+      if (pass) {
+        // Reset pass to ACTIVE and clear checkedInAt if previously scanned
+        if (pass.status !== DailyPassStatus.ACTIVE || pass.checkedInAt) {
+          pass = await this.prisma.dailyEmployeePass.update({
+            where: { id: pass.id },
+            data: {
+              status: DailyPassStatus.ACTIVE as any,
+              checkedInAt: null,
+              testSessionId: sessionId,
+            },
+          });
+          await this.prisma.dailyCheckin.deleteMany({
+            where: {
+              attendeeId: attendee.id,
+              eventDate: dto.simulatedDate,
+              isLoadTest: true,
+            },
+          });
+        }
+        existingCount++;
+      } else {
+        const qrToken = crypto.randomBytes(32).toString('hex');
+        pass = await this.prisma.dailyEmployeePass.create({
+          data: {
+            attendeeId: attendee.id,
+            eventDate: dto.simulatedDate,
+            qrToken,
+            status: DailyPassStatus.ACTIVE as any,
+            emailStatus: DailyPassEmailStatus.PENDING as any,
+            isTest: true,
+            testSessionId: sessionId,
+          },
+        });
+        newlyGeneratedCount++;
+      }
+
+      // Check if automatic email dispatch should occur
+      let emailStatus: string = pass.emailStatus;
+      if (isDue && dto.testRecipientEmail?.trim()) {
+        if (pass.emailStatus === DailyPassEmailStatus.SENT) {
+          emailsSkippedCount++;
+        } else {
+          try {
+            const emailRes = await this.sendTestEmail(
+              { token: pass.qrToken, recipientEmail: dto.testRecipientEmail.trim() },
+              adminUser,
+            );
+            emailStatus = emailRes.emailStatus;
+            if (emailRes.success) {
+              emailsSentCount++;
+            }
+          } catch (err: any) {
+            this.logger.error(`Error auto-dispatching test email for pass ${pass.id}: ${err.message}`);
+            emailStatus = 'FAILED';
+          }
+        }
+      }
+
+      const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
+      const attendeeName =
+        attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
+      const isFamily = !!attendee.familyMember;
+      const relation = attendee.familyMember?.relation || 'Self';
+      const employeeName = primaryEmployee?.name || attendeeName;
+      const employeeCpf = primaryEmployee?.cpf || 'N/A';
+      const department = primaryEmployee?.department || 'EWC Ahmedabad';
+      const passType = isFamily
+        ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
+        : 'ONGC Employee Pass';
+      const dayTheme = getEventDayTheme(dto.simulatedDate);
+
+      const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
+        eventDate: pass.eventDate,
+        ticketNumber: attendee.ticketNumber,
+        qrToken: pass.qrToken,
+        status: pass.status,
+        attendeeName,
+        isFamily,
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
+      });
+
+      resultPasses.push({
+        testPassId: pass.id.toString(),
+        testSessionId: sessionId,
+        qrToken: pass.qrToken,
+        attendeeId: attendee.id.toString(),
+        attendeeName,
+        isFamily,
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
+        passType,
+        ticketNumber: attendee.ticketNumber,
+        eventDate: pass.eventDate,
+        status: pass.status,
+        emailStatus,
+        dayTheme,
+        presentation,
+        createdAt: pass.createdAt,
+      });
+    }
+
+    const dayTheme = getEventDayTheme(dto.simulatedDate);
+
+    let message: string;
+    if (isDue) {
+      message = `QR Delivery Condition Satisfied: Simulated time (${simulatedTime}) has reached or exceeded configured dispatch time (${configuredDispatchTime}) for ${dayTheme.fullDateLabel}. ${resultPasses.length} eligible pass(es) ready.`;
+      if (dto.testRecipientEmail?.trim()) {
+        message += ` ${emailsSentCount} test email(s) dispatched to ${dto.testRecipientEmail.trim()}${emailsSkippedCount > 0 ? ` (${emailsSkippedCount} previously sent skipped for idempotency)` : ''}.`;
+      }
+    } else {
+      message = `Waiting for QR delivery time: Configured dispatch time is ${configuredDispatchTime}, but simulated time is ${simulatedTime} for ${dayTheme.fullDateLabel}. Test passes generated in PENDING email status. Test emails were not sent.`;
+    }
+
+    this.logger.log(
+      `[TEST_LAB] Simulate delivery for ${dto.simulatedDate}: isDue=${isDue}, ${resultPasses.length} passes, ${emailsSentCount} emails sent`,
+    );
+
+    const firstPass = resultPasses[0] || {};
+    return {
+      ...firstPass,
+      success: true,
+      isDue,
+      status: isDue ? 'DUE' : 'WAITING',
+      simulatedDate: dto.simulatedDate,
+      simulatedTime,
+      configuredDispatchTime,
+      passes: resultPasses,
+      ineligible: ineligibleAttendees,
+      totalEmployees,
+      totalSelectedPeople: targetAttendees.length,
+      totalEligible: eligibleAttendees.length,
+      totalPasses: resultPasses.length,
+      newlyGeneratedCount,
+      existingCount,
+      emailsSentCount,
+      emailsSkippedCount,
+      message,
+      testSessionId: sessionId,
     };
   }
 }

@@ -9,7 +9,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { UserRole, CheckinResult } from '@ongc/shared-types';
+import { UserRole, CheckinResult, RegistrationStatus, DailyPassEmailStatus } from '@ongc/shared-types';
 
 describe('EmployeeDailyPassTestService', () => {
   let service: EmployeeDailyPassTestService;
@@ -91,6 +91,9 @@ describe('EmployeeDailyPassTestService', () => {
       },
       scanLog: {
         deleteMany: jest.fn().mockResolvedValue({ count: 3 }),
+      },
+      setting: {
+        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
 
@@ -533,6 +536,122 @@ describe('EmployeeDailyPassTestService', () => {
       );
 
       expect(res.scannerResponse.result).toBe(CheckinResult.NOT_BOOKED_TODAY);
+    });
+  });
+
+  describe('searchEmployees - APPROVED only filter', () => {
+    it('queries employee table with registrationStatus = APPROVED', async () => {
+      await service.searchEmployees('Amit');
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            registrationStatus: RegistrationStatus.APPROVED,
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('simulateDelivery', () => {
+    it('when simulated time is before dispatch time, passes are generated in PENDING status and no emails are sent', async () => {
+      const res = await service.simulateDelivery(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedTime: '17:00',
+          testRecipientEmail: 'test@example.com',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.isDue).toBe(false);
+      expect(res.status).toBe('WAITING');
+      expect(res.totalPasses).toBe(1);
+      expect(res.emailsSentCount).toBe(0);
+      expect(res.passes[0].emailStatus).toBe('PENDING');
+      expect(mailService.sendEmployeeDailyPassEmail).not.toHaveBeenCalled();
+    });
+
+    it('when simulated time is at or after dispatch time, passes are generated and test emails are sent', async () => {
+      const res = await service.simulateDelivery(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedTime: '18:00',
+          testRecipientEmail: 'test@example.com',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.isDue).toBe(true);
+      expect(res.status).toBe('DUE');
+      expect(res.totalPasses).toBe(1);
+      expect(res.emailsSentCount).toBe(1);
+      expect(mailService.sendEmployeeDailyPassEmail).toHaveBeenCalled();
+    });
+
+    it('idempotency: already sent email is skipped and not duplicated', async () => {
+      prisma.dailyEmployeePass.findFirst.mockResolvedValueOnce({
+        ...mockTestPass,
+        emailStatus: DailyPassEmailStatus.SENT,
+      });
+
+      const res = await service.simulateDelivery(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedTime: '18:30',
+          testRecipientEmail: 'test@example.com',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.isDue).toBe(true);
+      expect(res.emailsSkippedCount).toBe(1);
+      expect(res.emailsSentCount).toBe(0);
+    });
+  });
+
+  describe('Production Dispatch Schedule Integration', () => {
+    it('returns DEFAULT_DISPATCH_SCHEDULE when no custom setting is saved in database', async () => {
+      const schedule = await service.getEffectiveDispatchSchedule();
+      expect(schedule['2026-10-11']).toBe('18:00');
+      expect(schedule['2026-10-12']).toBe('17:30');
+    });
+
+    it('reads and merges live production setting from prisma.setting when present', async () => {
+      prisma.setting.findFirst.mockResolvedValueOnce({
+        key: 'employee.dispatch_schedule',
+        value: JSON.stringify({ '2026-10-11': '16:00' }),
+      });
+
+      const schedule = await service.getEffectiveDispatchSchedule();
+      expect(schedule['2026-10-11']).toBe('16:00');
+      expect(schedule['2026-10-12']).toBe('17:30'); // fallback preserved
+    });
+
+    it('simulateDelivery respects the live production setting from database', async () => {
+      prisma.setting.findFirst.mockResolvedValueOnce({
+        key: 'employee.dispatch_schedule',
+        value: JSON.stringify({ '2026-10-11': '16:30' }),
+      });
+
+      // At 16:45, it is DUE under the custom 16:30 setting (whereas default was 18:00)
+      const res = await service.simulateDelivery(
+        {
+          employeeIds: ['10'],
+          simulatedDate: '2026-10-11',
+          simulatedTime: '16:45',
+          testRecipientEmail: 'test@example.com',
+        },
+        mockSuperAdmin,
+      );
+
+      expect(res.isDue).toBe(true);
+      expect(res.configuredDispatchTime).toBe('16:30');
     });
   });
 });

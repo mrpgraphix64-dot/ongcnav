@@ -24,6 +24,7 @@ import {
   CleanupSessionDto,
   CleanupAllDto,
   DispatchScheduleCheckDto,
+  SimulateDeliveryDto,
 } from './employee-daily-pass-test.dto';
 
 @ApiTags('Super Admin Employee Daily Pass Test Lab')
@@ -47,11 +48,24 @@ export class EmployeeDailyPassTestController {
     return this.testService.getRecentTestPasses(adminUser);
   }
 
+  @Get('dispatch-schedule')
+  @ApiOperation({ summary: 'Get current effective production QR pass delivery schedule' })
+  async getDispatchSchedule() {
+    return this.testService.getEffectiveDispatchSchedule();
+  }
+
   @Post('check-dispatch')
   @ApiOperation({ summary: 'Simulate automatic daily dispatch trigger based on simulated time and schedule' })
   async checkAndRunSimulatedDispatch(@Body() dto: DispatchScheduleCheckDto, @Req() req: Request) {
     const adminUser = (req as any).user;
     return this.testService.checkAndRunSimulatedDispatch(dto, adminUser);
+  }
+
+  @Post('simulate-delivery')
+  @ApiOperation({ summary: 'Simulate QR delivery evaluation and auto-dispatch based on simulated date and time' })
+  async simulateDelivery(@Body() dto: SimulateDeliveryDto, @Req() req: Request) {
+    const adminUser = (req as any).user;
+    return this.testService.simulateDelivery(dto, adminUser);
   }
 
   @Post('generate')
