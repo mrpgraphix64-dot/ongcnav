@@ -17,7 +17,7 @@ export function validateEmployeeLookup(
       isValid: false,
       cleanCpf: '',
       cleanPhoneLast4: '',
-      error: 'Please enter your ONGC CPF number or Ticket ID',
+      error: 'Please enter your Pass Reference Number (e.g. ONGC-12345) or ONGC CPF number',
     };
   }
 

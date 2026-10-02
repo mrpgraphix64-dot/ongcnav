@@ -470,42 +470,60 @@ export default function CommercialAgentsPage() {
   }, [agents, search, activeFilter]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
       {/* Top Banner / Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Master Agents</div>
-          <div className="text-2xl font-outfit font-black text-blue-900 mt-1">{masterAgentsCount}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block font-outfit">Master Agents</span>
+            <span className="text-[10px] text-stone-400">Primary</span>
+          </div>
+          <span className="text-xl font-outfit font-black text-blue-900 leading-none text-right ml-2">{masterAgentsCount}</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Sub-Agents</div>
-          <div className="text-2xl font-outfit font-black text-amber-900 mt-1">{subAgentsCount}</div>
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block font-outfit">Sub-Agents</span>
+            <span className="text-[10px] text-stone-400">Distributed</span>
+          </div>
+          <span className="text-xl font-outfit font-black text-amber-900 leading-none text-right ml-2">{subAgentsCount}</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Total Allocated</div>
-          <div className="text-2xl font-outfit font-black text-maroon mt-1">{totalAllocatedAll}</div>
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block font-outfit">Total Allocated</span>
+            <span className="text-[10px] text-stone-400">Assigned</span>
+          </div>
+          <span className="text-xl font-outfit font-black text-maroon leading-none text-right ml-2">{totalAllocatedAll}</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Direct Sold</div>
-          <div className="text-2xl font-outfit font-black text-emerald-700 mt-1">{totalBookedAll}</div>
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block font-outfit">Direct Sold</span>
+            <span className="text-[10px] text-emerald-600">Issued</span>
+          </div>
+          <span className="text-xl font-outfit font-black text-emerald-700 leading-none text-right ml-2">{totalBookedAll}</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Available to Sell</div>
-          <div className="text-2xl font-outfit font-black text-amber-700 mt-1">{totalAvailableAll}</div>
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block font-outfit">Available</span>
+            <span className="text-[10px] text-amber-600">To sell</span>
+          </div>
+          <span className="text-xl font-outfit font-black text-amber-700 leading-none text-right ml-2">{totalAvailableAll}</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs">
-          <div className="text-[11px] font-bold text-stone-500 uppercase font-outfit">Checked In</div>
-          <div className="text-2xl font-outfit font-black text-indigo-700 mt-1">{totalCheckedInAll}</div>
+        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block font-outfit">Checked In</span>
+            <span className="text-[10px] text-indigo-700">At gates</span>
+          </div>
+          <span className="text-xl font-outfit font-black text-indigo-700 leading-none text-right ml-2">{totalCheckedInAll}</span>
         </div>
       </div>
 
       {/* Control Bar: Search, Filters & Actions */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs space-y-3">
+      <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-2xs space-y-2.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />

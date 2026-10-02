@@ -598,51 +598,41 @@ export default function AdminStaffPage() {
   return (
     <div className="space-y-3.5 sm:space-y-4 2xl:space-y-6">
       {/* Top Action & Stats Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 bg-white p-3.5 sm:p-4 2xl:p-5 rounded-2xl border border-stone-200/70 shadow-xs">
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-          <div>
-            <div className="text-[10px] 2xl:text-xs font-semibold text-stone-500 uppercase tracking-wider">
-              Total Staff
-            </div>
-            <div className="font-outfit font-black text-xl 2xl:text-2xl text-[#7A1113]">
-              {internalStaffList.length}
-            </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        {/* Compact Stats Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
+          <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Total Staff</span>
+            <span className="font-outfit font-black text-xl text-[#7A1113] leading-none">{internalStaffList.length}</span>
           </div>
-          <div className="h-7 2xl:h-8 w-px bg-stone-200 hidden sm:block"></div>
-          <div>
-            <div className="text-[10px] 2xl:text-xs font-semibold text-stone-500 uppercase tracking-wider">
-              Active Operators
-            </div>
-            <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-600">
-              {activeOperatorsCount}
-            </div>
+
+          <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Active Operators</span>
+            <span className="font-outfit font-black text-xl text-emerald-700 leading-none">{activeOperatorsCount}</span>
           </div>
-          <div className="h-7 2xl:h-8 w-px bg-stone-200 hidden sm:block"></div>
-          <div>
-            <div className="text-[10px] 2xl:text-xs font-semibold text-stone-500 uppercase tracking-wider">
-              Active Gates
-            </div>
-            <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900">
-              {gatesList.length}
-            </div>
+
+          <div className="bg-stone-50/80 py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+            <span className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Active Gates</span>
+            <span className="font-outfit font-black text-xl text-stone-900 leading-none">{gatesList.length}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 2xl:gap-3">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={loadData}
             disabled={loading}
             title="Refresh Staff Data"
-            className="p-1.5 2xl:p-2 rounded-xl border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors cursor-pointer"
+            className="p-2 rounded-xl border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors cursor-pointer shadow-2xs"
           >
-            <RefreshCw className={`w-3.5 h-3.5 2xl:w-4 2xl:h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
             type="button"
-            className="inline-flex items-center gap-1.5 2xl:gap-2 px-3 sm:px-3.5 2xl:px-4 py-1.5 2xl:py-2.5 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white font-semibold text-xs 2xl:text-sm transition-all shadow-xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#7A1113] hover:bg-[#8F1417] text-white font-bold text-xs transition-all shadow-2xs cursor-pointer"
           >
-            <UserPlus className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-amber-300" />
+            <UserPlus className="w-3.5 h-3.5 text-amber-300" />
             <span>Add Staff Operator</span>
           </button>
         </div>

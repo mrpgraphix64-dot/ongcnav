@@ -34,6 +34,7 @@ import {
   Eye,
   Mail,
   QrCode,
+  Database,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
@@ -177,6 +178,13 @@ const EMPLOYEE_ADMIN_NAV_ITEMS: NavItem[] = [
     section: 'EMPLOYEES',
   },
   {
+    label: 'ONGC Employee Master',
+    href: '/admin/employees/master',
+    icon: Database,
+    roles: ['EMPLOYEE_ADMIN'],
+    section: 'EMPLOYEES',
+  },
+  {
     label: 'Bulk Upload',
     href: '/admin/bulk-upload',
     icon: UploadCloud,
@@ -280,6 +288,13 @@ const ALL_NAV_ITEMS: NavItem[] = [
     label: 'QR Pass Delivery',
     href: '/admin/employees/qr-delivery',
     icon: Mail,
+    roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN'],
+    section: 'EMPLOYEES',
+  },
+  {
+    label: 'ONGC Employee Master',
+    href: '/admin/employees/master',
+    icon: Database,
     roles: ['SUPER_ADMIN', 'EMPLOYEE_ADMIN'],
     section: 'EMPLOYEES',
   },
@@ -442,6 +457,12 @@ function getPageMeta(pathname: string, userRole?: string): { title: string; subt
       subtitle: 'Manage gate operators, supervisors, roles, and credential access.',
     };
   }
+  if (pathname.startsWith('/admin/employees/master')) {
+    return {
+      title: 'ONGC Employee Master',
+      subtitle: 'Official CPF No. and Mobile No. verification records',
+    };
+  }
   if (pathname.startsWith('/admin/employees/qr-delivery')) {
     return {
       title: 'Daily QR Pass Delivery',
@@ -581,9 +602,28 @@ export default function AdminLayout({
     };
   }, [isLoginPage]);
 
-  // User profile and authentication check state (initialized deterministically for SSR to prevent React Error #418)
-  const [user, setUser] = useState<AdminUser | null>(null);
-  const [authChecking, setAuthChecking] = useState(!isLoginPage);
+  // User profile and authentication check state (initialized from storage if available in client/test environment)
+  const [user, setUser] = useState<AdminUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return (getStoredAuthUser() as AdminUser | null) || null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [authChecking, setAuthChecking] = useState(() => {
+    if (isLoginPage) return false;
+    if (typeof window !== 'undefined') {
+      try {
+        return !getStoredAuthUser();
+      } catch {
+        return true;
+      }
+    }
+    return true;
+  });
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -1193,8 +1233,8 @@ export default function AdminLayout({
           <main
             className={`flex-1 min-h-0 ${
               isViewportManagedPage
-                ? 'overflow-hidden flex flex-col px-3 sm:px-5 lg:px-6 2xl:px-8 py-2.5 sm:py-3 2xl:py-4'
-                : 'overflow-y-auto overflow-x-hidden px-3 sm:px-5 lg:px-6 2xl:px-8 py-3.5 sm:py-4 2xl:py-6'
+                ? 'overflow-hidden flex flex-col px-3 sm:px-4 lg:px-5 2xl:px-6 py-2 sm:py-2.5 2xl:py-3'
+                : 'overflow-y-auto overflow-x-hidden px-3 sm:px-4 lg:px-5 2xl:px-6 py-2.5 sm:py-3.5 2xl:py-4'
             }`}
           >
             {!isAuthorized ? (

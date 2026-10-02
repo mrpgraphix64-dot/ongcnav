@@ -132,6 +132,13 @@ export const EMPLOYEE_ADMIN_PAGE_PERMISSIONS: PagePermissionDefinition[] = [
     domain: 'employee',
     routes: ['/admin/employees/qr-delivery'],
   },
+  {
+    key: 'employee.master',
+    label: 'ONGC Employee Master',
+    description: 'Manage official ONGC employee verification master database',
+    domain: 'employee',
+    routes: ['/admin/employees/master'],
+  },
 ];
 
 export const E_PASS_ADMIN_PAGE_KEYS = E_PASS_ADMIN_PAGE_PERMISSIONS.map((p) => p.key);
@@ -204,6 +211,7 @@ export const DOMAIN_PAGE_ROUTES: Record<AdminDomain, string[]> = {
   employee: [
     '/admin/employees',
     '/admin/employees/qr-delivery',
+    '/admin/employees/master',
     '/admin/attendees',
     '/admin/bulk-upload',
     '/admin/employee',
@@ -326,6 +334,9 @@ export function isRoutePermittedForRole(
 
     if (cleanPath === '/admin' || cleanPath === '/admin/employee') {
       return perms.includes('employee.dashboard');
+    }
+    if (cleanPath.startsWith('/admin/employees/master')) {
+      return perms.includes('employee.master') || perms.includes('employee.attendees');
     }
     if (cleanPath.startsWith('/admin/employees/qr-delivery')) {
       return perms.includes('employee.qr_delivery') || perms.includes('employee.attendees');

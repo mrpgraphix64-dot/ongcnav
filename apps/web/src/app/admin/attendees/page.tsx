@@ -587,61 +587,26 @@ export default function AdminAttendeesPage() {
   return (
     <div className="space-y-3.5 sm:space-y-4 2xl:space-y-6">
       {/* TOP SUMMARY METRICS BAR */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 2xl:gap-4">
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-              Total Registrations
-            </div>
-            <div className="font-outfit font-black text-xl 2xl:text-2xl text-[#7A1113] mt-0.5">
-              {metrics.total_registrations}
-            </div>
-          </div>
-          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-[#7A1113]/10 text-[#7A1113] flex items-center justify-center font-bold">
-            <Users className="w-4 h-4 2xl:w-5 2xl:h-5" />
-          </div>
+      {/* COMPACT STATS STRIP */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Total Registrations</span>
+          <span className="font-outfit font-black text-xl text-[#7A1113] leading-none">{metrics.total_registrations}</span>
         </div>
 
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-              Total People
-            </div>
-            <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900 mt-0.5">
-              {metrics.total_people}
-            </div>
-          </div>
-          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-            <User className="w-4 h-4 2xl:w-5 2xl:h-5" />
-          </div>
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Total People</span>
+          <span className="font-outfit font-black text-xl text-stone-900 leading-none">{metrics.total_people}</span>
         </div>
 
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-              ONGC Staff
-            </div>
-            <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-600 mt-0.5">
-              {metrics.total_employees}
-            </div>
-          </div>
-          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <ShieldCheck className="w-4 h-4 2xl:w-5 2xl:h-5" />
-          </div>
+        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">ONGC Staff</span>
+          <span className="font-outfit font-black text-xl text-emerald-700 leading-none">{metrics.total_employees}</span>
         </div>
 
-        <div className="bg-white rounded-2xl p-3 2xl:p-4 border border-stone-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[10px] 2xl:text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-              Family Members
-            </div>
-            <div className="font-outfit font-black text-xl 2xl:text-2xl text-blue-600 mt-0.5">
-              {metrics.total_family_members}
-            </div>
-          </div>
-          <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-            <Users className="w-4 h-4 2xl:w-5 2xl:h-5" />
-          </div>
+        <div className="bg-blue-50/40 py-2 px-3 rounded-xl border border-blue-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Family Members</span>
+          <span className="font-outfit font-black text-xl text-blue-700 leading-none">{metrics.total_family_members}</span>
         </div>
       </div>
 

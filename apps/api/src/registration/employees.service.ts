@@ -49,6 +49,7 @@ export class EmployeesService {
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },
         { cpf: { contains: q, mode: 'insensitive' } },
+        { referenceNumber: { contains: q, mode: 'insensitive' } },
         { phone: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
         { department: { contains: q, mode: 'insensitive' } },
@@ -138,6 +139,7 @@ export class EmployeesService {
       return {
         id: emp.id.toString(),
         cpf: emp.cpf,
+        referenceNumber: emp.referenceNumber || emp.cpf,
         name: emp.name,
         department: emp.department,
         designation: emp.designation,
@@ -243,6 +245,7 @@ export class EmployeesService {
         return {
           id: fam.id.toString(),
           ticketNumber: fam.ticketNumber,
+          referenceNumber: emp.referenceNumber || emp.cpf,
           name: fam.name || fam.familyMember?.name || 'Family Member',
           relation: fam.familyMember?.relation || 'Family Member',
           age: fam.familyMember?.age,
@@ -270,6 +273,7 @@ export class EmployeesService {
       department: emp.department,
       designation: emp.designation,
       cpf: emp.cpf,
+      referenceNumber: emp.referenceNumber || emp.cpf,
       mobile: emp.phone,
       email: emp.email,
       bookingDays: bookingDaysList,
@@ -555,6 +559,7 @@ export class EmployeesService {
     return {
       id: emp.id.toString(),
       cpf: emp.cpf,
+      referenceNumber: emp.referenceNumber || emp.cpf,
       name: emp.name,
       designation: emp.designation,
       department: emp.department,
@@ -573,12 +578,14 @@ export class EmployeesService {
         age: fam.age,
         gender: fam.gender,
         phone: fam.phone,
+        email: fam.email,
         photoPath: fam.photoPath,
         hasPhoto: !!fam.photoPath,
       })),
       attendees: emp.attendees.map((att) => ({
         id: att.id.toString(),
         ticketNumber: att.ticketNumber,
+        referenceNumber: emp.referenceNumber || emp.cpf,
         status: att.status,
         attendeeName: att.familyMember ? att.familyMember.name : emp.name,
         relation: att.familyMember ? att.familyMember.relation : 'Primary Employee',
@@ -782,7 +789,7 @@ export class EmployeesService {
       const emp = att.employee;
       const fam = att.familyMember;
 
-      const recipientEmail = (emp?.email || att.email || '').trim();
+      const recipientEmail = (fam ? (fam.email || att.email || emp?.email || '') : (emp?.email || att.email || '')).trim();
       if (!recipientEmail) {
         await this.prisma.dailyEmployeePass.update({
           where: { id: pass.id },
@@ -821,6 +828,7 @@ export class EmployeesService {
         ticketNumber: att.ticketNumber,
         qrToken: pass.qrToken,
         cpf: emp?.cpf,
+        referenceNumber: emp?.referenceNumber || emp?.cpf,
         department: emp?.department,
         pdfBuffer,
       });
@@ -949,8 +957,9 @@ export class EmployeesService {
         isFamily: !!fam,
         employeeName: emp?.name || attendeeName,
         cpf: emp?.cpf || '',
+        referenceNumber: emp?.referenceNumber || emp?.cpf || '',
         department: emp?.department || '',
-        email: emp?.email || att.email || '',
+        email: (fam ? (fam.email || att.email || emp?.email) : (emp?.email || att.email)) || '',
         phone: fam?.phone || emp?.phone || '',
         status: pass ? pass.status : 'ELIGIBLE',
         emailStatus: pass ? pass.emailStatus : 'NOT_GENERATED',
@@ -992,6 +1001,7 @@ export class EmployeesService {
         (item) =>
           item.attendeeName.toLowerCase().includes(q) ||
           item.employeeName.toLowerCase().includes(q) ||
+          item.referenceNumber.toLowerCase().includes(q) ||
           item.cpf.toLowerCase().includes(q) ||
           item.email.toLowerCase().includes(q) ||
           item.ticketNumber.toLowerCase().includes(q) ||
@@ -1084,6 +1094,7 @@ export class EmployeesService {
 
     const headers = [
       'Employee Name',
+      'Ref No.',
       'Employee CPF',
       'Person Type',
       'Family Member Name',
@@ -1109,11 +1120,13 @@ export class EmployeesService {
       const categoryData: any = emp.categoryData || {};
       const dob = categoryData.dob || '';
       const joiningDate = categoryData.joiningDate || '';
+      const refNo = emp.referenceNumber || emp.cpf;
 
       // 1. Primary Employee Row
       rows.push(
         [
           escape(emp.name),
+          escape(refNo),
           escape(emp.cpf),
           escape('Employee'),
           escape('-'),
@@ -1140,12 +1153,13 @@ export class EmployeesService {
         rows.push(
           [
             escape(emp.name),
+            escape(refNo),
             escape(emp.cpf),
-            escape('Family'),
+            escape('Family Member'),
             escape(fam.name),
             escape(fam.relation),
             escape(fam.phone || emp.phone),
-            escape(emp.email),
+            escape(fam.email || emp.email),
             escape(emp.department),
             escape(emp.designation),
             escape('-'),

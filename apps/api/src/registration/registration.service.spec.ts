@@ -10,11 +10,13 @@ describe('RegistrationService', () => {
 
   beforeEach(async () => {
     prisma = {
-      employee: { findUnique: jest.fn(), create: jest.fn() },
+      employee: { findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
       setting: { findUnique: jest.fn().mockResolvedValue(null) },
       attendee: { create: jest.fn(), findFirst: jest.fn() },
       familyMember: { create: jest.fn() },
       dailyEmployeePass: { findUnique: jest.fn() },
+      referenceSequence: { upsert: jest.fn().mockResolvedValue({ currentValue: BigInt(1) }) },
+      ongcEmployeeMaster: { count: jest.fn().mockResolvedValue(0), findUnique: jest.fn() },
       $transaction: jest.fn().mockImplementation(async (callback: any) => callback(prisma)),
     };
 
@@ -27,7 +29,7 @@ describe('RegistrationService', () => {
 
   describe('register', () => {
     const baseDto = {
-      cpf: '654321',
+      cpf: '12345',
       name: 'Amit Sharma',
       designation: 'ONGC Employee',
       department: 'EWC Ahmedabad',
@@ -36,8 +38,8 @@ describe('RegistrationService', () => {
       employeeCategory: EmployeeCategory.REGULAR,
       bookingDays: ['2026-10-11', '2026-10-12'],
       familyMembers: [
-        { name: 'Sunita Sharma', relation: 'Spouse', phone: '9876543211', bookingDays: ['2026-10-13'] },
-        { name: 'Rohan Sharma', relation: 'Son', phone: '9876543212', bookingDays: ['2026-10-14', '2026-10-15'] },
+        { name: 'Sunita Sharma', relation: 'Spouse', phone: '9876543211', email: 'sunita@example.com', bookingDays: ['2026-10-13'] },
+        { name: 'Rohan Sharma', relation: 'Son', phone: '9876543212', email: 'rohan@example.com', bookingDays: ['2026-10-14', '2026-10-15'] },
       ],
     };
 
@@ -137,6 +139,58 @@ describe('RegistrationService', () => {
       attendeeCalls.forEach((call: any) => {
         expect(call[0].data.registrationType).toBe(RegistrationType.EMPLOYEE);
       });
+    });
+
+    it('assigns sequential reference number ONGC-00001 to registered employee', async () => {
+      const res = await service.register(baseDto as any);
+      expect(prisma.employee.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ referenceNumber: 'ONGC-00001' }),
+        }),
+      );
+      expect(res.data.employee.referenceNumber).toBe('ONGC-00001');
+    });
+
+    it('rejects employee registration if CPF is not strictly 5 numeric digits', async () => {
+      await expect(service.register({ ...baseDto, cpf: '1234' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.register({ ...baseDto, cpf: '123456' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.register({ ...baseDto, cpf: '12A45' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects employee registration if more than 3 family members are submitted', async () => {
+      const fourFamily = [
+        { name: 'Member 1', relation: 'Spouse', phone: '9876543211', email: 'm1@example.com', bookingDays: ['2026-10-11'] },
+        { name: 'Member 2', relation: 'Son', phone: '9876543212', email: 'm2@example.com', bookingDays: ['2026-10-12'] },
+        { name: 'Member 3', relation: 'Daughter', phone: '9876543213', email: 'm3@example.com', bookingDays: ['2026-10-13'] },
+        { name: 'Member 4', relation: 'Parent', phone: '9876543214', email: 'm4@example.com', bookingDays: ['2026-10-14'] },
+      ];
+      await expect(service.register({ ...baseDto, familyMembers: fourFamily } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects employee registration if family member email is missing or empty', async () => {
+      const invalidFamily = [
+        { name: 'Member 1', relation: 'Spouse', phone: '9876543211', email: '', bookingDays: ['2026-10-11'] },
+      ];
+      await expect(service.register({ ...baseDto, familyMembers: invalidFamily } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('stores email for family members on both familyMember and attendee records', async () => {
+      await service.register(baseDto as any);
+      expect(prisma.familyMember.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ email: 'sunita@example.com' }),
+        }),
+      );
     });
 
     it('rejects employee registration if registrationType is incorrectly set to COMMERCIAL', async () => {
@@ -351,12 +405,12 @@ describe('RegistrationService', () => {
     });
 
     it('rejects when phone last 4 digits do not match registered employee phone', async () => {
-      prisma.employee.findUnique.mockResolvedValue(mockEmployee);
+      prisma.employee.findFirst.mockResolvedValue(mockEmployee);
       await expect(service.findByCpf('CPF1', '9999')).rejects.toThrow(BadRequestException);
     });
 
     it('succeeds when both valid CPF and correct phone last 4 digits match', async () => {
-      prisma.employee.findUnique.mockResolvedValue(mockEmployee);
+      prisma.employee.findFirst.mockResolvedValue(mockEmployee);
       const result = await service.findByCpf('CPF1', '3210');
       expect(result.employee.cpf).toBe('CPF1');
       expect(result.employee.name).toBe('Amit');
@@ -365,10 +419,20 @@ describe('RegistrationService', () => {
       expect(result.passes[1].bookingDays).toEqual(['2026-10-14']);
     });
 
+    it('succeeds when searched by Reference Number (ONGC-00001)', async () => {
+      prisma.employee.findFirst.mockResolvedValue({
+        ...mockEmployee,
+        referenceNumber: 'ONGC-00001',
+      });
+      const result = await service.findByCpf('ONGC-00001', '3210');
+      expect(result.employee.referenceNumber).toBe('ONGC-00001');
+      expect(result.employee.name).toBe('Amit');
+    });
+
     it('enforces RegistrationType.EMPLOYEE on attendee query to prevent retrieving commercial attendees', async () => {
-      prisma.employee.findUnique.mockResolvedValue(mockEmployee);
+      prisma.employee.findFirst.mockResolvedValue(mockEmployee);
       await service.findByCpf('CPF1', '3210');
-      expect(prisma.employee.findUnique).toHaveBeenCalledWith(
+      expect(prisma.employee.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           include: expect.objectContaining({
             attendees: expect.objectContaining({
@@ -455,6 +519,55 @@ describe('RegistrationService', () => {
       expect(result.passType).toBe('Family Member Pass (Spouse)');
       expect(result.employeeName).toBe('Amit Sharma');
       expect(result.employeeCpf).toBe('123456');
+    });
+  });
+
+  describe('verifyEmployee', () => {
+    it('rejects CPF that is not 5 digits', async () => {
+      await expect(service.verifyEmployee('1234', '9876543210')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.verifyEmployee('123456', '9876543210')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects mobile that is not 10 digits', async () => {
+      await expect(service.verifyEmployee('12345', '98765')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects if employee is already registered in portal', async () => {
+      prisma.employee.findUnique.mockResolvedValueOnce({ id: BigInt(1), cpf: '12345' });
+      await expect(service.verifyEmployee('12345', '9876543210')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('validates against master records and fails if mismatch', async () => {
+      prisma.employee.findUnique.mockResolvedValueOnce(null);
+      prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(100);
+      prisma.ongcEmployeeMaster.findUnique.mockResolvedValueOnce(null);
+
+      await expect(service.verifyEmployee('12345', '9876543210')).rejects.toThrow(
+        'The CPF No. and Mobile No. do not match the official ONGC employee records',
+      );
+    });
+
+    it('succeeds when master record matches', async () => {
+      prisma.employee.findUnique.mockResolvedValueOnce(null);
+      prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(100);
+      prisma.ongcEmployeeMaster.findUnique.mockResolvedValueOnce({
+        cpf: '12345',
+        name: 'Rajesh Kumar',
+        mobile: '9876543210',
+      });
+
+      const res = await service.verifyEmployee('12345', '9876543210');
+      expect(res.verified).toBe(true);
+      expect(res.name).toBe('Rajesh Kumar');
+      expect(res.cpf).toBe('12345');
     });
   });
 });

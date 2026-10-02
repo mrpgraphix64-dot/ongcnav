@@ -489,19 +489,19 @@ export default function AdminSettingsPage() {
   const currentGroup = groups[activeTab] || {};
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
       {/* Header */}
-      <div className="p-6 rounded-3xl bg-white border border-stone-200/80 card-shadow">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 uppercase">
+            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 uppercase">
               System Configuration
             </span>
-            <h2 className="font-outfit font-extrabold text-2xl text-ink mt-1 flex items-center gap-2">
-              <Settings className="w-6 h-6 text-maroon" />
+            <h2 className="font-outfit font-extrabold text-xl text-ink mt-0.5 flex items-center gap-2">
+              <Settings className="w-5 h-5 text-maroon" />
               <span>Event Portal Settings</span>
             </h2>
-            <p className="text-xs text-ink-soft mt-0.5">
+            <p className="text-[11px] text-ink-soft">
               Control event parameters, turnstile hardware thresholds, QR policies, and audit configurations.
             </p>
           </div>
@@ -511,31 +511,31 @@ export default function AdminSettingsPage() {
       {/* Flash Alert */}
       {msg && (
         <div
-          className={`p-4 rounded-2xl flex items-center justify-between shadow-xs transition-all ${
+          className={`p-3 rounded-xl flex items-center justify-between shadow-xs transition-all ${
             msg.type === 'success'
               ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
               : 'bg-rose-50 border border-rose-300 text-rose-900'
           }`}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {msg.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             ) : (
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
             )}
-            <span className="text-sm font-semibold">{msg.text}</span>
+            <span className="text-xs font-semibold">{msg.text}</span>
           </div>
           <button
             onClick={() => setMsg(null)}
             className="p-1 rounded-lg hover:bg-black/5 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex flex-wrap gap-2 p-1.5 bg-stone-100 rounded-2xl border border-stone-200 text-xs font-bold">
+      <div className="flex flex-wrap gap-1 p-1 bg-stone-100 rounded-xl border border-stone-200 text-xs font-bold">
         {[
           { id: 'general', label: 'General', icon: Building },
           { id: 'event', label: 'Event Dates', icon: Calendar },
@@ -566,13 +566,13 @@ export default function AdminSettingsPage() {
                   loadBookPassSettings(!bookPassInitializedRef.current);
                 }
               }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 isActive
                   ? 'bg-maroon text-white shadow-xs'
                   : 'text-stone-600 hover:text-ink hover:bg-white/60'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-gold' : 'text-stone-400'}`} />
+              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-gold' : 'text-stone-400'}`} />
               <span>{tab.label}</span>
             </button>
           );
@@ -580,7 +580,7 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* Tab Panels */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-6">
+      <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow p-4 sm:p-5">
         {/* 1. General Settings */}
         {activeTab === 'general' && (
           <form

@@ -355,20 +355,20 @@ export default function EventControlPage() {
       )}
 
       {/* 2. Top Command Console Card (Matching Laravel index.blade.php) */}
-      <div className="p-6 rounded-3xl bg-white border border-stone-200/80 card-shadow relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
               {/* Master Event Status Badge */}
               <span
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                   data.eventStatus === 'open'
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                     : 'bg-rose-100 text-rose-800 border border-rose-300'
                 }`}
               >
                 <span
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-1.5 h-1.5 rounded-full ${
                     data.eventStatus === 'open' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
                   }`}
                 />
@@ -377,7 +377,7 @@ export default function EventControlPage() {
 
               {/* Scanning Active / Off Badge */}
               <span
-                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                   data.scanningEnabled && !data.emergencyStopped
                     ? 'bg-blue-100 text-blue-800 border border-blue-200'
                     : 'bg-rose-100 text-rose-800 border border-rose-200'
@@ -388,28 +388,28 @@ export default function EventControlPage() {
 
               {/* Emergency Stopped Badge */}
               {data.emergencyStopped && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-600 text-white uppercase animate-bounce">
-                  <AlertOctagon className="w-3.5 h-3.5" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white uppercase animate-bounce">
+                  <AlertOctagon className="w-3 h-3" />
                   EMERGENCY STOPPED
                 </span>
               )}
             </div>
 
-            <h2 className="font-outfit font-extrabold text-2xl text-ink">
+            <h2 className="font-outfit font-extrabold text-xl text-ink">
               Central Event Operations Console
             </h2>
 
-            <p className="text-xs text-ink-soft mt-1">
+            <p className="text-[11px] text-ink-soft mt-0.5">
               Active Operational Date:{' '}
-              <span className="font-bold text-maroon font-outfit text-sm">
+              <span className="font-bold text-maroon font-outfit text-xs">
                 {formatDateDisplay(data.activeDate)}
               </span>
               {data.isManualDateOverride ? (
-                <span className="ml-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                <span className="ml-1.5 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                   Manual Override
                 </span>
               ) : (
-                <span className="ml-1.5 text-[11px] font-semibold text-stone-500 bg-stone-100 px-2 py-0.5 rounded">
+                <span className="ml-1.5 text-[10px] font-semibold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">
                   System Date
                 </span>
               )}
@@ -417,26 +417,26 @@ export default function EventControlPage() {
           </div>
 
           {/* Command Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Date Switch Form */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSetDate(dateInput);
               }}
-              className="flex items-center gap-1.5 bg-cream-soft p-1.5 rounded-2xl border border-stone-200"
+              className="flex items-center gap-1 bg-cream-soft p-1 rounded-xl border border-stone-200"
             >
               <input
                 type="date"
                 value={dateInput}
                 onChange={(e) => setDateInput(e.target.value)}
                 disabled={actionLoading}
-                className="text-xs px-2.5 py-1.5 rounded-xl border border-stone-200 bg-white font-semibold focus:outline-maroon"
+                className="text-xs px-2 py-1 rounded-lg border border-stone-200 bg-white font-semibold focus:outline-maroon"
               />
               <button
                 type="submit"
                 disabled={actionLoading}
-                className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink text-xs font-bold transition cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-ink text-xs font-bold transition cursor-pointer"
               >
                 Set Date
               </button>
@@ -445,7 +445,7 @@ export default function EventControlPage() {
                   type="button"
                   onClick={() => handleSetDate('')}
                   disabled={actionLoading}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                  className="px-2 py-1 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                   title="Reset to today's system date"
                 >
                   Reset
@@ -458,7 +458,7 @@ export default function EventControlPage() {
               type="button"
               onClick={handleToggleStatus}
               disabled={actionLoading}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer ${
                 data.eventStatus === 'open'
                   ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -466,12 +466,12 @@ export default function EventControlPage() {
             >
               {data.eventStatus === 'open' ? (
                 <>
-                  <Lock className="w-4 h-4" />
+                  <Lock className="w-3.5 h-3.5" />
                   <span>Close Event</span>
                 </>
               ) : (
                 <>
-                  <Unlock className="w-4 h-4" />
+                  <Unlock className="w-3.5 h-3.5" />
                   <span>Open Event</span>
                 </>
               )}
@@ -482,7 +482,7 @@ export default function EventControlPage() {
               type="button"
               onClick={handleToggleScanning}
               disabled={actionLoading}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer ${
                 data.scanningEnabled
                   ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -490,12 +490,12 @@ export default function EventControlPage() {
             >
               {data.scanningEnabled ? (
                 <>
-                  <Pause className="w-4 h-4" />
+                  <Pause className="w-3.5 h-3.5" />
                   <span>Pause Scanning</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-4 h-4" />
+                  <Play className="w-3.5 h-3.5" />
                   <span>Enable Scanning</span>
                 </>
               )}
@@ -507,20 +507,20 @@ export default function EventControlPage() {
                 type="button"
                 onClick={() => setEmergencyModalOpen(true)}
                 disabled={actionLoading}
-                className="px-4 py-2.5 rounded-xl text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white transition flex items-center gap-2 shadow-xs cursor-pointer"
+                className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
-                <AlertOctagon className="w-4 h-4" />
-                <span>STOP ALL SCANNING</span>
+                <AlertOctagon className="w-3.5 h-3.5" />
+                <span>STOP SCANNING</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleEmergencyResume}
                 disabled={actionLoading}
-                className="px-4 py-2.5 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-2 shadow-xs cursor-pointer"
+                className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>RESUME NORMAL OPERATIONS</span>
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>RESUME OPERATIONS</span>
               </button>
             )}
           </div>
@@ -584,106 +584,117 @@ export default function EventControlPage() {
       )}
 
       {/* 4. Live Operational KPIs (Matching Laravel 7-column KPI grid) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         {/* KPI 1: Registered Total */}
-        <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-          <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft font-outfit">
-            Registered Total
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block font-outfit">
+              Registered
+            </span>
+            <span className="text-[10px] text-stone-400">All attendees</span>
           </div>
-          <div className="font-outfit font-extrabold text-2xl text-ink mt-1">
+          <span className="font-outfit font-black text-xl text-ink leading-none text-right ml-2">
             {data.kpis.totalRegistered.toLocaleString()}
-          </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">All event attendees</div>
+          </span>
         </div>
 
         {/* KPI 2: Booked Today */}
-        <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-          <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft font-outfit">
-            Booked Today
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block font-outfit">
+              Booked Today
+            </span>
+            <span className="text-[10px] text-stone-400">Passes for date</span>
           </div>
-          <div className="font-outfit font-extrabold text-2xl text-maroon mt-1">
+          <span className="font-outfit font-black text-xl text-maroon leading-none text-right ml-2">
             {data.kpis.bookedForToday.toLocaleString()}
-          </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">Selected date pass</div>
+          </span>
         </div>
 
         {/* KPI 3: Checked In */}
-        <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-          <div className="text-[10px] font-bold tracking-wider uppercase text-emerald-800 font-outfit">
-            Checked In
+        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-800 block font-outfit">
+              Checked In
+            </span>
+            <span className="text-[10px] text-emerald-600">Active arrivals</span>
           </div>
-          <div className="font-outfit font-extrabold text-2xl text-emerald-700 mt-1">
+          <span className="font-outfit font-black text-xl text-emerald-700 leading-none text-right ml-2">
             {data.kpis.checkedInToday.toLocaleString()}
-          </div>
-          <div className="text-[10px] text-emerald-600 mt-0.5">Active entries</div>
+          </span>
         </div>
 
         {/* KPI 4: Pending Arrival */}
-        <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-          <div className="text-[10px] font-bold tracking-wider uppercase text-amber-800 font-outfit">
-            Pending Arrival
+        <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold tracking-wider uppercase text-amber-800 block font-outfit">
+              Pending
+            </span>
+            <span className="text-[10px] text-amber-600">Yet to arrive</span>
           </div>
-          <div className="font-outfit font-extrabold text-2xl text-amber-700 mt-1">
+          <span className="font-outfit font-black text-xl text-amber-700 leading-none text-right ml-2">
             {data.kpis.pendingToday.toLocaleString()}
-          </div>
-          <div className="text-[10px] text-amber-600 mt-0.5">Yet to arrive</div>
+          </span>
         </div>
 
         {/* KPI 5: Attendance Rate */}
-        <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-          <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft font-outfit">
-            Attendance Rate
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div className="min-w-0 pr-2">
+            <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block font-outfit">
+              Att. Rate
+            </span>
+            <div className="w-14 bg-stone-100 rounded-full h-1.5 mt-1 overflow-hidden">
+              <div
+                className="bg-maroon h-1.5 rounded-full transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, data.kpis.attendanceRate))}%` }}
+              />
+            </div>
           </div>
-          <div className="font-outfit font-extrabold text-2xl text-ink mt-1">
+          <span className="font-outfit font-black text-xl text-ink leading-none text-right shrink-0">
             {data.kpis.attendanceRate}%
-          </div>
-          <div className="w-full bg-stone-100 rounded-full h-1.5 mt-1.5 overflow-hidden">
-            <div
-              className="bg-maroon h-1.5 rounded-full transition-all"
-              style={{ width: `${Math.min(100, Math.max(0, data.kpis.attendanceRate))}%` }}
-            />
-          </div>
+          </span>
         </div>
 
         {/* KPI 6: Open Gates */}
-        <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-          <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft font-outfit">
-            Open Gates
-          </div>
-          <div className="font-outfit font-extrabold text-2xl text-ink mt-1">
-            {data.kpis.openGatesCount}{' '}
-            <span className="text-xs font-normal text-stone-400">
-              / {data.kpis.totalGatesCount}
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block font-outfit">
+              Open Gates
             </span>
+            <span className="text-[10px] text-stone-400">of {data.kpis.totalGatesCount} total</span>
           </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">Active lanes</div>
+          <span className="font-outfit font-black text-xl text-ink leading-none text-right ml-2">
+            {data.kpis.openGatesCount}
+          </span>
         </div>
 
         {/* KPI 7: On-Duty Staff */}
-        <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-          <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft font-outfit">
-            On-Duty Staff
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block font-outfit">
+              On-Duty Staff
+            </span>
+            <span className="text-[10px] text-stone-400">Personnel</span>
           </div>
-          <div className="font-outfit font-extrabold text-2xl text-ink mt-1">
+          <span className="font-outfit font-black text-xl text-ink leading-none text-right ml-2">
             {data.kpis.activeStaffCount}
-          </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">Active personnel</div>
+          </span>
         </div>
       </div>
 
       {/* 5. Gate Live Status & Capacity Controls Table (Exact Laravel layout) */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
-        <div className="p-5 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow overflow-hidden">
+        <div className="py-2.5 px-3.5 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <h3 className="font-outfit font-extrabold text-base text-ink flex items-center gap-2">
-              <DoorOpen className="w-4 h-4 text-maroon" />
+            <h3 className="font-outfit font-extrabold text-sm text-ink flex items-center gap-1.5">
+              <DoorOpen className="w-3.5 h-3.5 text-maroon" />
               <span>Gate Live Status &amp; Capacity Controls</span>
             </h3>
-            <p className="text-xs text-ink-soft mt-0.5">
+            <p className="text-[11px] text-ink-soft">
               Control lane availability, set maximum capacity limits, and enforce automatic blockades when full.
             </p>
           </div>
-          <span className="text-xs text-stone-500 font-semibold bg-stone-50 px-3 py-1 rounded-xl border border-stone-200">
+          <span className="text-[11px] text-stone-500 font-semibold bg-stone-50 px-2.5 py-0.5 rounded-lg border border-stone-200 shrink-0">
             Active Date: {formatDateDisplay(data.activeDate)}
           </span>
         </div>
@@ -692,12 +703,12 @@ export default function EventControlPage() {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70 font-outfit">
-                <th className="py-3.5 px-4">Gate</th>
-                <th className="py-3.5 px-3">Type / Location</th>
-                <th className="py-3.5 px-3">Status</th>
-                <th className="py-3.5 px-3">Check-ins Today</th>
-                <th className="py-3.5 px-3">Capacity &amp; Occupancy</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
+                <th className="py-2 px-3">Gate</th>
+                <th className="py-2 px-3">Type / Location</th>
+                <th className="py-2 px-3">Status</th>
+                <th className="py-2 px-3">Check-ins Today</th>
+                <th className="py-2 px-3">Capacity &amp; Occupancy</th>
+                <th className="py-2 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -710,24 +721,24 @@ export default function EventControlPage() {
                     }`}
                   >
                     {/* Gate Name & Code */}
-                    <td className="py-3.5 px-4 font-bold text-ink">
-                      <div className="font-outfit text-sm text-maroon font-bold">{gate.name}</div>
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono bg-stone-100 text-stone-700 mt-0.5">
+                    <td className="py-2 px-3 font-bold text-ink">
+                      <div className="font-outfit text-xs text-maroon font-bold">{gate.name}</div>
+                      <span className="inline-block px-1 py-0.2 rounded text-[9px] font-mono bg-stone-100 text-stone-700 mt-0.5">
                         {gate.code}
                       </span>
                     </td>
 
                     {/* Type / Location */}
-                    <td className="py-3.5 px-3">
-                      <div className="font-semibold text-stone-800">{gate.type}</div>
-                      <div className="text-[11px] text-stone-400">{gate.location}</div>
+                    <td className="py-2 px-3">
+                      <div className="font-semibold text-stone-800 text-xs">{gate.type}</div>
+                      <div className="text-[10px] text-stone-400">{gate.location}</div>
                     </td>
 
                     {/* Status Badge */}
-                    <td className="py-3.5 px-3">
-                      <div className="flex items-center gap-2 flex-wrap">
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
                             gate.isOpen
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-rose-100 text-rose-800'
@@ -741,7 +752,7 @@ export default function EventControlPage() {
                           {gate.isOpen ? 'OPEN' : 'CLOSED'}
                         </span>
                         {gate.isCapacityReached && gate.capacityEnabled && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-600 text-white uppercase">
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-rose-600 text-white uppercase">
                             FULL
                           </span>
                         )}
@@ -749,17 +760,17 @@ export default function EventControlPage() {
                     </td>
 
                     {/* Check-ins Today */}
-                    <td className="py-3.5 px-3 font-mono font-bold text-ink">
-                      <span className="text-sm font-outfit text-emerald-700">
+                    <td className="py-2 px-3 font-mono font-bold text-ink">
+                      <span className="text-xs font-outfit text-emerald-700">
                         {gate.checkinsToday.toLocaleString()}
                       </span>
                     </td>
 
                     {/* Capacity & Occupancy Meter */}
-                    <td className="py-3.5 px-3 min-w-[200px]">
+                    <td className="py-2 px-3 min-w-[180px]">
                       {gate.capacityEnabled && gate.maximumCapacity && gate.maximumCapacity > 0 ? (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[11px] font-semibold text-stone-600">
+                        <div className="space-y-0.5">
+                          <div className="flex justify-between text-[10px] font-semibold text-stone-600">
                             <span>
                               {gate.checkinsToday.toLocaleString()} / {gate.maximumCapacity.toLocaleString()}
                             </span>
@@ -775,9 +786,9 @@ export default function EventControlPage() {
                               {gate.capacityPercentage}%
                             </span>
                           </div>
-                          <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                          <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
                             <div
-                              className={`h-2 rounded-full transition-all ${
+                              className={`h-1.5 rounded-full transition-all ${
                                 gate.capacityPercentage >= 90
                                   ? 'bg-rose-500'
                                   : gate.capacityPercentage >= 70
@@ -788,36 +799,36 @@ export default function EventControlPage() {
                             />
                           </div>
                           {gate.blockWhenFull && (
-                            <span className="text-[10px] text-rose-600 font-semibold block">
+                            <span className="text-[9px] text-rose-600 font-semibold block">
                               &bull; Blocking scans when full
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-[11px] text-stone-400 italic">No limit set</span>
+                        <span className="text-[10px] text-stone-400 italic">No limit set</span>
                       )}
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="inline-flex items-center gap-1.5">
+                    <td className="py-2 px-3 text-right">
+                      <div className="inline-flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => handleToggleGateOpen(gate.id)}
                           disabled={actionLoading}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                             gate.isOpen
                               ? 'bg-stone-100 hover:bg-stone-200 text-stone-700'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                           }`}
                         >
-                          {gate.isOpen ? 'Close Lane' : 'Open Lane'}
+                          {gate.isOpen ? 'Close' : 'Open'}
                         </button>
 
                         <button
                           type="button"
                           onClick={() => openCapacityModal(gate)}
-                          className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-cream-soft hover:bg-stone-200 text-ink border border-stone-200 transition cursor-pointer"
+                          className="px-2 py-1 rounded-lg text-xs font-semibold bg-cream-soft hover:bg-stone-200 text-ink border border-stone-200 transition cursor-pointer"
                         >
                           Limits
                         </button>
@@ -827,7 +838,7 @@ export default function EventControlPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-stone-400">
+                  <td colSpan={6} className="py-4 text-center text-stone-400">
                     No active gates configured.
                   </td>
                 </tr>
@@ -923,23 +934,23 @@ export default function EventControlPage() {
       )}
 
       {/* 7. Recent Operational Audit Logs (Latest 15) */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-5 space-y-4">
+      <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow p-3.5 space-y-2.5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-outfit font-extrabold text-base text-ink flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-maroon" />
+            <h3 className="font-outfit font-extrabold text-sm text-ink flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-maroon" />
               <span>Recent Operational Actions</span>
             </h3>
-            <p className="text-xs text-ink-soft">
+            <p className="text-[11px] text-ink-soft">
               Real-time audit log of gate changes, status switches, and manual overrides.
             </p>
           </div>
-          <span className="text-xs font-bold text-maroon font-outfit bg-maroon-50 px-2.5 py-1 rounded-lg border border-maroon/20">
+          <span className="text-[10px] font-bold text-maroon font-outfit bg-maroon-50 px-2 py-0.5 rounded-md border border-maroon/20">
             Latest 15 Actions
           </span>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {data.recentAudits.length > 0 ? (
             data.recentAudits.map((log) => {
               const isEmergency = log.action.includes('emergency');
@@ -947,7 +958,7 @@ export default function EventControlPage() {
               return (
                 <div
                   key={log.id}
-                  className="p-3 rounded-xl bg-cream/40 border border-stone-200/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs"
+                  className="py-1.5 px-2.5 rounded-xl bg-cream/40 border border-stone-200/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 text-xs"
                 >
                   <div className="flex items-start sm:items-center gap-2.5 flex-wrap">
                     <span

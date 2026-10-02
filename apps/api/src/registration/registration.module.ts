@@ -8,6 +8,8 @@ import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
 import { DailyPassPdfService } from './daily-pass-pdf.service';
 import { EmployeeDispatchSchedulerService } from './employee-dispatch-scheduler.service';
+import { EmployeeMasterService } from './employee-master.service';
+import { EmployeeMasterController } from './employee-master.controller';
 
 import { MailModule } from '../mail/mail.module';
 
@@ -19,12 +21,14 @@ import { MailModule } from '../mail/mail.module';
     EmployeesService,
     DailyPassPdfService,
     EmployeeDispatchSchedulerService,
+    EmployeeMasterService,
   ],
   controllers: [
     RegistrationController,
     AttendeesController,
     BulkUploadController,
     EmployeesController,
+    EmployeeMasterController,
   ],
   exports: [
     RegistrationService,
@@ -32,6 +36,7 @@ import { MailModule } from '../mail/mail.module';
     EmployeesService,
     DailyPassPdfService,
     EmployeeDispatchSchedulerService,
+    EmployeeMasterService,
   ],
 })
 export class RegistrationModule {}

@@ -598,49 +598,49 @@ export default function DailyQrDeliveryPage() {
       {/* 2. COMPACT STATS STRIP FOR SELECTED DATE */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         {/* Eligible */}
-        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex flex-col justify-center min-h-[58px]">
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
           <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Eligible</span>
-          <span className="font-outfit font-black text-xl text-ink leading-tight">
+          <span className="font-outfit font-black text-xl text-ink leading-none">
             {statsLoading ? '—' : stats?.eligibleCount.toLocaleString() ?? 0}
           </span>
         </div>
 
         {/* Generated */}
-        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex flex-col justify-center min-h-[58px]">
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
           <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">Generated</span>
-          <span className="font-outfit font-black text-xl text-purple-700 leading-tight">
+          <span className="font-outfit font-black text-xl text-purple-700 leading-none">
             {statsLoading ? '—' : stats?.generatedCount.toLocaleString() ?? 0}
           </span>
         </div>
 
         {/* Sent */}
-        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex flex-col justify-center min-h-[58px]">
+        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
           <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Emails Sent</span>
-          <span className="font-outfit font-black text-xl text-emerald-700 leading-tight">
+          <span className="font-outfit font-black text-xl text-emerald-700 leading-none">
             {statsLoading ? '—' : stats?.sentCount.toLocaleString() ?? 0}
           </span>
         </div>
 
         {/* Failed */}
-        <div className="bg-rose-50/40 py-2 px-3 rounded-xl border border-rose-200/80 shadow-2xs flex flex-col justify-center min-h-[58px]">
+        <div className="bg-rose-50/40 py-2 px-3 rounded-xl border border-rose-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
           <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Failed</span>
-          <span className="font-outfit font-black text-xl text-rose-700 leading-tight">
+          <span className="font-outfit font-black text-xl text-rose-700 leading-none">
             {statsLoading ? '—' : stats?.failedCount.toLocaleString() ?? 0}
           </span>
         </div>
 
         {/* Pending */}
-        <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/80 shadow-2xs flex flex-col justify-center min-h-[58px]">
+        <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
           <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Pending</span>
-          <span className="font-outfit font-black text-xl text-amber-700 leading-tight">
+          <span className="font-outfit font-black text-xl text-amber-700 leading-none">
             {statsLoading ? '—' : stats?.pendingCount.toLocaleString() ?? 0}
           </span>
         </div>
 
         {/* Scans */}
-        <div className="bg-blue-50/40 py-2 px-3 rounded-xl border border-blue-200/80 shadow-2xs flex flex-col justify-center min-h-[58px]">
+        <div className="bg-blue-50/40 py-2 px-3 rounded-xl border border-blue-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
           <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Gate Scans</span>
-          <span className="font-outfit font-black text-xl text-blue-700 leading-tight">
+          <span className="font-outfit font-black text-xl text-blue-700 leading-none">
             {statsLoading ? '—' : stats?.checkedInCount.toLocaleString() ?? 0}
           </span>
         </div>

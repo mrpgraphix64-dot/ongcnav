@@ -308,14 +308,14 @@ export default function AdminIncidentsPage() {
       )}
 
       {/* Header Card with Metrics */}
-      <div className="p-6 rounded-3xl bg-white border border-stone-200/80 card-shadow space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="font-outfit font-extrabold text-2xl text-ink flex items-center gap-2.5">
-              <AlertTriangle className="w-6 h-6 text-maroon shrink-0" />
+            <h2 className="font-outfit font-extrabold text-xl text-ink flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-maroon shrink-0" />
               <span>Gate &amp; Operations Incident Log</span>
             </h2>
-            <p className="text-xs text-ink-soft mt-0.5">
+            <p className="text-[11px] text-ink-soft">
               Log, escalate, and resolve gate issues, duplicate claims, capacity bottlenecks, and
               security matters.
             </p>
@@ -325,66 +325,76 @@ export default function AdminIncidentsPage() {
               onClick={loadIncidents}
               disabled={loading}
               title="Refresh list"
-              className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-cream-soft text-ink transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              className="p-2 rounded-xl border border-stone-200 bg-white hover:bg-cream-soft text-ink transition-colors cursor-pointer shadow-xs disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 text-maroon ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-maroon ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
               type="button"
               onClick={() => setShowCreateModal(true)}
-              className="px-5 py-2.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center gap-2 shrink-0 shadow-xs cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
             >
-              <PlusCircle className="w-4 h-4" />
-              <span>Log New Incident</span>
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Log Incident</span>
             </button>
           </div>
         </div>
 
         {/* Metric Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-          <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200/70">
-            <div className="text-[10px] font-bold text-stone-500 uppercase">Total Incidents</div>
-            <div className="font-outfit font-extrabold text-xl text-ink mt-0.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+          <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+            <div>
+              <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block">Total Incidents</span>
+              <span className="text-[10px] text-stone-400">All recorded</span>
+            </div>
+            <span className="font-outfit font-black text-xl text-ink leading-none text-right ml-2">
               {metrics.totalCount}
-            </div>
+            </span>
           </div>
-          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200/70">
-            <div className="text-[10px] font-bold text-rose-700 uppercase">
-              Open / Action Required
+          <div className="bg-rose-50/40 py-2 px-3 rounded-xl border border-rose-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+            <div>
+              <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block">Open / Action</span>
+              <span className="text-[10px] text-rose-600">Pending</span>
             </div>
-            <div className="font-outfit font-extrabold text-xl text-rose-800 mt-0.5">
+            <span className="font-outfit font-black text-xl text-rose-800 leading-none text-right ml-2">
               {metrics.openCount}
-            </div>
+            </span>
           </div>
-          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/70">
-            <div className="text-[10px] font-bold text-amber-700 uppercase">In Review</div>
-            <div className="font-outfit font-extrabold text-xl text-amber-800 mt-0.5">
+          <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+            <div>
+              <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">In Review</span>
+              <span className="text-[10px] text-amber-600">Investigating</span>
+            </div>
+            <span className="font-outfit font-black text-xl text-amber-800 leading-none text-right ml-2">
               {metrics.inReviewCount}
-            </div>
+            </span>
           </div>
-          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/70">
-            <div className="text-[10px] font-bold text-emerald-700 uppercase">Resolved</div>
-            <div className="font-outfit font-extrabold text-xl text-emerald-800 mt-0.5">
-              {metrics.resolvedCount}
+          <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+            <div>
+              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Resolved</span>
+              <span className="text-[10px] text-emerald-600">Closed</span>
             </div>
+            <span className="font-outfit font-black text-xl text-emerald-800 leading-none text-right ml-2">
+              {metrics.resolvedCount}
+            </span>
           </div>
         </div>
 
         {/* Filters Form */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-stone-100 text-xs">
           <input
             type="date"
             name="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 bg-cream-soft font-semibold text-ink focus:outline-maroon"
+            className="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-cream-soft font-semibold text-ink text-xs focus:outline-maroon"
           />
 
           <select
             name="status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium text-ink focus:outline-maroon"
+            className="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-white font-medium text-ink text-xs focus:outline-maroon"
           >
             <option value="">All Statuses</option>
             <option value="OPEN">OPEN</option>
@@ -397,7 +407,7 @@ export default function AdminIncidentsPage() {
             name="category"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium text-ink focus:outline-maroon"
+            className="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-white font-medium text-ink text-xs focus:outline-maroon"
           >
             <option value="">All Categories</option>
             {Object.entries(categories).map(([key, label]) => (
@@ -411,7 +421,7 @@ export default function AdminIncidentsPage() {
             name="gate_id"
             value={gateFilter}
             onChange={(e) => setGateFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium text-ink focus:outline-maroon"
+            className="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-white font-medium text-ink text-xs focus:outline-maroon"
           >
             <option value="">All Gates</option>
             {gates.map((gate) => (
@@ -424,7 +434,7 @@ export default function AdminIncidentsPage() {
           <button
             type="button"
             onClick={loadIncidents}
-            className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink font-bold transition cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink text-xs font-bold transition cursor-pointer"
           >
             Filter
           </button>
@@ -432,7 +442,7 @@ export default function AdminIncidentsPage() {
             <button
               type="button"
               onClick={handleResetFilters}
-              className="px-3 py-2 rounded-xl text-stone-500 hover:text-stone-800 font-semibold transition cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl text-stone-500 hover:text-stone-800 text-xs font-semibold transition cursor-pointer"
             >
               Reset
             </button>
@@ -441,17 +451,17 @@ export default function AdminIncidentsPage() {
       </div>
 
       {/* Incidents Table */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
+      <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70">
-                <th className="py-3.5 px-4">Incident ID &amp; Time</th>
-                <th className="py-3.5 px-3">Category</th>
-                <th className="py-3.5 px-4">Description &amp; Context</th>
-                <th className="py-3.5 px-3">Gate / Reporter</th>
-                <th className="py-3.5 px-3">Status</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
+                <th className="py-2 px-3">Incident ID &amp; Time</th>
+                <th className="py-2 px-3">Category</th>
+                <th className="py-2 px-3">Description &amp; Context</th>
+                <th className="py-2 px-3">Gate / Reporter</th>
+                <th className="py-2 px-3">Status</th>
+                <th className="py-2 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -464,68 +474,68 @@ export default function AdminIncidentsPage() {
 
                   return (
                     <tr key={inc.id} className="hover:bg-cream/40 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="font-mono font-bold text-ink">{incCode}</div>
-                        <div className="text-[11px] text-stone-400">
+                      <td className="py-2 px-3">
+                        <div className="font-mono font-bold text-ink text-xs">{incCode}</div>
+                        <div className="text-[10px] text-stone-400">
                           {inc.incident_date ? inc.incident_date : 'Today'}
                           {inc.incident_time ? ` • ${inc.incident_time}` : ''}
                         </div>
                       </td>
-                      <td className="py-3.5 px-3">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-stone-100 text-stone-700">
+                      <td className="py-2 px-3">
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-stone-100 text-stone-700">
                           {categoryTitle}
                         </span>
                         {(inc.ticket_id || inc.ticketId) && (
-                          <div className="font-mono text-[10px] text-maroon mt-0.5 font-bold">
+                          <div className="font-mono text-[9px] text-maroon mt-0.5 font-bold">
                             {inc.ticket_id || inc.ticketId}
                           </div>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 max-w-sm">
+                      <td className="py-2 px-3 max-w-sm">
                         <p className="text-xs text-ink/80 leading-relaxed">{inc.description}</p>
                         {isResolved && (inc.resolution_notes || inc.resolutionNotes) && (
-                          <div className="mt-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900">
+                          <div className="mt-1 p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-900">
                             <span className="font-bold text-emerald-800">Resolution:</span>{' '}
                             {inc.resolution_notes || inc.resolutionNotes}
                           </div>
                         )}
                       </td>
-                      <td className="py-3.5 px-3">
-                        <div className="font-semibold text-stone-800">
+                      <td className="py-2 px-3">
+                        <div className="font-semibold text-stone-800 text-xs">
                           {inc.gate?.name || 'General Perimeter'}
                         </div>
-                        <div className="text-[11px] text-stone-400">
+                        <div className="text-[10px] text-stone-400">
                           By: {inc.reportedBy?.name || 'Staff'}
                         </div>
                       </td>
-                      <td className="py-3.5 px-3">
+                      <td className="py-2 px-3">
                         {inc.status === 'OPEN' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 text-rose-800">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />{' '}
                             OPEN
                           </span>
                         ) : inc.status === 'IN_REVIEW' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">
                             IN REVIEW
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800">
                             <Check className="w-3 h-3 text-emerald-600" />{' '}
                             {inc.status === 'CLOSED' ? 'CLOSED' : 'RESOLVED'}
                           </span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-2 px-3 text-right">
                         {!isResolved ? (
                           <button
                             type="button"
                             onClick={() => openResolveModal(inc)}
-                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs cursor-pointer"
                           >
                             Resolve
                           </button>
                         ) : (
-                          <span className="text-[11px] text-stone-400 font-medium">Closed</span>
+                          <span className="text-[10px] text-stone-400 font-medium">Closed</span>
                         )}
                       </td>
                     </tr>
@@ -533,7 +543,7 @@ export default function AdminIncidentsPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-10 text-center text-stone-400 font-medium">
+                  <td colSpan={6} className="py-6 text-center text-stone-400 font-medium">
                     No incidents logged for this period.
                   </td>
                 </tr>

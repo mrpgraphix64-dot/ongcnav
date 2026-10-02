@@ -861,6 +861,7 @@ Reworkzone.com (https://reworkzone.com)
       relation: data.relation,
       employeeName: data.employeeName,
       employeeCpf: data.cpf,
+      referenceNumber: data.referenceNumber || data.cpf,
       department: data.department,
     });
     const dayTheme: EventDayTheme = presentation.theme;
@@ -969,10 +970,10 @@ Reworkzone.com (https://reworkzone.com)
                             <div><strong>Attendee Name:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.attendeeName)}</span></div>
                             <div><strong>Relationship:</strong> <span style="color: #1A1A1A;">${this.escapeHtml(presentation.relation)}</span></div>
                             <div><strong>Primary Employee:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.primaryEmployeeName)}</span></div>
-                            <div><strong>Employee CPF:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.employeeCpf)}</span></div>
+                            <div><strong>Ref No.:</strong> <span style="font-family: monospace; color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.referenceNumber || presentation.employeeCpf)}</span></div>
                           ` : `
                             <div><strong>Employee Name:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.attendeeName)}</span></div>
-                            <div><strong>Employee CPF:</strong> <span style="color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.employeeCpf)}</span></div>
+                            <div><strong>Ref No.:</strong> <span style="font-family: monospace; color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.referenceNumber || presentation.employeeCpf)}</span></div>
                             <div><strong>Department:</strong> <span style="color: #1A1A1A;">${this.escapeHtml(presentation.department)}</span></div>
                           `}
                           <div><strong>Ticket Number:</strong> <span style="font-family: monospace; font-weight: 700; color: #1A1A1A;">${this.escapeHtml(presentation.ticketNumber)}</span></div>
@@ -1095,7 +1096,7 @@ is ready.
 PASS DETAILS:
 Attendee: ${presentation.attendeeName}
 Pass Type: ${presentation.passTypeWithRelation}
-${presentation.isFamily ? `Primary Employee: ${presentation.primaryEmployeeName}\nEmployee CPF: ${presentation.employeeCpf}\nRelationship: ${presentation.relation}\n` : `CPF: ${presentation.employeeCpf}\n`}Ticket No: ${presentation.ticketNumber}
+${presentation.isFamily ? `Primary Employee: ${presentation.primaryEmployeeName}\nRef No.: ${presentation.referenceNumber || presentation.employeeCpf}\nRelationship: ${presentation.relation}\n` : `Ref No.: ${presentation.referenceNumber || presentation.employeeCpf}\n`}Ticket No: ${presentation.ticketNumber}
 Date: ${dayTheme.fullDateLabel}
 Venue: Malaviya Cricket Ground ONGC, Ahmedabad
 Gates Open: From 7:00 PM

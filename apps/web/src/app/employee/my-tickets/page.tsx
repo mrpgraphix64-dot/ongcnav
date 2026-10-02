@@ -107,7 +107,7 @@ function EmployeeTicketsContent() {
                 htmlFor="employee_cpf"
                 className="block text-xs font-bold text-ink-soft uppercase tracking-wider mb-2"
               >
-                ONGC CPF Number <span className="text-maroon">*</span>
+                Pass Reference Number / CPF No. <span className="text-maroon">*</span>
               </label>
               <div className="relative">
                 <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -118,7 +118,7 @@ function EmployeeTicketsContent() {
                   onChange={(e) => setCpf(e.target.value)}
                   required
                   autoFocus
-                  placeholder="e.g. 123456"
+                  placeholder="e.g. ONGC-00001 or 12345"
                   className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-stone-50 border border-stone-200 text-ink font-mono font-bold text-base placeholder:font-sans placeholder:font-normal placeholder:text-stone-400 focus:bg-white focus:outline-none focus:border-maroon shadow-xs transition-colors uppercase"
                 />
               </div>
@@ -219,8 +219,13 @@ function EmployeeTicketsContent() {
 
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="px-3 py-1 rounded-full text-xs font-bold bg-maroon-soft text-maroon border border-maroon/20">
-                      CPF: {result.employee.cpf}
+                      REF NO: {result.employee.referenceNumber || result.employee.cpf}
                     </span>
+                    {result.employee.referenceNumber && (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-stone-100 text-stone-700 border border-stone-200">
+                        CPF: {result.employee.cpf}
+                      </span>
+                    )}
                     {result.employee.employeeCategory && (
                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-gold/20 text-maroon-deep border border-gold/40">
                         {result.employee.employeeCategory}
@@ -355,6 +360,14 @@ function EmployeeTicketsContent() {
                               </span>
                             </div>
                             <div>
+                              <span className="text-gold-light/70 text-[10px] block uppercase font-mono">
+                                Ref No.
+                              </span>
+                              <span className="font-mono font-bold text-white text-sm">
+                                {pass.referenceNumber || result.employee?.referenceNumber || result.employee?.cpf}
+                              </span>
+                            </div>
+                            <div>
                               <span className="text-gold-light/70 text-[10px] block uppercase">
                                 Relation / Role
                               </span>
@@ -370,7 +383,7 @@ function EmployeeTicketsContent() {
                                 Malaviya Cricket Ground ONGC
                               </span>
                             </div>
-                            <div>
+                            <div className="col-span-2">
                               <span className="text-gold-light/70 text-[10px] block uppercase">
                                 Entry Gate
                               </span>

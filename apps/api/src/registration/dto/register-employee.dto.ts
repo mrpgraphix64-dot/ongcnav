@@ -8,10 +8,27 @@ import {
   Matches,
   ValidateNested,
   ArrayMinSize,
+  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EmployeeCategory, RegistrationType } from '@ongc/shared-types';
+
+export class VerifyEmployeeDto {
+  @ApiProperty({ example: '12345', description: 'ONGC Employee CPF Number (exactly 5 numeric digits)' })
+  @IsString()
+  @IsNotEmpty({ message: 'Employee CPF No. is required.' })
+  @Matches(/^[0-9]{5}$/, { message: 'Employee CPF No. must accept ONLY 5 numeric digits.' })
+  cpf: string;
+
+  @ApiProperty({ example: '9876543210', description: 'Employee 10-digit mobile number' })
+  @IsString()
+  @IsNotEmpty({ message: 'Employee mobile number is required.' })
+  @Matches(/^[6-9][0-9]{9}$/, {
+    message: 'Employee mobile number must be exactly 10 digits and start with 6, 7, 8 or 9.',
+  })
+  mobile: string;
+}
 
 export class FamilyMemberInputDto {
   @ApiProperty({ example: 'Sunita Sharma' })
@@ -35,6 +52,14 @@ export class FamilyMemberInputDto {
   })
   phone: string;
 
+  @ApiProperty({
+    example: 'sunita.sharma@example.com',
+    description: 'Family member email — required. Their ticket will be shared through email for this member.',
+  })
+  @IsEmail({}, { message: 'Please provide a valid email address for the family member.' })
+  @IsNotEmpty({ message: 'Family member email is required.' })
+  email: string;
+
   @ApiPropertyOptional({ example: 38 })
   @IsOptional()
   age?: number;
@@ -55,9 +80,10 @@ export class FamilyMemberInputDto {
 }
 
 export class RegisterEmployeeDto {
-  @ApiProperty({ example: '123456', description: 'ONGC Employee CPF Number' })
+  @ApiProperty({ example: '12345', description: 'ONGC Employee CPF Number (exactly 5 numeric digits)' })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Employee CPF No. is required.' })
+  @Matches(/^[0-9]{5}$/, { message: 'Employee CPF No. must accept ONLY 5 numeric digits.' })
   cpf: string;
 
   @ApiProperty({ example: 'Amit Sharma' })
@@ -75,7 +101,7 @@ export class RegisterEmployeeDto {
   @IsNotEmpty()
   department: string;
 
-  @ApiProperty({ example: '+919876543210' })
+  @ApiProperty({ example: '9876543210' })
   @IsString()
   @IsNotEmpty()
   phone: string;
@@ -102,6 +128,7 @@ export class RegisterEmployeeDto {
   @ApiPropertyOptional({ type: [FamilyMemberInputDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(3, { message: 'Maximum 3 family members are allowed per employee.' })
   @ValidateNested({ each: true })
   @Type(() => FamilyMemberInputDto)
   familyMembers?: FamilyMemberInputDto[];

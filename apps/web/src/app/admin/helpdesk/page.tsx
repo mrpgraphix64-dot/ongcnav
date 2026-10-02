@@ -278,23 +278,23 @@ export default function AdminHelpDeskPage() {
     userRole === 'SUPER_ADMIN' || userRole === 'EVENT_ADMIN' || userRole === 'ADMIN';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
       {/* Flash Alerts */}
       {msg && (
         <div
-          className={`p-4 rounded-2xl flex items-center justify-between shadow-xs transition-all ${
+          className={`p-3 rounded-xl flex items-center justify-between shadow-xs transition-all ${
             msg.type === 'success'
               ? 'bg-emerald-50 border border-emerald-200 text-emerald-900'
               : 'bg-rose-50 border border-rose-300 text-rose-900'
           }`}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {msg.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             ) : (
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
             )}
-            <span className="text-sm font-semibold">{msg.text}</span>
+            <span className="text-xs font-semibold">{msg.text}</span>
           </div>
           <button
             onClick={() => setMsg(null)}
@@ -302,20 +302,20 @@ export default function AdminHelpDeskPage() {
               msg.type === 'success' ? 'text-emerald-700' : 'text-rose-700'
             }`}
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
       {/* Search Header Card */}
-      <div className="p-6 rounded-3xl bg-white border border-stone-200/80 card-shadow space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <h2 className="font-outfit font-extrabold text-2xl text-ink flex items-center gap-2.5">
-              <LifeBuoy className="w-6 h-6 text-maroon shrink-0" />
-              <span>Attendee Help Desk & Verification</span>
+            <h2 className="font-outfit font-extrabold text-xl text-ink flex items-center gap-2">
+              <LifeBuoy className="w-5 h-5 text-maroon shrink-0" />
+              <span>Attendee Help Desk &amp; Verification</span>
             </h2>
-            <p className="text-xs text-ink-soft mt-0.5">
+            <p className="text-[11px] text-ink-soft">
               Search attendee records by Ticket ID, Full Name, Mobile Number{' '}
               {canViewCpf ? (
                 <span className="font-bold text-maroon">or ONGC CPF Number</span>
@@ -328,7 +328,7 @@ export default function AdminHelpDeskPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-3.5 py-1.5 rounded-xl bg-cream-soft border border-stone-200 text-xs font-semibold text-stone-700 flex items-center gap-1.5 shadow-xs">
+            <span className="px-2.5 py-1 rounded-lg bg-cream-soft border border-stone-200 text-xs font-semibold text-stone-700 flex items-center gap-1.5 shadow-2xs">
               <Calendar className="w-3.5 h-3.5 text-maroon" />
               <span>Active Date:</span>
               <strong className="text-maroon font-bold">
@@ -341,10 +341,10 @@ export default function AdminHelpDeskPage() {
         {/* Search Form */}
         <form
           onSubmit={(e) => handleSearch(e)}
-          className="flex flex-col sm:flex-row items-center gap-2.5"
+          className="flex flex-col sm:flex-row items-center gap-2"
         >
           <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
               name="q"
@@ -354,13 +354,13 @@ export default function AdminHelpDeskPage() {
                 canViewCpf ? ', CPF' : ''
               }...`}
               autoFocus
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-cream-soft text-xs text-ink placeholder-stone-400 focus:outline-maroon font-medium transition"
+              className="w-full pl-9 pr-3.5 py-1.5 rounded-xl border border-stone-200 bg-cream-soft text-xs text-ink placeholder-stone-400 focus:outline-maroon font-medium transition"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center justify-center gap-2 shrink-0 shadow-xs cursor-pointer disabled:opacity-50"
+            className="w-full sm:w-auto px-4 py-1.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shrink-0 shadow-xs cursor-pointer disabled:opacity-50"
           >
             <Search className="w-3.5 h-3.5" />
             <span>{loading ? 'Searching...' : 'Lookup Attendee'}</span>
@@ -369,7 +369,7 @@ export default function AdminHelpDeskPage() {
             <button
               type="button"
               onClick={handleClear}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink text-xs font-bold transition text-center shrink-0 cursor-pointer"
+              className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink text-xs font-bold transition text-center shrink-0 cursor-pointer"
             >
               Clear
             </button>
@@ -379,11 +379,11 @@ export default function AdminHelpDeskPage() {
 
       {/* Results Section */}
       {searchedQuery !== '' && (
-        <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
-          <div className="p-4 border-b border-stone-100 flex items-center justify-between">
-            <h3 className="font-outfit font-extrabold text-base text-ink">
+        <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow overflow-hidden">
+          <div className="py-2.5 px-3.5 border-b border-stone-100 flex items-center justify-between">
+            <h3 className="font-outfit font-extrabold text-sm text-ink">
               Search Results{' '}
-              <span className="text-xs font-normal text-stone-400">
+              <span className="text-[11px] font-normal text-stone-400">
                 ({results.length} {results.length === 1 ? 'attendee found' : 'attendees found'})
               </span>
             </h3>
@@ -393,13 +393,13 @@ export default function AdminHelpDeskPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70">
-                  <th className="py-3.5 px-4">Ticket / Attendee</th>
-                  <th className="py-3.5 px-3">Category</th>
-                  <th className="py-3.5 px-3">Contact</th>
-                  {canViewCpf && <th className="py-3.5 px-3">CPF</th>}
-                  <th className="py-3.5 px-3">Today Booking</th>
-                  <th className="py-3.5 px-3">Entry Status Today</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-2 px-3">Ticket / Attendee</th>
+                  <th className="py-2 px-3">Category</th>
+                  <th className="py-2 px-3">Contact</th>
+                  {canViewCpf && <th className="py-2 px-3">CPF</th>}
+                  <th className="py-2 px-3">Today Booking</th>
+                  <th className="py-2 px-3">Entry Status Today</th>
+                  <th className="py-2 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
@@ -411,17 +411,17 @@ export default function AdminHelpDeskPage() {
 
                     return (
                       <tr key={att.id} className="hover:bg-cream/40 transition-colors">
-                        <td className="py-3.5 px-4">
-                          <div className="font-outfit font-bold text-sm text-maroon">
+                        <td className="py-2 px-3">
+                          <div className="font-outfit font-bold text-xs text-maroon">
                             {att.name || att.attendeeName}
                           </div>
-                          <div className="font-mono text-[11px] text-stone-600">
+                          <div className="font-mono text-[10px] text-stone-600">
                             {att.ticketNumber || att.ticket_id}
                           </div>
                         </td>
-                        <td className="py-3.5 px-3">
+                        <td className="py-2 px-3">
                           <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
                               att.category === 'VIP'
                                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                 : 'bg-stone-100 text-stone-700'
@@ -429,36 +429,36 @@ export default function AdminHelpDeskPage() {
                           >
                             {att.category}
                           </span>
-                          <div className="text-[10px] text-stone-400 mt-0.5">
+                          <div className="text-[9px] text-stone-400 mt-0.5">
                             {att.isFamily ? 'Family Member' : 'Primary Employee'}
                           </div>
                         </td>
-                        <td className="py-3.5 px-3 font-mono text-stone-700">
+                        <td className="py-2 px-3 font-mono text-stone-700 text-xs">
                           {att.mobile || 'N/A'}
                         </td>
                         {canViewCpf && (
-                          <td className="py-3.5 px-3 font-mono font-semibold text-ink">
+                          <td className="py-2 px-3 font-mono font-semibold text-ink text-xs">
                             {att.cpf ? att.cpf : '—'}
                           </td>
                         )}
-                        <td className="py-3.5 px-3">
+                        <td className="py-2 px-3">
                           {isBookedToday ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Booked
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Booked
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-rose-600 font-bold">
-                              <XCircle className="w-3.5 h-3.5 text-rose-500" /> Not Booked
+                            <span className="inline-flex items-center gap-1 text-rose-600 font-bold text-xs">
+                              <XCircle className="w-3 h-3 text-rose-500" /> Not Booked
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-3">
+                        <td className="py-2 px-3">
                           {activeCheckin ? (
                             <div className="space-y-0.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Checked In
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> Checked In
                               </span>
-                              <div className="text-[11px] text-stone-600 font-medium">
+                              <div className="text-[10px] text-stone-600 font-medium">
                                 {activeCheckin.checkinTime
                                   ? new Date(activeCheckin.checkinTime).toLocaleTimeString(
                                       'en-IN',
@@ -473,33 +473,33 @@ export default function AdminHelpDeskPage() {
                                 &bull; {activeCheckin.gateName || 'Gate'}
                               </div>
                               {activeCheckin.isManual && (
-                                <div className="text-[10px] text-amber-700 font-semibold">
+                                <div className="text-[9px] text-amber-700 font-semibold">
                                   Manual: {activeCheckin.manualReason || 'Admin Override'}
                                 </div>
                               )}
                             </div>
                           ) : voidedCheckin ? (
                             <div className="space-y-0.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-100 text-rose-800">
                                 Voided
                               </span>
-                              <div className="text-[10px] text-stone-400">
+                              <div className="text-[9px] text-stone-400">
                                 Reason: {voidedCheckin.voidReason}
                               </div>
                             </div>
                           ) : (
-                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-600">
+                            <span className="inline-block px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-stone-100 text-stone-600">
                               Not Checked In
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="inline-flex items-center gap-1.5">
+                        <td className="py-2 px-3 text-right">
+                          <div className="inline-flex items-center gap-1">
                             {!activeCheckin ? (
                               <button
                                 type="button"
                                 onClick={() => openManualModal(att)}
-                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-maroon hover:bg-maroon-dark text-white transition shadow-xs cursor-pointer"
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-maroon hover:bg-maroon-dark text-white transition shadow-xs cursor-pointer"
                               >
                                 Manual Check-in
                               </button>
@@ -508,7 +508,7 @@ export default function AdminHelpDeskPage() {
                                 <button
                                   type="button"
                                   onClick={() => openVoidModal(att, activeCheckin)}
-                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer"
+                                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer"
                                 >
                                   Reverse Check-in
                                 </button>

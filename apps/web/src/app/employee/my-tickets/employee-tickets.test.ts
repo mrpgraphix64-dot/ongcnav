@@ -5,32 +5,38 @@ import {
 } from './employee-tickets-utils';
 
 describe('Employee-Tickets: CPF and Phone Last 4 Lookup Validation (validateEmployeeLookup)', () => {
-  it('accepts valid ONGC CPF number and 4-digit phone suffix', () => {
-    const res1 = validateEmployeeLookup('123456', '3210');
+  it('accepts valid ONGC Reference Number or CPF and 4-digit phone suffix', () => {
+    const res1 = validateEmployeeLookup('12345', '3210');
     expect(res1.isValid).toBe(true);
-    expect(res1.cleanCpf).toBe('123456');
+    expect(res1.cleanCpf).toBe('12345');
     expect(res1.cleanPhoneLast4).toBe('3210');
 
-    const res2 = validateEmployeeLookup('TK-12345', '9876');
+    const res2 = validateEmployeeLookup('ONGC-00042', '9876');
     expect(res2.isValid).toBe(true);
-    expect(res2.cleanCpf).toBe('TK-12345');
+    expect(res2.cleanCpf).toBe('ONGC-00042');
     expect(res2.cleanPhoneLast4).toBe('9876');
+
+    const res3 = validateEmployeeLookup('TK-12345', '9876');
+    expect(res3.isValid).toBe(true);
+    expect(res3.cleanCpf).toBe('TK-12345');
+    expect(res3.cleanPhoneLast4).toBe('9876');
   });
 
   it('trims leading/trailing whitespace and normalizes CPF to uppercase', () => {
-    const res = validateEmployeeLookup('  tk-ongc-001  ', ' 3210 ');
+    const res = validateEmployeeLookup('  ongc-00001  ', ' 3210 ');
     expect(res.isValid).toBe(true);
-    expect(res.cleanCpf).toBe('TK-ONGC-001');
+    expect(res.cleanCpf).toBe('ONGC-00001');
     expect(res.cleanPhoneLast4).toBe('3210');
   });
 
   it('rejects empty or whitespace-only CPF inputs with an informative error', () => {
     const res1 = validateEmployeeLookup('', '3210');
     expect(res1.isValid).toBe(false);
-    expect(res1.error).toContain('Please enter your ONGC CPF number');
+    expect(res1.error).toContain('Please enter your Pass Reference Number');
 
     const res2 = validateEmployeeLookup('    ', '3210');
     expect(res2.isValid).toBe(false);
+    expect(res2.error).toContain('Please enter your Pass Reference Number');
   });
 
   it('rejects empty or missing phone last 4 digits', () => {

@@ -60,6 +60,65 @@ export class RegistrationService {
     return `TK-${prefix}-${timeSuffix}${randomSuffix}`;
   }
 
+  async generateReferenceNumber(tx?: any): Promise<string> {
+    const client = tx || this.prisma;
+    const seq = await client.referenceSequence.upsert({
+      where: { name: 'employee_pass' },
+      update: { currentValue: { increment: 1 } },
+      create: { name: 'employee_pass', currentValue: 1 },
+    });
+    const num = Number(seq.currentValue);
+    const padded = num <= 99999 ? String(num).padStart(5, '0') : String(num);
+    return `ONGC-${padded}`;
+  }
+
+  async verifyEmployee(cpf: string, mobile: string) {
+    const cleanCpf = (cpf || '').trim();
+    if (!/^[0-9]{5}$/.test(cleanCpf)) {
+      throw new BadRequestException('Employee CPF No. must accept ONLY 5 numeric digits.');
+    }
+    const cleanMobile = (mobile || '').trim();
+    if (!/^[6-9][0-9]{9}$/.test(cleanMobile)) {
+      throw new BadRequestException(
+        'Employee mobile number must be exactly 10 digits starting with 6, 7, 8, or 9.',
+      );
+    }
+
+    // Check if employee already registered
+    const existing = await this.prisma.employee.findUnique({
+      where: { cpf: cleanCpf },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Employee with CPF ${cleanCpf} is already registered. Please use Ticket Lookup.`,
+      );
+    }
+
+    // Check official ONGC master data if master records exist
+    const masterCount = await this.prisma.ongcEmployeeMaster.count();
+    if (masterCount > 0) {
+      const master = await this.prisma.ongcEmployeeMaster.findUnique({
+        where: { cpf: cleanCpf },
+      });
+      const masterMobile = (master?.mobile || '').replace(/\D/g, '');
+      if (!master || !masterMobile.endsWith(cleanMobile)) {
+        throw new BadRequestException(
+          'The CPF No. and Mobile No. do not match the official ONGC employee records. Please check the details and try again.',
+        );
+      }
+      return {
+        verified: true,
+        name: master.name,
+        cpf: cleanCpf,
+      };
+    }
+
+    return {
+      verified: true,
+      cpf: cleanCpf,
+    };
+  }
+
   async register(
     dto: RegisterEmployeeDto,
     photoPath?: string,
@@ -78,12 +137,17 @@ export class RegistrationService {
       }
     }
 
-    if (dto.familyMembers && dto.familyMembers.length > 6) {
-      throw new BadRequestException('A maximum of 6 family members can be registered.');
+    if (dto.familyMembers && dto.familyMembers.length > 3) {
+      throw new BadRequestException('A maximum of 3 family members can be registered.');
     }
 
     if (dto.familyMembers) {
       for (const fam of dto.familyMembers) {
+        if (!fam.email || !fam.email.trim()) {
+          throw new BadRequestException(
+            `Please provide a valid email address for family member ${fam.name || 'unnamed'}.`,
+          );
+        }
         if (fam.bookingDays && Array.isArray(fam.bookingDays) && fam.bookingDays.length > 0) {
           for (const d of fam.bookingDays) {
             if (!isOfficialEventDate(d)) {
@@ -94,7 +158,10 @@ export class RegistrationService {
       }
     }
 
-    const cleanCpf = dto.cpf.trim().toUpperCase();
+    const cleanCpf = dto.cpf.trim();
+    if (!/^[0-9]{5}$/.test(cleanCpf)) {
+      throw new BadRequestException('Employee CPF No. must accept ONLY 5 numeric digits.');
+    }
 
     // Check if employee already registered
     const existing = await this.prisma.employee.findUnique({
@@ -105,6 +172,21 @@ export class RegistrationService {
       throw new ConflictException(
         `Employee with CPF ${cleanCpf} is already registered. Please use Ticket Lookup.`,
       );
+    }
+
+    // Validate against official ONGC master data if available
+    const masterCount = await this.prisma.ongcEmployeeMaster.count();
+    if (masterCount > 0) {
+      const master = await this.prisma.ongcEmployeeMaster.findUnique({
+        where: { cpf: cleanCpf },
+      });
+      const cleanPhone = (dto.phone || '').replace(/\D/g, '');
+      const masterMobile = (master?.mobile || '').replace(/\D/g, '');
+      if (!master || !masterMobile.endsWith(cleanPhone)) {
+        throw new BadRequestException(
+          'The CPF No. and Mobile No. do not match the official ONGC employee records. Please check the details and try again.',
+        );
+      }
     }
 
     // Check if registration is open in settings
@@ -120,9 +202,12 @@ export class RegistrationService {
 
     // Atomically create employee, family members, and attendees
     const result = await this.prisma.$transaction(async (tx) => {
+      const referenceNumber = await this.generateReferenceNumber(tx);
+
       const employee = await tx.employee.create({
         data: {
           cpf: cleanCpf,
+          referenceNumber,
           name: dto.name.trim(),
           designation: dto.designation.trim(),
           department: dto.department.trim(),
@@ -173,6 +258,7 @@ export class RegistrationService {
               age: famDto.age || null,
               gender: famDto.gender || null,
               phone: famDto.phone.trim(),
+              email: famDto.email.trim().toLowerCase(),
               photoPath: famPhotoPath || null,
             },
           });
@@ -182,6 +268,7 @@ export class RegistrationService {
               registrationType: RegistrationType.EMPLOYEE as any,
               employeeId: employee.id,
               familyMemberId: familyMember.id,
+              email: famDto.email.trim().toLowerCase(),
               ticketNumber: famTicketNumber,
               qrCodeToken: famToken,
               status: AttendeeStatus.PENDING as any,
@@ -302,10 +389,10 @@ export class RegistrationService {
     };
   }
 
-  async findByCpf(cpf: string, phoneLast4: string) {
-    const cleanCpf = (cpf || '').trim().toUpperCase();
-    if (!cleanCpf) {
-      throw new BadRequestException('CPF number is required');
+  async findByCpf(identifier: string, phoneLast4: string) {
+    const cleanQuery = (identifier || '').trim().toUpperCase();
+    if (!cleanQuery) {
+      throw new BadRequestException('Reference number or CPF is required');
     }
 
     const cleanPhone4 = (phoneLast4 || '').trim();
@@ -320,8 +407,14 @@ export class RegistrationService {
       );
     }
 
-    const employee = await this.prisma.employee.findUnique({
-      where: { cpf: cleanCpf },
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        OR: [
+          { referenceNumber: cleanQuery },
+          { cpf: cleanQuery },
+          { attendees: { some: { ticketNumber: cleanQuery } } },
+        ],
+      },
       include: {
         familyMembers: true,
         attendees: {
@@ -334,17 +427,20 @@ export class RegistrationService {
     });
 
     if (!employee) {
-      throw new NotFoundException(`No registration found for CPF: ${cleanCpf}`);
+      throw new NotFoundException(`No registration found for: ${cleanQuery}`);
     }
 
     if (!employee.phone.endsWith(cleanPhone4)) {
       throw new BadRequestException('Security verification failed. Phone number does not match.');
     }
 
+    const refNo = employee.referenceNumber || employee.cpf;
+
     return {
       employee: {
         id: employee.id.toString(),
         cpf: employee.cpf,
+        referenceNumber: refNo,
         name: employee.name,
         designation: employee.designation,
         department: employee.department,
@@ -355,6 +451,7 @@ export class RegistrationService {
       passes: employee.attendees.map((att) => ({
         attendeeId: att.id.toString(),
         ticketNumber: att.ticketNumber,
+        referenceNumber: refNo,
         qrCodeToken: att.qrCodeToken,
         status: att.status,
         isFamily: !!att.familyMemberId,
@@ -411,6 +508,7 @@ export class RegistrationService {
     const relation = familyMember ? familyMember.relation : 'Self';
     const employeeName = primaryEmployee?.name || attendeeName;
     const employeeCpf = primaryEmployee?.cpf || 'N/A';
+    const referenceNumber = primaryEmployee?.referenceNumber || employeeCpf;
     const department = primaryEmployee?.department || 'EWC Ahmedabad';
     const passType = isFamily ? `Family Member Pass (${relation})` : 'ONGC Employee Pass';
     const ticketNumber = attendee.ticketNumber || `TK-${cleanToken.substring(0, 10).toUpperCase()}`;
@@ -426,6 +524,7 @@ export class RegistrationService {
       relation,
       employeeName,
       employeeCpf,
+      referenceNumber,
       department,
     });
 
@@ -453,6 +552,7 @@ export class RegistrationService {
       relation,
       employeeName,
       employeeCpf,
+      referenceNumber,
       department,
       passType,
       category: attendee.category || (isFamily ? 'FAMILY MEMBER' : 'ONGC STAFF'),

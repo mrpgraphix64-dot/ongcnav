@@ -252,53 +252,61 @@ export default function AdminReportsPage() {
       {report && (
         <div className="space-y-4 2xl:space-y-6">
           {/* 4 Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 2xl:gap-4">
-            <div className="p-3.5 sm:p-4 2xl:p-5 rounded-xl 2xl:rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <span className="text-[9px] 2xl:text-[10px] font-bold text-ink-soft uppercase tracking-wider block">
-                Total Passes Registered
-              </span>
-              <div className="text-2xl 2xl:text-3xl font-black text-ink mt-1 font-outfit">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block">
+                  Total Passes
+                </span>
+                <span className="text-[10px] text-stone-400 block truncate">
+                  {report.pendingCount?.toLocaleString() ?? 0} pending
+                </span>
+              </div>
+              <div className="text-xl font-black text-ink font-outfit text-right ml-2">
                 {report.totalAttendees?.toLocaleString() ?? 0}
               </div>
-              <span className="text-[11px] 2xl:text-xs text-stone-400 font-medium mt-0.5 block">
-                {report.pendingCount?.toLocaleString() ?? 0} pending arrival
-              </span>
             </div>
 
-            <div className="p-3.5 sm:p-4 2xl:p-5 rounded-xl 2xl:rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <span className="text-[9px] 2xl:text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                Successfully Checked In
-              </span>
-              <div className="text-2xl 2xl:text-3xl font-black text-emerald-700 mt-1 font-outfit">
+            <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                  Checked In
+                </span>
+                <span className="text-[10px] text-emerald-600 font-semibold block truncate">
+                  {report.checkInPct ?? 0}% turnout
+                </span>
+              </div>
+              <div className="text-xl font-black text-emerald-700 font-outfit text-right ml-2">
                 {report.checkedInCount?.toLocaleString() ?? 0}
               </div>
-              <span className="text-[11px] 2xl:text-xs text-emerald-600 font-medium mt-0.5 block">
-                {report.checkInPct ?? 0}% overall turnout
-              </span>
             </div>
 
-            <div className="p-3.5 sm:p-4 2xl:p-5 rounded-xl 2xl:rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <span className="text-[9px] 2xl:text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-                Duplicate Attempts Blocked
-              </span>
-              <div className="text-2xl 2xl:text-3xl font-black text-amber-700 mt-1 font-outfit">
+            <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+                  Duplicate Blocked
+                </span>
+                <span className="text-[10px] text-amber-600 block truncate">
+                  Re-use alerts
+                </span>
+              </div>
+              <div className="text-xl font-black text-amber-700 font-outfit text-right ml-2">
                 {report.duplicateAttempts?.toLocaleString() ?? 0}
               </div>
-              <span className="text-[11px] 2xl:text-xs text-amber-600 font-medium mt-0.5 block">
-                Prevented entry re-use
-              </span>
             </div>
 
-            <div className="p-3.5 sm:p-4 2xl:p-5 rounded-xl 2xl:rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <span className="text-[9px] 2xl:text-[10px] font-bold text-ink-soft uppercase tracking-wider block">
-                Active Gates Monitored
-              </span>
-              <div className="text-2xl 2xl:text-3xl font-black text-maroon mt-1 font-outfit">
+            <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block">
+                  Active Gates
+                </span>
+                <span className="text-[10px] text-stone-400 block truncate">
+                  Turnstiles active
+                </span>
+              </div>
+              <div className="text-xl font-black text-maroon font-outfit text-right ml-2">
                 {report.gatePerformance?.length ?? 0}
               </div>
-              <span className="text-[11px] 2xl:text-xs text-stone-400 font-medium mt-0.5 block">
-                Turnstiles in perimeter
-              </span>
             </div>
           </div>
 

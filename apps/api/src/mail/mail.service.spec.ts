@@ -762,7 +762,7 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(preview.html).toContain('Priya Kumar');
       expect(preview.html).toContain('Primary Employee:');
       expect(preview.html).toContain('Rajesh Kumar');
-      expect(preview.html).toContain('Employee CPF:');
+      expect(preview.html).toContain('Ref No.:');
       expect(preview.html).toContain('12345');
       expect(preview.html).toContain('Relationship:');
       expect(preview.html).toContain('Spouse');

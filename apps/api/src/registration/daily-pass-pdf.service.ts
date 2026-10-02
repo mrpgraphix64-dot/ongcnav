@@ -55,6 +55,7 @@ export class DailyPassPdfService {
     const relation = familyMember ? familyMember.relation : 'Self';
     const employeeName = primaryEmployee?.name || attendeeName;
     const employeeCpf = primaryEmployee?.cpf || 'N/A';
+    const referenceNumber = primaryEmployee?.referenceNumber || employeeCpf;
     const department = primaryEmployee?.department || 'EWC Ahmedabad';
     const ticketNumber = attendee.ticketNumber || `TK-${cleanToken.substring(0, 10).toUpperCase()}`;
 
@@ -68,6 +69,7 @@ export class DailyPassPdfService {
       relation,
       employeeName,
       employeeCpf,
+      referenceNumber,
       department,
     });
     const dayTheme: EventDayTheme = presentation.theme;
@@ -236,11 +238,11 @@ export class DailyPassPdfService {
           doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Primary Employee:', col1X, detailsY + 54);
           doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.primaryEmployeeName, col1X, detailsY + 65);
 
-          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Employee CPF:', col1X, detailsY + 80);
-          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.employeeCpf, col1X, detailsY + 91);
+          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Ref No.:', col1X, detailsY + 80);
+          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.referenceNumber || presentation.employeeCpf, col1X, detailsY + 91);
         } else {
-          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Employee CPF:', col1X, detailsY + 54);
-          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.employeeCpf, col1X, detailsY + 65);
+          doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Ref No.:', col1X, detailsY + 54);
+          doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.referenceNumber || presentation.employeeCpf, col1X, detailsY + 65);
 
           doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Department / Unit:', col1X, detailsY + 80);
           doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica').text(presentation.department, col1X, detailsY + 91);

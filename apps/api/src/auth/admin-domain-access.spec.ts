@@ -37,6 +37,7 @@ describe('Admin Domain Separation & Page Access Control', () => {
       '/admin/helpdesk',
       '/admin/daily-closing',
       '/admin/reports',
+      '/admin/employees/master',
     ];
 
     const globalAdminRoutes = [
@@ -152,7 +153,8 @@ describe('Admin Domain Separation & Page Access Control', () => {
       expect(defaults).toContain('employee.reports');
       expect(defaults).toContain('employee.operations');
       expect(defaults).toContain('employee.qr_delivery');
-      expect(defaults.length).toBe(7);
+      expect(defaults).toContain('employee.master');
+      expect(defaults.length).toBe(8);
     });
 
     it('allows access to specific page when permission is granted', () => {

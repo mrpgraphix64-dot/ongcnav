@@ -561,6 +561,7 @@ export interface DailyEmployeePassPresentation {
 
   primaryEmployeeName: string;
   employeeCpf: string;
+  referenceNumber: string;
   department: string;
 
   ticketNumber: string;
@@ -589,6 +590,7 @@ export interface BuildDailyPassPresentationInput {
 
   employeeName?: string | null;
   employeeCpf?: string | null;
+  referenceNumber?: string | null;
   department?: string | null;
 }
 
@@ -614,6 +616,7 @@ export function buildDailyEmployeePassPresentation(
     input.employeeName || (!isFamily ? attendeeName : 'ONGC Employee')
   ).trim();
   const employeeCpf = (input.employeeCpf || 'N/A').trim();
+  const referenceNumber = (input.referenceNumber || input.employeeCpf || 'N/A').trim();
   const department = (input.department || 'ONGC Ahmedabad').trim();
 
   const passHolderLabel = isFamily ? 'Family Member' : 'ONGC Employee';
@@ -643,6 +646,7 @@ export function buildDailyEmployeePassPresentation(
 
     primaryEmployeeName,
     employeeCpf,
+    referenceNumber,
     department,
 
     ticketNumber:
@@ -671,6 +675,7 @@ export interface PublicDailyPassResponseDto {
   relation: string;
   employeeName: string;
   employeeCpf: string;
+  referenceNumber?: string;
   department: string;
   passType: string;
   category: string;

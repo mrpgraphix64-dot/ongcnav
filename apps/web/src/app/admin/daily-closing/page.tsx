@@ -64,19 +64,19 @@ export default function AdminDailyClosingPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
       {/* Header Actions & Date Picker */}
-      <div className="p-6 rounded-3xl bg-white border border-stone-200/80 card-shadow print:hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow print:hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
-            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 uppercase">
+            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 uppercase">
               Daily Closing Reconciliation
             </span>
-            <h2 className="font-outfit font-extrabold text-2xl text-ink mt-1 flex items-center gap-2">
-              <CheckCheck className="w-6 h-6 text-maroon" />
+            <h2 className="font-outfit font-extrabold text-xl text-ink mt-0.5 flex items-center gap-2">
+              <CheckCheck className="w-5 h-5 text-maroon" />
               <span>Event Day Closing Report</span>
             </h2>
-            <p className="text-xs text-ink-soft mt-0.5">
+            <p className="text-[11px] text-ink-soft">
               Comprehensive audit of attendance, gate volumes, operator productivity, verification
               failures, and incident logs.
             </p>
@@ -90,13 +90,13 @@ export default function AdminDailyClosingPage() {
                 name="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-stone-200 bg-cream-soft font-semibold text-ink focus:outline-maroon"
+                className="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-cream-soft font-semibold text-ink text-xs focus:outline-maroon"
               />
               <button
                 type="button"
                 onClick={loadClosing}
                 disabled={loading}
-                className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink font-bold transition cursor-pointer shadow-xs disabled:opacity-50"
+                className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-ink text-xs font-bold transition cursor-pointer shadow-xs disabled:opacity-50"
               >
                 {loading ? 'Loading...' : 'Load Date'}
               </button>
@@ -106,7 +106,7 @@ export default function AdminDailyClosingPage() {
             <button
               type="button"
               onClick={handleExportCsv}
-              className="px-4 py-2 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export CSV</span>
@@ -116,7 +116,7 @@ export default function AdminDailyClosingPage() {
             <button
               type="button"
               onClick={() => window.print()}
-              className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Print</span>
@@ -126,14 +126,14 @@ export default function AdminDailyClosingPage() {
       </div>
 
       {/* Print-Only Official Document Header */}
-      <div className="hidden print:block p-6 border-b-2 border-stone-900 bg-white">
+      <div className="hidden print:block p-4 border-b-2 border-stone-900 bg-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-black text-black uppercase tracking-wider font-outfit">
+            <h1 className="text-xl font-black text-black uppercase tracking-wider font-outfit">
               ONGC NAVRATRI 2026
             </h1>
-            <h2 className="text-base font-bold text-stone-700">DAILY OPERATIONAL CLOSING AUDIT REPORT</h2>
-            <p className="text-xs text-stone-500 mt-1">
+            <h2 className="text-sm font-bold text-stone-700">DAILY OPERATIONAL CLOSING AUDIT REPORT</h2>
+            <p className="text-xs text-stone-500 mt-0.5">
               Operational Date: <strong>{selectedDate}</strong> • Generated:{' '}
               {new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
             </p>
@@ -145,183 +145,211 @@ export default function AdminDailyClosingPage() {
       </div>
 
       {report && (
-        <div className="space-y-6">
+        <div className="space-y-3.5">
           {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
-                Booked for Date
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block">
+                  Booked for Date
+                </span>
+                <span className="text-[10px] text-stone-400">Eligible passes</span>
               </div>
-              <div className="font-outfit font-extrabold text-2xl text-maroon mt-1">
+              <span className="font-outfit font-black text-xl text-maroon leading-none text-right ml-2">
                 {report.bookedForDate?.toLocaleString() ?? 0}
-              </div>
-              <div className="text-[10px] text-stone-400 mt-0.5">Eligible passes</div>
+              </span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <div className="text-[10px] font-bold tracking-wider uppercase text-emerald-800">
-                Checked In
+            <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-800 block">
+                  Checked In
+                </span>
+                <span className="text-[10px] text-emerald-600">Active arrivals</span>
               </div>
-              <div className="font-outfit font-extrabold text-2xl text-emerald-700 mt-1">
+              <span className="font-outfit font-black text-xl text-emerald-700 leading-none text-right ml-2">
                 {report.checkedInCount?.toLocaleString() ?? 0}
-              </div>
-              <div className="text-[10px] text-emerald-600 mt-0.5">Active arrivals</div>
+              </span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <div className="text-[10px] font-bold tracking-wider uppercase text-amber-800">
-                Pending Attendance
+            <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-amber-800 block">
+                  Pending
+                </span>
+                <span className="text-[10px] text-amber-600">No-shows so far</span>
               </div>
-              <div className="font-outfit font-extrabold text-2xl text-amber-700 mt-1">
+              <span className="font-outfit font-black text-xl text-amber-700 leading-none text-right ml-2">
                 {report.pendingCount?.toLocaleString() ?? 0}
-              </div>
-              <div className="text-[10px] text-amber-600 mt-0.5">No-shows so far</div>
+              </span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
-                Attendance Rate
+            <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div className="min-w-0 pr-2">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block">
+                  Attendance Rate
+                </span>
+                <div className="w-16 bg-stone-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                  <div
+                    className="bg-maroon h-1.5 rounded-full"
+                    style={{ width: `${Math.min(100, report.attendanceRate ?? 0)}%` }}
+                  />
+                </div>
               </div>
-              <div className="font-outfit font-extrabold text-2xl text-ink mt-1">
+              <span className="font-outfit font-black text-xl text-ink leading-none text-right shrink-0">
                 {report.attendanceRate ?? 0}%
-              </div>
-              <div className="w-full bg-stone-100 rounded-full h-1.5 mt-1 overflow-hidden">
-                <div
-                  className="bg-maroon h-1.5 rounded-full"
-                  style={{ width: `${Math.min(100, report.attendanceRate ?? 0)}%` }}
-                />
-              </div>
+              </span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
-                Peak Inflow Hour
+            <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block">
+                  Peak Inflow
+                </span>
+                <span className="text-[10px] text-stone-400 truncate block">
+                  {report.peakHourCount?.toLocaleString() ?? 0} arrivals
+                </span>
               </div>
-              <div className="font-outfit font-extrabold text-xl text-ink mt-1 truncate">
+              <span className="font-outfit font-black text-sm text-ink leading-tight text-right ml-2 shrink-0 truncate max-w-[110px]">
                 {report.peakHourFormatted || 'N/A'}
-              </div>
-              <div className="text-[10px] text-stone-400 mt-0.5">
-                {report.peakHourCount?.toLocaleString() ?? 0} check-ins
-              </div>
+              </span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 card-shadow">
-              <div className="text-[10px] font-bold tracking-wider uppercase text-ink-soft">
-                Incidents Logged
+            <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-ink-soft block">
+                  Incidents
+                </span>
+                <span
+                  className={`text-[10px] ${
+                    report.incidentsOpen > 0 ? 'text-rose-600 font-bold' : 'text-stone-400'
+                  }`}
+                >
+                  {report.incidentsOpen ?? 0} open &bull; {report.incidentsResolved ?? 0} res
+                </span>
               </div>
-              <div
-                className={`font-outfit font-extrabold text-2xl mt-1 ${
+              <span
+                className={`font-outfit font-black text-xl leading-none text-right ml-2 ${
                   report.incidentsOpen > 0 ? 'text-rose-600' : 'text-ink'
                 }`}
               >
                 {report.incidentsTotal ?? 0}
-              </div>
-              <div
-                className={`text-[10px] mt-0.5 ${
-                  report.incidentsOpen > 0 ? 'text-rose-600 font-bold' : 'text-stone-400'
-                }`}
-              >
-                {report.incidentsOpen ?? 0} open &bull; {report.incidentsResolved ?? 0} resolved
-              </div>
+              </span>
             </div>
           </div>
 
           {/* Check-in Audit Results Breakdown Grid */}
-          <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow p-5 space-y-4">
+          <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow p-3.5 space-y-2.5">
             <div>
-              <h3 className="font-outfit font-extrabold text-base text-ink">
+              <h3 className="font-outfit font-extrabold text-sm text-ink">
                 Check-In Verification Audit Summary
               </h3>
-              <p className="text-xs text-ink-soft">
+              <p className="text-[11px] text-ink-soft">
                 Breakdown of legitimate admissions vs. anomalous or rejected scan attempts for{' '}
                 {selectedDate}.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 text-xs">
-              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200">
-                <div className="text-[10px] font-bold text-emerald-800 uppercase">Approved</div>
-                <div className="font-outfit font-extrabold text-xl text-emerald-900 mt-0.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-xs">
+              <div className="py-2 px-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-emerald-800 uppercase">Approved</div>
+                  <div className="text-[9px] text-emerald-700">Valid entries</div>
+                </div>
+                <div className="font-outfit font-black text-base text-emerald-900 ml-1.5">
                   {report.approvedCount?.toLocaleString() ?? 0}
                 </div>
-                <div className="text-[10px] text-emerald-700">Valid entries</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200">
-                <div className="text-[10px] font-bold text-blue-800 uppercase">Manual Entry</div>
-                <div className="font-outfit font-extrabold text-xl text-blue-900 mt-0.5">
+              <div className="py-2 px-2.5 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-blue-800 uppercase">Manual Entry</div>
+                  <div className="text-[9px] text-blue-700">Helpdesk overrides</div>
+                </div>
+                <div className="font-outfit font-black text-base text-blue-900 ml-1.5">
                   {report.manualCount?.toLocaleString() ?? 0}
                 </div>
-                <div className="text-[10px] text-blue-700">Help desk overrides</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-purple-50 border border-purple-200">
-                <div className="text-[10px] font-bold text-purple-800 uppercase">Voided / Reversed</div>
-                <div className="font-outfit font-extrabold text-xl text-purple-900 mt-0.5">
+              <div className="py-2 px-2.5 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-purple-800 uppercase">Voided / Rev</div>
+                  <div className="text-[9px] text-purple-700">Admin fixes</div>
+                </div>
+                <div className="font-outfit font-black text-base text-purple-900 ml-1.5">
                   {report.voidedCount?.toLocaleString() ?? 0}
                 </div>
-                <div className="text-[10px] text-purple-700">Admin corrections</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200">
-                <div className="text-[10px] font-bold text-amber-800 uppercase">Duplicate Scans</div>
-                <div className="font-outfit font-extrabold text-xl text-amber-900 mt-0.5">
+              <div className="py-2 px-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-amber-800 uppercase">Duplicate</div>
+                  <div className="text-[9px] text-amber-700">Already in</div>
+                </div>
+                <div className="font-outfit font-black text-base text-amber-900 ml-1.5">
                   {report.duplicateCount?.toLocaleString() ?? 0}
                 </div>
-                <div className="text-[10px] text-amber-700">Already entered</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-stone-50 border border-stone-200">
-                <div className="text-[10px] font-bold text-stone-700 uppercase">Not Booked</div>
-                <div className="font-outfit font-extrabold text-xl text-stone-900 mt-0.5">
+              <div className="py-2 px-2.5 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-stone-700 uppercase">Not Booked</div>
+                  <div className="text-[9px] text-stone-500">Other date</div>
+                </div>
+                <div className="font-outfit font-black text-base text-stone-900 ml-1.5">
                   {report.notBookedCount?.toLocaleString() ?? 0}
                 </div>
-                <div className="text-[10px] text-stone-500">Other date pass</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200">
-                <div className="text-[10px] font-bold text-rose-800 uppercase">Unauthorized Gate</div>
-                <div className="font-outfit font-extrabold text-xl text-rose-900 mt-0.5">
+              <div className="py-2 px-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-rose-800 uppercase">Wrong Gate</div>
+                  <div className="text-[9px] text-rose-700">Misassigned</div>
+                </div>
+                <div className="font-outfit font-black text-base text-rose-900 ml-1.5">
                   {report.unauthorizedGateCount?.toLocaleString() ?? 0}
                 </div>
-                <div className="text-[10px] text-rose-700">Staff misassignment</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200">
-                <div className="text-[10px] font-bold text-rose-800 uppercase">Invalid Ticket</div>
-                <div className="font-outfit font-extrabold text-xl text-rose-900 mt-0.5">
+              <div className="py-2 px-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-rose-800 uppercase">Invalid Pass</div>
+                  <div className="text-[9px] text-rose-700">Unknown QR</div>
+                </div>
+                <div className="font-outfit font-black text-base text-rose-900 ml-1.5">
                   {report.invalidCount?.toLocaleString() ?? 0}
                 </div>
-                <div className="text-[10px] text-rose-700">Unknown code</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-stone-50 border border-stone-200">
-                <div className="text-[10px] font-bold text-stone-700 uppercase">Lane / Cap Block</div>
-                <div className="font-outfit font-extrabold text-xl text-stone-900 mt-0.5">
+              <div className="py-2 px-2.5 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-between min-h-[48px]">
+                <div>
+                  <div className="text-[10px] font-bold text-stone-700 uppercase">Lane / Cap</div>
+                  <div className="text-[9px] text-stone-500">Closed / Full</div>
+                </div>
+                <div className="font-outfit font-black text-base text-stone-900 ml-1.5">
                   {((report.gateClosedCount ?? 0) + (report.capacityReachedCount ?? 0)).toLocaleString()}
                 </div>
-                <div className="text-[10px] text-stone-500">Closed / Full</div>
               </div>
             </div>
           </div>
 
           {/* Gate Volume Breakdown */}
-          <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
-            <div className="p-5 border-b border-stone-100">
-              <h3 className="font-outfit font-extrabold text-base text-ink">Gate Check-in Volumes</h3>
-              <p className="text-xs text-ink-soft">Traffic distribution across all event entry lanes.</p>
+          <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow overflow-hidden">
+            <div className="py-2.5 px-3.5 border-b border-stone-100">
+              <h3 className="font-outfit font-extrabold text-sm text-ink">Gate Check-in Volumes</h3>
+              <p className="text-[11px] text-ink-soft">Traffic distribution across all event entry lanes.</p>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70">
-                    <th className="py-3.5 px-4">Gate</th>
-                    <th className="py-3.5 px-3">Type</th>
-                    <th className="py-3.5 px-3">Lane Status</th>
-                    <th className="py-3.5 px-3">Entries Processed</th>
-                    <th className="py-3.5 px-3">Capacity Limit</th>
-                    <th className="py-3.5 px-4">Capacity Utilization</th>
+                    <th className="py-2 px-3">Gate</th>
+                    <th className="py-2 px-3">Type</th>
+                    <th className="py-2 px-3">Lane Status</th>
+                    <th className="py-2 px-3">Entries Processed</th>
+                    <th className="py-2 px-3">Capacity Limit</th>
+                    <th className="py-2 px-3">Capacity Utilization</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -330,14 +358,14 @@ export default function AdminDailyClosingPage() {
                       const g = item.gate;
                       return (
                         <tr key={g.id} className="hover:bg-cream/40 transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-ink">
-                            <div className="font-outfit text-sm text-maroon">{g.name}</div>
-                            <span className="font-mono text-[10px] text-stone-500">{g.code}</span>
+                          <td className="py-2 px-3 font-bold text-ink">
+                            <div className="font-outfit text-xs text-maroon">{g.name}</div>
+                            <span className="font-mono text-[9px] text-stone-500">{g.code}</span>
                           </td>
-                          <td className="py-3.5 px-3 font-semibold text-stone-700">{g.type}</td>
-                          <td className="py-3.5 px-3">
+                          <td className="py-2 px-3 font-semibold text-stone-700 text-xs">{g.type}</td>
+                          <td className="py-2 px-3">
                             <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                 item.is_open
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : 'bg-stone-100 text-stone-600'
@@ -346,19 +374,19 @@ export default function AdminDailyClosingPage() {
                               {item.is_open ? 'OPEN' : 'CLOSED'}
                             </span>
                           </td>
-                          <td className="py-3.5 px-3 font-mono font-bold text-sm text-emerald-700">
+                          <td className="py-2 px-3 font-mono font-bold text-xs text-emerald-700">
                             {item.count?.toLocaleString() ?? 0}
                           </td>
-                          <td className="py-3.5 px-3 text-stone-600 font-mono">
+                          <td className="py-2 px-3 text-stone-600 font-mono text-xs">
                             {item.capacity ? item.capacity.toLocaleString() : 'Unlimited'}
                           </td>
-                          <td className="py-3.5 px-4 min-w-[180px]">
+                          <td className="py-2 px-3 min-w-[150px]">
                             {item.capacity > 0 ? (
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-[11px] font-semibold text-stone-600">
+                              <div className="space-y-0.5">
+                                <div className="flex justify-between text-[10px] font-semibold text-stone-600">
                                   <span>{item.percentage}%</span>
                                   <span
-                                    className={`text-[10px] uppercase font-bold ${
+                                    className={`text-[9px] uppercase font-bold ${
                                       item.status_level === 'critical'
                                         ? 'text-rose-600'
                                         : item.status_level === 'warning'
@@ -383,7 +411,7 @@ export default function AdminDailyClosingPage() {
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-[11px] text-stone-400 italic">&mdash;</span>
+                              <span className="text-[10px] text-stone-400 italic">&mdash;</span>
                             )}
                           </td>
                         </tr>
@@ -391,7 +419,7 @@ export default function AdminDailyClosingPage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-stone-400">
+                      <td colSpan={6} className="py-4 text-center text-stone-400">
                         No gate records available.
                       </td>
                     </tr>
@@ -402,12 +430,12 @@ export default function AdminDailyClosingPage() {
           </div>
 
           {/* Staff Productivity Table */}
-          <div className="bg-white rounded-3xl border border-stone-200/80 card-shadow overflow-hidden">
-            <div className="p-5 border-b border-stone-100">
-              <h3 className="font-outfit font-extrabold text-base text-ink">
+          <div className="bg-white rounded-2xl border border-stone-200/80 card-shadow overflow-hidden">
+            <div className="py-2.5 px-3.5 border-b border-stone-100">
+              <h3 className="font-outfit font-extrabold text-sm text-ink">
                 Staff Productivity &amp; Operator Audit
               </h3>
-              <p className="text-xs text-ink-soft">
+              <p className="text-[11px] text-ink-soft">
                 Scan volumes and timestamps recorded by operational personnel on this date.
               </p>
             </div>
@@ -416,11 +444,11 @@ export default function AdminDailyClosingPage() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-stone-50/80 text-stone-600 font-bold border-b border-stone-200/70">
-                    <th className="py-3.5 px-4">Staff Member</th>
-                    <th className="py-3.5 px-3">Role</th>
-                    <th className="py-3.5 px-3">Assigned Gates</th>
-                    <th className="py-3.5 px-3">Check-ins Handled</th>
-                    <th className="py-3.5 px-4 text-right">Last Recorded Activity</th>
+                    <th className="py-2 px-3">Staff Member</th>
+                    <th className="py-2 px-3">Role</th>
+                    <th className="py-2 px-3">Assigned Gates</th>
+                    <th className="py-2 px-3">Check-ins Handled</th>
+                    <th className="py-2 px-3 text-right">Last Recorded Activity</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -429,24 +457,24 @@ export default function AdminDailyClosingPage() {
                       const s = member.staff;
                       return (
                         <tr key={s.id} className="hover:bg-cream/40 transition-colors">
-                          <td className="py-3.5 px-4">
-                            <div className="font-outfit font-bold text-sm text-ink">{s.name}</div>
-                            <div className="font-mono text-[10px] text-stone-500">
+                          <td className="py-2 px-3">
+                            <div className="font-outfit font-bold text-xs text-ink">{s.name}</div>
+                            <div className="font-mono text-[9px] text-stone-500">
                               {s.email}
                             </div>
                           </td>
-                          <td className="py-3.5 px-3">
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-stone-100 text-stone-700">
+                          <td className="py-2 px-3">
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-stone-100 text-stone-700">
                               {s.role ? s.role.replace(/_/g, ' ') : 'STAFF'}
                             </span>
                           </td>
-                          <td className="py-3.5 px-3 text-stone-700 font-medium">
+                          <td className="py-2 px-3 text-stone-700 font-medium text-xs">
                             {member.assigned_gates}
                           </td>
-                          <td className="py-3.5 px-3 font-mono font-bold text-sm text-emerald-700">
+                          <td className="py-2 px-3 font-mono font-bold text-xs text-emerald-700">
                             {member.checkins_count?.toLocaleString() ?? 0}
                           </td>
-                          <td className="py-3.5 px-4 text-right font-mono text-[11px] text-stone-500">
+                          <td className="py-2 px-3 text-right font-mono text-[10px] text-stone-500">
                             {member.last_activity_at
                               ? new Date(member.last_activity_at).toLocaleTimeString('en-IN', {
                                   timeZone: 'Asia/Kolkata',

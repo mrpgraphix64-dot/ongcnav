@@ -170,6 +170,7 @@ export class AttendeesService {
             OR: [
               { name: { contains: search, mode: 'insensitive' } },
               { cpf: { contains: search, mode: 'insensitive' } },
+              { referenceNumber: { contains: search, mode: 'insensitive' } },
               { phone: { contains: search, mode: 'insensitive' } },
               {
                 attendees: {
@@ -681,6 +682,7 @@ export class AttendeesService {
             OR: [
               { name: { contains: q, mode: 'insensitive' } },
               { cpf: { contains: q, mode: 'insensitive' } },
+              { referenceNumber: { contains: q, mode: 'insensitive' } },
               { phone: { contains: q, mode: 'insensitive' } },
             ],
           },

@@ -45,6 +45,7 @@ export interface EmployeeDailyPassEmailData {
   ticketNumber: string;
   qrToken: string;
   cpf?: string;
+  referenceNumber?: string;
   department?: string;
   pdfBuffer?: Buffer;
   viewTicketUrl?: string;

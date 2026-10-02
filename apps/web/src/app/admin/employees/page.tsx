@@ -605,8 +605,8 @@ export default function AdminEmployeesPage() {
         </div>
       )}
 
-      {/* COMPACT TOP ROW: TITLE & DYNAMIC SUMMARY PILLS */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      {/* COMPACT TOP ROW: TITLE */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
         <div>
           <h1 className="font-outfit font-bold text-base sm:text-lg text-ink leading-tight">
             Employee Directory
@@ -615,25 +615,25 @@ export default function AdminEmployeesPage() {
             ONGC employee roster, registration review, and employee pass management.
           </p>
         </div>
+      </div>
 
-        {/* Dynamic Summary Pills */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white border border-stone-200/90 shadow-2xs text-stone-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
-            Total <strong className="font-bold text-ink ml-0.5">{statusCounts.total}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50/80 border border-amber-200/80 shadow-2xs text-amber-800">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            Pending <strong className="font-bold text-amber-900 ml-0.5">{statusCounts.pending}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50/80 border border-emerald-200/80 shadow-2xs text-emerald-800">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Approved <strong className="font-bold text-emerald-900 ml-0.5">{statusCounts.approved}</strong>
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50/80 border border-rose-200/80 shadow-2xs text-rose-800">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-            Rejected <strong className="font-bold text-rose-900 ml-0.5">{statusCounts.rejected}</strong>
-          </span>
+      {/* 2. COMPACT HORIZONTAL STATS STRIP */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Total</span>
+          <span className="font-outfit font-black text-xl text-ink leading-none">{statusCounts.total}</span>
+        </div>
+        <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Pending</span>
+          <span className="font-outfit font-black text-xl text-amber-700 leading-none">{statusCounts.pending}</span>
+        </div>
+        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Approved</span>
+          <span className="font-outfit font-black text-xl text-emerald-700 leading-none">{statusCounts.approved}</span>
+        </div>
+        <div className="bg-rose-50/40 py-2 px-3 rounded-xl border border-rose-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Rejected</span>
+          <span className="font-outfit font-black text-xl text-rose-700 leading-none">{statusCounts.rejected}</span>
         </div>
       </div>
 

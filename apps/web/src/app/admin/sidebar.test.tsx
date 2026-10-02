@@ -105,6 +105,7 @@ describe('Admin Portal Sidebar Navigation Reorganization', () => {
 
     // EMPLOYEES items (employee-specific only)
     expect(html).toContain('Employees');
+    expect(html).toContain('ONGC Employee Master');
     expect(html).toContain('Bulk Upload');
 
     // E-PASS items

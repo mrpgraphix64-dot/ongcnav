@@ -219,6 +219,7 @@ model GateUser {
 model Employee {
   id               BigInt           @id @default(autoincrement())
   cpf              String           @unique @db.VarChar(50)
+  referenceNumber  String?          @unique @map("reference_number") @db.VarChar(50)
   name             String           @db.VarChar(255)
   designation      String           @db.VarChar(255)
   department       String           @db.VarChar(255)
@@ -246,6 +247,7 @@ model Employee {
   attendees     Attendee[]
 
   @@index([cpf])
+  @@index([referenceNumber])
   @@index([phone])
   @@index([registrationStatus])
   @@map("employees")
@@ -262,6 +264,7 @@ model FamilyMember {
   // rows created before this field existed — the API DTO enforces it as
   // required (exact 10-digit Indian mobile) for every new registration.
   phone      String?  @db.VarChar(20)
+  email      String?  @db.VarChar(255)
   photoPath  String?  @map("photo_path") @db.VarChar(500)
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -622,4 +625,25 @@ model PasswordReset {
   @@index([email, expiresAt])
   @@index([tokenHash])
   @@map("password_resets")
+}
+
+model ReferenceSequence {
+  name         String   @id @db.VarChar(50)
+  currentValue BigInt   @default(0) @map("current_value")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("reference_sequences")
+}
+
+model OngcEmployeeMaster {
+  cpf       String   @id @db.VarChar(10)
+  name      String?  @default("") @db.VarChar(255)
+  dob       String?  @db.VarChar(50)
+  doj       String?  @db.VarChar(50)
+  mobile    String   @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([mobile])
+  @@map("ongc_employee_masters")
 }

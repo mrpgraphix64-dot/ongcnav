@@ -178,10 +178,10 @@ export default function DailyEmployeeTicketCard({
                 </div>
                 <div className="p-2.5 rounded-xl bg-white border border-stone-200/80">
                   <p className="text-stone-500 text-[10px] uppercase font-bold tracking-wider">
-                    Employee CPF
+                    Ref No.
                   </p>
                   <p className="font-mono font-bold text-stone-900 text-sm mt-0.5">
-                    {presentation.employeeCpf}
+                    {presentation.referenceNumber || presentation.employeeCpf}
                   </p>
                 </div>
               </>
@@ -189,10 +189,10 @@ export default function DailyEmployeeTicketCard({
               <>
                 <div className="p-2.5 rounded-xl bg-white border border-stone-200/80">
                   <p className="text-stone-500 text-[10px] uppercase font-bold tracking-wider">
-                    Employee CPF
+                    Ref No.
                   </p>
                   <p className="font-mono font-bold text-stone-900 text-sm mt-0.5">
-                    {presentation.employeeCpf}
+                    {presentation.referenceNumber || presentation.employeeCpf}
                   </p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white border border-stone-200/80">

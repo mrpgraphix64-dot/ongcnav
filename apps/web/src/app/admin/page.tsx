@@ -198,28 +198,28 @@ export default function OperationsDashboardPage() {
           }}
         />
 
-        <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-5 2xl:gap-6">
-          <div className="space-y-1.5 2xl:space-y-2 max-w-xl lg:max-w-2xl xl:max-w-3xl">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 2xl:px-3 2xl:py-1 rounded-full bg-maroon-50 text-maroon text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider font-outfit">
-              <Sparkles className="w-3 2xl:w-3.5 h-3 2xl:h-3.5" />
+        <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="space-y-0.5 max-w-xl lg:max-w-2xl">
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-maroon font-outfit">
+              <Sparkles className="w-3 h-3 text-maroon" />
               <span>Real-time Entry Operations</span>
             </div>
-            <h1 className="text-xl sm:text-2xl 2xl:text-[28px] font-outfit font-bold text-ink leading-tight">
+            <h1 className="text-lg sm:text-xl font-outfit font-bold text-ink leading-tight">
               ONGC Navratri <span className="text-maroon">Entry Control</span>
             </h1>
-            <p className="text-xs sm:text-[13px] 2xl:text-sm text-ink-soft">
-              Live check-in monitoring, QR verification analytics, and gate operations for the Malaviya Cricket Ground ONGC Event.
+            <p className="text-xs text-ink-soft">
+              Live check-in monitoring, QR verification analytics, and gate operations.
             </p>
           </div>
 
           {/* Action Buttons Hierarchy */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 w-full sm:w-auto justify-start sm:justify-end">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {isSuperOrEventAdmin && (
               <Link
                 href="/admin/event-control"
-                className="flex items-center gap-1.5 2xl:gap-2 px-3 py-2 2xl:px-3.5 2xl:py-2.5 rounded-xl bg-cream-soft border border-stone-200 text-ink text-xs 2xl:text-sm font-bold hover:border-maroon/50 transition-all shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cream-soft border border-stone-200 text-ink text-xs font-bold hover:border-maroon/50 transition-all shadow-2xs"
               >
-                <Gauge className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
+                <Gauge className="w-3.5 h-3.5 text-maroon" />
                 <span>Event Control</span>
               </Link>
             )}
@@ -228,16 +228,16 @@ export default function OperationsDashboardPage() {
               <>
                 <Link
                   href="/admin/commercial/orders"
-                  className="flex items-center gap-1.5 2xl:gap-2 px-3 sm:px-3.5 2xl:px-4 py-2 2xl:py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs 2xl:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-ink text-xs font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-2xs"
                 >
-                  <CalendarCheck className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
+                  <CalendarCheck className="w-3.5 h-3.5 text-maroon" />
                   <span>E-Pass Orders</span>
                 </Link>
                 <Link
                   href="/admin/commercial/agents"
-                  className="flex items-center gap-1.5 2xl:gap-2 px-3 sm:px-3.5 2xl:px-4 py-2 2xl:py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs 2xl:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-ink text-xs font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-2xs"
                 >
-                  <Shield className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
+                  <Shield className="w-3.5 h-3.5 text-maroon" />
                   <span>Agents Network</span>
                 </Link>
               </>
@@ -252,17 +252,17 @@ export default function OperationsDashboardPage() {
                     setAddModalOpen(true);
                   }}
                   type="button"
-                  className="flex items-center gap-1.5 2xl:gap-2 px-3 sm:px-3.5 2xl:px-4 py-2 2xl:py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs 2xl:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-ink text-xs font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-2xs cursor-pointer"
                 >
-                  <UserPlus className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
+                  <UserPlus className="w-3.5 h-3.5 text-maroon" />
                   <span>Add Attendee</span>
                 </button>
 
                 <Link
                   href="/admin/bulk-upload"
-                  className="flex items-center gap-1.5 2xl:gap-2 px-3 sm:px-3.5 2xl:px-4 py-2 2xl:py-2.5 rounded-xl bg-white border border-stone-200 text-ink text-xs 2xl:text-sm font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-ink text-xs font-semibold hover:border-maroon/50 hover:bg-cream-soft transition-all shadow-2xs"
                 >
-                  <UploadCloud className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-maroon" />
+                  <UploadCloud className="w-3.5 h-3.5 text-maroon" />
                   <span>Upload CSV</span>
                 </Link>
               </>
@@ -272,10 +272,10 @@ export default function OperationsDashboardPage() {
             {!isCommercialAdmin && userRole !== 'EMPLOYEE_ADMIN' && (
               <Link
                 href="/scanner"
-                className="relative group flex items-center gap-2 2xl:gap-2.5 px-3.5 sm:px-4 2xl:px-5 py-2 2xl:py-2.5 rounded-xl bg-gradient-to-r from-maroon via-maroon-dark to-maroon text-white text-xs 2xl:text-sm font-bold border-2 border-gold/60 hover:border-gold hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+                className="relative group flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-maroon via-maroon-dark to-maroon text-white text-xs font-bold border border-gold/60 hover:border-gold hover:shadow-xs transition-all"
               >
-                <span className="w-1.5 h-1.5 2xl:w-2 2xl:h-2 rounded-full bg-gold animate-ping" />
-                <ScanLine className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 text-gold-light group-hover:rotate-6 transition-transform" />
+                <span className="w-1.5 h-1.5 rounded-full bg-gold animate-ping" />
+                <ScanLine className="w-3.5 h-3.5 text-gold-light" />
                 <span className="font-outfit tracking-wide">LIVE SCANNER</span>
               </Link>
             )}
@@ -283,167 +283,112 @@ export default function OperationsDashboardPage() {
         </div>
       </div>
 
-      {/* 2. 4 ACTION-ORIENTED KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 lg:gap-4 2xl:gap-5">
+      {/* 2. COMPACT HORIZONTAL STATS STRIP */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         {/* Card 1: Total People */}
-        <div className="bg-white rounded-2xl p-3.5 sm:p-4 2xl:p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-maroon/30 transition-all">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
-                Total People
-              </span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 2xl:w-9 2xl:h-9 rounded-lg 2xl:rounded-xl bg-maroon-50 text-maroon flex items-center justify-center border border-maroon/20">
-                <Users className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
-              </div>
-            </div>
-            <div className="mt-2 2xl:mt-3">
-              <div className="text-2xl sm:text-3xl 2xl:text-4xl font-outfit font-black text-ink leading-none">
-                {stats.totalAttendees.toLocaleString()}
-              </div>
-              <p className="text-[11px] 2xl:text-xs text-ink-soft mt-1 2xl:mt-1.5 font-medium">
-                {isCommercialAdmin ? 'Event Passes & Registrations' : 'Employees + Family Members'}
-              </p>
-            </div>
+        <Link
+          href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees'}
+          className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[58px] hover:border-maroon/40 transition-all group"
+        >
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block">
+              Total People
+            </span>
+            <span className="text-[10px] text-stone-400 truncate block">
+              {isCommercialAdmin ? 'Passes' : 'Employees + Family'}
+            </span>
           </div>
-          <div className="mt-3 2xl:mt-4 pt-2.5 2xl:pt-3 border-t border-stone-100">
-            <Link
-              href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees'}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-maroon hover:text-maroon-dark group"
-            >
-              <span>{isCommercialAdmin ? 'View E-Pass Orders' : 'View Attendees'}</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </Link>
+          <div className="font-outfit font-black text-xl text-ink group-hover:text-maroon transition-colors ml-2 text-right">
+            {stats.totalAttendees.toLocaleString()}
           </div>
-        </div>
+        </Link>
 
         {/* Card 2: Checked In */}
-        <div className="bg-white rounded-2xl p-3.5 sm:p-4 2xl:p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-emerald-300 transition-all">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
-                Checked In
-              </span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 2xl:w-9 2xl:h-9 rounded-lg 2xl:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
-              </div>
-            </div>
-            <div className="mt-2 2xl:mt-3">
-              <div className="text-2xl sm:text-3xl 2xl:text-4xl font-outfit font-black text-emerald-700 leading-none">
-                {stats.checkedInCount.toLocaleString()}
-              </div>
-              <p className="text-[11px] 2xl:text-xs text-ink-soft mt-1 2xl:mt-1.5 font-medium">
-                <span className="font-bold text-emerald-700">
-                  {stats.checkInPercentage}%
-                </span>{' '}
-                of registered people
-              </p>
-            </div>
+        <Link
+          href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=checked_in'}
+          className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-between min-h-[58px] hover:border-emerald-400 transition-all group"
+        >
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+              Checked In
+            </span>
+            <span className="text-[10px] text-emerald-600 font-semibold truncate block">
+              {stats.checkInPercentage}% turnout
+            </span>
           </div>
-          <div className="mt-3 2xl:mt-4 pt-2.5 2xl:pt-3 border-t border-stone-100">
-            <Link
-              href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=checked_in'}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 group"
-            >
-              <span>{isCommercialAdmin ? 'View Order Records' : 'View Check-ins'}</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </Link>
+          <div className="font-outfit font-black text-xl text-emerald-700 ml-2 text-right">
+            {stats.checkedInCount.toLocaleString()}
           </div>
-        </div>
+        </Link>
 
         {/* Card 3: Pending */}
-        <div className="bg-white rounded-2xl p-3.5 sm:p-4 2xl:p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-amber-300 transition-all">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
-                Pending
-              </span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 2xl:w-9 2xl:h-9 rounded-lg 2xl:rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
-                <Clock className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
-              </div>
-            </div>
-            <div className="mt-2 2xl:mt-3">
-              <div className="text-2xl sm:text-3xl 2xl:text-4xl font-outfit font-black text-amber-700 leading-none">
-                {stats.pendingCount.toLocaleString()}
-              </div>
-              <p className="text-[11px] 2xl:text-xs text-ink-soft mt-1 2xl:mt-1.5 font-medium">
-                Awaiting Entry
-              </p>
-            </div>
+        <Link
+          href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=pending'}
+          className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/80 shadow-2xs flex items-center justify-between min-h-[58px] hover:border-amber-400 transition-all group"
+        >
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+              Pending
+            </span>
+            <span className="text-[10px] text-amber-600 truncate block">
+              Awaiting Entry
+            </span>
           </div>
-          <div className="mt-3 2xl:mt-4 pt-2.5 2xl:pt-3 border-t border-stone-100">
-            <Link
-              href={isCommercialAdmin ? '/admin/commercial/orders' : '/admin/attendees?status=pending'}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-800 group"
-            >
-              <span>{isCommercialAdmin ? 'View Commercial Orders' : 'View Pending'}</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </Link>
+          <div className="font-outfit font-black text-xl text-amber-700 ml-2 text-right">
+            {stats.pendingCount.toLocaleString()}
           </div>
-        </div>
+        </Link>
 
         {/* Card 4: Duplicate Attempts */}
-        <div className="bg-white rounded-2xl p-3.5 sm:p-4 2xl:p-5 border border-stone-200/70 card-shadow flex flex-col justify-between hover:border-rose-300 transition-all">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] 2xl:text-[11px] font-bold uppercase tracking-wider text-ink-soft font-outfit">
-                Duplicate Attempts
-              </span>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 2xl:w-9 2xl:h-9 rounded-lg 2xl:rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
-                <AlertTriangle className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
-              </div>
-            </div>
-            <div className="mt-2 2xl:mt-3">
-              <div className="text-2xl sm:text-3xl 2xl:text-4xl font-outfit font-black text-rose-700 leading-none">
-                {stats.duplicateAttemptsCount.toLocaleString()}
-              </div>
-              <p className="text-[11px] 2xl:text-xs text-ink-soft mt-1 2xl:mt-1.5 font-medium">
-                Prevented re-entry alerts
-              </p>
-            </div>
+        <Link
+          href={
+            isCommercialAdmin
+              ? '/admin/commercial/orders'
+              : userRole === 'EMPLOYEE_ADMIN'
+              ? '/admin/attendees'
+              : '/scanner'
+          }
+          className="bg-rose-50/40 py-2 px-3 rounded-xl border border-rose-200/80 shadow-2xs flex items-center justify-between min-h-[58px] hover:border-rose-400 transition-all group"
+        >
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider block">
+              Duplicate Attempts
+            </span>
+            <span className="text-[10px] text-rose-600 truncate block">
+              Alerts prevented
+            </span>
           </div>
-          <div className="mt-3 2xl:mt-4 pt-2.5 2xl:pt-3 border-t border-stone-100">
-            <Link
-              href={
-                isCommercialAdmin
-                  ? '/admin/commercial/orders'
-                  : userRole === 'EMPLOYEE_ADMIN'
-                  ? '/admin/attendees'
-                  : '/scanner'
-              }
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 hover:text-rose-800 group"
-            >
-              <span>{isCommercialAdmin ? 'View Commercial Audit' : userRole === 'EMPLOYEE_ADMIN' ? 'View Attendees' : 'View Scan Logs'}</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </Link>
+          <div className="font-outfit font-black text-xl text-rose-700 ml-2 text-right">
+            {stats.duplicateAttemptsCount.toLocaleString()}
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* 3. TODAY'S GATE ACTIVITY */}
-      <div className="bg-white rounded-2xl p-3.5 sm:p-4 lg:p-5 2xl:p-6 border border-stone-200/70 card-shadow space-y-3 2xl:space-y-4">
-        <div className="flex items-center justify-between border-b border-stone-100 pb-2.5 2xl:pb-3 flex-wrap gap-2">
-          <div className="flex items-center gap-2 2xl:gap-2.5">
-            <div className="w-7 h-7 2xl:w-8 2xl:h-8 rounded-lg bg-maroon/10 text-maroon flex items-center justify-center shrink-0">
-              <DoorOpen className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
+      <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-stone-200/80 shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-2 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-maroon/10 text-maroon flex items-center justify-center shrink-0">
+              <DoorOpen className="w-3.5 h-3.5" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-outfit font-bold text-ink">
+              <h3 className="text-xs sm:text-sm font-outfit font-bold text-ink">
                 Today's Gate Activity
               </h3>
-              <p className="text-[11px] 2xl:text-xs text-ink-soft">
+              <p className="text-[10px] text-ink-soft">
                 Real-time check-in volume distributed across entry gates
               </p>
             </div>
           </div>
           <div className="text-right flex items-center gap-2">
-            <span className="text-[11px] 2xl:text-xs font-semibold text-ink-soft">Total Today:</span>
-            <span className="font-outfit font-black text-maroon text-sm sm:text-base">
+            <span className="text-[10px] font-semibold text-ink-soft">Total Today:</span>
+            <span className="font-outfit font-black text-maroon text-xs sm:text-sm">
               {stats.totalGateCheckinsToday.toLocaleString()}
             </span>
             {isSuperOrEventAdmin && (
               <Link
                 href="/admin/gates"
-                className="ml-1.5 2xl:ml-2 text-[11px] 2xl:text-xs font-bold text-maroon hover:underline hidden sm:inline"
+                className="ml-1.5 text-[10px] font-bold text-maroon hover:underline hidden sm:inline"
               >
                 Manage Gates &rarr;
               </Link>
@@ -451,24 +396,24 @@ export default function OperationsDashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-2.5 lg:gap-3 2xl:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-2">
           {stats.gatesActivity.length > 0 ? (
             stats.gatesActivity.map((ga) => {
               const cardContent = (
                 <>
-                  <span className="inline-block px-1.5 py-0.5 rounded text-[8px] 2xl:text-[9px] font-black uppercase tracking-wider bg-maroon text-gold-light font-outfit">
+                  <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-maroon text-gold-light font-outfit">
                     {ga.code || 'GATE'}
                   </span>
-                  <div className="font-outfit font-bold text-xs sm:text-sm text-ink group-hover:text-maroon transition-colors truncate mt-1">
+                  <div className="font-outfit font-bold text-xs text-ink group-hover:text-maroon transition-colors truncate mt-0.5">
                     {ga.name}
                   </div>
-                  <div className="text-[9px] 2xl:text-[10px] text-ink-soft mb-0.5 2xl:mb-1 capitalize">
+                  <div className="text-[9px] text-ink-soft mb-0.5 capitalize">
                     {ga.type.toLowerCase()} Entry
                   </div>
-                  <div className="font-outfit font-black text-lg 2xl:text-xl text-maroon">
+                  <div className="font-outfit font-black text-base text-maroon leading-tight">
                     {ga.count.toLocaleString()}
                   </div>
-                  <div className="text-[9px] 2xl:text-[10px] text-ink-soft">check-ins</div>
+                  <div className="text-[8px] text-ink-soft">check-ins</div>
                 </>
               );
 
@@ -476,21 +421,21 @@ export default function OperationsDashboardPage() {
                 <Link
                   key={ga.id}
                   href="/admin/gates"
-                  className="p-2.5 sm:p-3 2xl:p-4 rounded-xl bg-cream-soft border border-stone-200/60 hover:border-gold hover:bg-white transition-all text-center group block shadow-2xs"
+                  className="p-2 rounded-lg bg-cream-soft border border-stone-200/60 hover:border-gold hover:bg-white transition-all text-center group block shadow-2xs"
                 >
                   {cardContent}
                 </Link>
               ) : (
                 <div
                   key={ga.id}
-                  className="p-2.5 sm:p-3 2xl:p-4 rounded-xl bg-cream-soft border border-stone-200/60 text-center block shadow-2xs"
+                  className="p-2 rounded-lg bg-cream-soft border border-stone-200/60 text-center block shadow-2xs"
                 >
                   {cardContent}
                 </div>
               );
             })
           ) : (
-            <div className="col-span-full py-6 text-center text-xs text-ink-soft">
+            <div className="col-span-full py-4 text-center text-xs text-ink-soft">
               No active gates configured.
             </div>
           )}
@@ -498,11 +443,11 @@ export default function OperationsDashboardPage() {
       </div>
 
       {/* 4. LIVE CAPACITY & RECENT CHECK-INS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-12 gap-3.5 sm:gap-4 lg:gap-5 2xl:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-12 gap-2.5 sm:gap-3">
         {/* Live Capacity & Check-in Meter (2/3 width on desktop, 8/12 on xl) */}
-        <div className="lg:col-span-2 xl:col-span-8 bg-white rounded-2xl p-4 sm:p-5 2xl:p-6 border border-stone-200/70 card-shadow space-y-4 2xl:space-y-5 flex flex-col justify-between">
+        <div className="lg:col-span-2 xl:col-span-8 bg-white rounded-xl p-3 sm:p-3.5 border border-stone-200/80 shadow-2xs space-y-3 flex flex-col justify-between">
           <div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 pb-2.5 2xl:pb-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-2">
               <div>
                 <h3 className="text-sm sm:text-base font-outfit font-bold text-ink flex items-center gap-2">
                   <Activity className="w-4 h-4 text-maroon" />

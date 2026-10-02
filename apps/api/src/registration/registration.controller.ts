@@ -18,7 +18,7 @@ import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
 import { RegistrationService } from './registration.service';
-import { RegisterEmployeeDto } from './dto/register-employee.dto';
+import { RegisterEmployeeDto, VerifyEmployeeDto } from './dto/register-employee.dto';
 import { DailyPassPdfService } from './daily-pass-pdf.service';
 import { PublicMaintenanceGuard } from '../common/guards/public-maintenance.guard';
 
@@ -66,6 +66,13 @@ export class RegistrationController {
   @ApiOperation({ summary: 'Get current event public maintenance mode status' })
   async getMaintenanceStatus() {
     return this.registrationService.getMaintenanceStatus();
+  }
+
+  @Post(['employee/verify', 'verify-employee'])
+  @UseGuards(PublicMaintenanceGuard)
+  @ApiOperation({ summary: 'Verify employee CPF and Mobile against official ONGC master data' })
+  async verifyEmployee(@Body() body: VerifyEmployeeDto) {
+    return this.registrationService.verifyEmployee(body.cpf, body.mobile);
   }
 
   @Post(['register', 'register/employee', 'employee/register'])

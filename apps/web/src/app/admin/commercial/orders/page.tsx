@@ -841,17 +841,19 @@ export default function CommercialOrdersAuditPage() {
       </div>
 
       {/* Top 6 Compact Channel & Pass Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 2xl:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         {/* Card 1: TOTAL PASSES */}
-        <div className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 shadow-xs">
-          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-            <Ticket className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-[#7A1113]" />
-            TOTAL PASSES
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-soft flex items-center gap-1">
+              <Ticket className="w-3 h-3 text-[#7A1113]" />
+              TOTAL PASSES
+            </span>
+            <span className="text-[10px] text-stone-400 block mt-0.5">All issued passes</span>
           </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900 mt-1.5 2xl:mt-2">
+          <span className="font-outfit font-black text-xl text-stone-900 leading-none text-right ml-2">
             {(passSummary?.total ?? summary.totalPasses).toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-stone-400 font-medium mt-0.5">All issued passes</div>
+          </span>
         </div>
 
         {/* Card 2: WEBSITE PASSES */}
@@ -861,22 +863,24 @@ export default function CommercialOrdersAuditPage() {
             setChannelTab('PUBLIC');
             setPage(1);
           }}
-          className={`text-left p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border transition-all shadow-xs ${
+          className={`text-left py-2 px-3 rounded-xl border transition-all shadow-2xs flex items-center justify-between min-h-[55px] cursor-pointer ${
             channelTab === 'PUBLIC'
               ? 'bg-blue-50/60 border-blue-400 ring-2 ring-blue-400/20'
               : 'bg-white border-stone-200/80 hover:border-blue-200'
           }`}
         >
-          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
-            <CreditCard className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-blue-600" />
-            WEBSITE
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1">
+              <CreditCard className="w-3 h-3 text-blue-600" />
+              WEBSITE
+            </span>
+            <span className="text-[10px] text-blue-700/80 block mt-0.5">
+              ₹{summary.publicSalesInr.toLocaleString('en-IN')} online
+            </span>
           </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-blue-950 mt-1.5 2xl:mt-2">
+          <span className="font-outfit font-black text-xl text-blue-950 leading-none text-right ml-2">
             {(passSummary?.website ?? summary.publicPassesCount).toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-blue-700/80 font-medium mt-0.5">
-            ₹{summary.publicSalesInr.toLocaleString('en-IN')} online
-          </div>
+          </span>
         </button>
 
         {/* Card 3: AGENT PASSES */}
@@ -886,64 +890,69 @@ export default function CommercialOrdersAuditPage() {
             setChannelTab('AGENT');
             setPage(1);
           }}
-          className={`text-left p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border transition-all shadow-xs ${
+          className={`text-left py-2 px-3 rounded-xl border transition-all shadow-2xs flex items-center justify-between min-h-[55px] cursor-pointer ${
             channelTab === 'AGENT'
               ? 'bg-amber-50/60 border-amber-400 ring-2 ring-amber-400/20'
               : 'bg-white border-stone-200/80 hover:border-amber-200'
           }`}
         >
-          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-            <Users className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-amber-600" />
-            AGENT
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1">
+              <Users className="w-3 h-3 text-amber-600" />
+              AGENT
+            </span>
+            <span className="text-[10px] text-amber-700/80 block mt-0.5">
+              ₹{summary.agentSalesInr.toLocaleString('en-IN')} agent
+            </span>
           </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-amber-950 mt-1.5 2xl:mt-2">
+          <span className="font-outfit font-black text-xl text-amber-950 leading-none text-right ml-2">
             {(passSummary?.agent ?? summary.agentPassesCount).toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-amber-700/80 font-medium mt-0.5">
-            ₹{summary.agentSalesInr.toLocaleString('en-IN')} agent
-          </div>
+          </span>
         </button>
 
         {/* Card 4: EMPLOYEE PASSES */}
         <Link
           href="/admin/employees"
-          className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 hover:border-purple-300 hover:bg-purple-50/20 transition-all shadow-xs block"
+          className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 hover:border-purple-300 hover:bg-purple-50/20 transition-all shadow-2xs flex items-center justify-between min-h-[55px]"
         >
-          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-purple-900 flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <Building2 className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-purple-600" />
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-900 flex items-center gap-1">
+              <Building2 className="w-3 h-3 text-purple-600" />
               EMPLOYEE
             </span>
-            <span className="text-[9px] font-bold text-purple-600 underline">View</span>
+            <span className="text-[10px] text-purple-700/80 block mt-0.5">Staff &amp; Family</span>
           </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-purple-950 mt-1.5 2xl:mt-2">
+          <span className="font-outfit font-black text-xl text-purple-950 leading-none text-right ml-2">
             {(passSummary?.employee ?? 0).toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-purple-700/80 font-medium mt-0.5">ONGC Staff & Family</div>
+          </span>
         </Link>
 
         {/* Card 5: CHECKED IN */}
-        <div className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 shadow-xs">
-          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
-            <CheckCircle2 className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-emerald-600" />
-            CHECKED IN
+        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/60 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              CHECKED IN
+            </span>
+            <span className="text-[10px] text-emerald-700/80 block mt-0.5">Scanned at gates</span>
           </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-emerald-950 mt-1.5 2xl:mt-2">
+          <span className="font-outfit font-black text-xl text-emerald-950 leading-none text-right ml-2">
             {(passSummary?.checkedIn ?? 0).toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-emerald-700/80 font-medium mt-0.5">Scanned at gates</div>
+          </span>
         </div>
 
         {/* Card 6: NOT CHECKED IN */}
-        <div className="bg-white p-3 2xl:p-3.5 rounded-xl 2xl:rounded-2xl border border-stone-200/80 shadow-xs">
-          <div className="text-[9px] 2xl:text-[10px] font-extrabold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
-            <Clock className="w-3 2xl:w-3.5 h-3 2xl:h-3.5 text-stone-500" />
-            NOT CHECKED IN
+        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-stone-500" />
+              NOT CHECKED IN
+            </span>
+            <span className="text-[10px] text-stone-500 block mt-0.5">Pending check-in</span>
           </div>
-          <div className="font-outfit font-black text-xl 2xl:text-2xl text-stone-900 mt-1.5 2xl:mt-2">
+          <span className="font-outfit font-black text-xl text-stone-900 leading-none text-right ml-2">
             {(passSummary?.notCheckedIn ?? 0).toLocaleString()}
-          </div>
-          <div className="text-[9px] 2xl:text-[10px] text-stone-500 font-medium mt-0.5">Pending check-in</div>
+          </span>
         </div>
       </div>
 
