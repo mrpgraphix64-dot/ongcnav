@@ -396,6 +396,19 @@ export class EmployeesService {
       throw new NotFoundException(`Employee with ID ${id} not found.`);
     }
 
+    // Idempotent: If already approved, return safe response without duplicate updates or side effects
+    if (emp.registrationStatus === (RegistrationStatus.APPROVED as any)) {
+      return {
+        success: true,
+        alreadyApproved: true,
+        message: `Registration for ${emp.name} (CPF: ${emp.cpf}) is already approved.`,
+      };
+    }
+
+    if (emp.registrationStatus === (RegistrationStatus.REJECTED as any)) {
+      throw new BadRequestException(`Cannot approve a rejected employee registration.`);
+    }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.employee.update({
         where: { id },

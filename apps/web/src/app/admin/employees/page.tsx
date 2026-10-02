@@ -217,6 +217,22 @@ export default function AdminEmployeesPage() {
         method: 'POST',
       });
       setActionSuccess(res.message || 'Registration approved.');
+
+      // Automatically clear employee from selection
+      setSelectedIds((prev) => prev.filter((item) => item !== id));
+
+      // Optimistically update employee status and counters
+      setEmployees((prev) =>
+        prev.map((emp) =>
+          emp.id === id ? { ...emp, registrationStatus: 'APPROVED' } : emp
+        )
+      );
+      setStatusCounts((prev) => ({
+        ...prev,
+        pending: Math.max(0, prev.pending - 1),
+        approved: prev.approved + 1,
+      }));
+
       if (detailEmployee && detailEmployee.id === id) {
         setDetailEmployee((prev) => (prev ? { ...prev, registrationStatus: 'APPROVED' } : null));
       }
@@ -239,6 +255,22 @@ export default function AdminEmployeesPage() {
         method: 'POST',
       });
       setActionSuccess(res.message || 'Registration rejected.');
+
+      // Automatically clear employee from selection
+      setSelectedIds((prev) => prev.filter((item) => item !== id));
+
+      // Optimistically update employee status and counters
+      setEmployees((prev) =>
+        prev.map((emp) =>
+          emp.id === id ? { ...emp, registrationStatus: 'REJECTED' } : emp
+        )
+      );
+      setStatusCounts((prev) => ({
+        ...prev,
+        pending: Math.max(0, prev.pending - 1),
+        rejected: prev.rejected + 1,
+      }));
+
       if (detailEmployee && detailEmployee.id === id) {
         setDetailEmployee((prev) => (prev ? { ...prev, registrationStatus: 'REJECTED' } : null));
       }
@@ -253,20 +285,49 @@ export default function AdminEmployeesPage() {
   // Bulk Actions
   const handleBulkApprove = async () => {
     if (selectedIds.length === 0 || bulkBusy) return;
-    const eligibleCount = employees.filter((e) => selectedIds.includes(e.id) && e.registrationStatus === 'PENDING').length;
-    const countToApprove = eligibleCount > 0 ? eligibleCount : selectedIds.length;
+
+    // Filter STRICTLY PENDING employees
+    const pendingEmployees = employees.filter(
+      (e) => selectedIds.includes(e.id) && e.registrationStatus === 'PENDING'
+    );
+    const countToApprove = pendingEmployees.length;
+
+    // Do NOT show confirm if there are zero pending selected employees
+    if (countToApprove === 0) {
+      setSelectedIds([]);
+      return;
+    }
+
     if (!confirm(`Approve ${countToApprove} selected employee registration${countToApprove > 1 ? 's' : ''}?`)) {
       return;
     }
+
     setBulkBusy(true);
     setActionSuccess(null);
     try {
+      const pendingIds = pendingEmployees.map((e) => e.id);
       const res = await fetchApi<{ success: boolean; message: string; count?: number }>('/admin/employees/bulk-approve', {
         method: 'POST',
-        body: JSON.stringify({ ids: selectedIds }),
+        body: JSON.stringify({ ids: pendingIds }),
       });
       setActionSuccess(res.message || `Approved ${res.count || countToApprove} registrations.`);
-      setSelectedIds([]);
+
+      // Automatically clear selection after approval
+      setSelectedIds((prev) => prev.filter((id) => !pendingIds.includes(id)));
+
+      // Optimistic update
+      const pendingIdsSet = new Set(pendingIds);
+      setEmployees((prev) =>
+        prev.map((emp) =>
+          pendingIdsSet.has(emp.id) ? { ...emp, registrationStatus: 'APPROVED' } : emp
+        )
+      );
+      setStatusCounts((prev) => ({
+        ...prev,
+        pending: Math.max(0, prev.pending - countToApprove),
+        approved: prev.approved + countToApprove,
+      }));
+
       await loadEmployees();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to bulk approve registrations.');
@@ -277,19 +338,45 @@ export default function AdminEmployeesPage() {
 
   const handleBulkReject = async () => {
     if (selectedIds.length === 0 || bulkBusy) return;
-    const countToReject = selectedIds.length;
+
+    const pendingEmployees = employees.filter(
+      (e) => selectedIds.includes(e.id) && e.registrationStatus === 'PENDING'
+    );
+    const countToReject = pendingEmployees.length;
+
+    if (countToReject === 0) {
+      setSelectedIds([]);
+      return;
+    }
+
     if (!confirm(`Reject ${countToReject} selected employee registration${countToReject > 1 ? 's' : ''}? Linked passes will be revoked.`)) {
       return;
     }
+
     setBulkBusy(true);
     setActionSuccess(null);
     try {
+      const pendingIds = pendingEmployees.map((e) => e.id);
       const res = await fetchApi<{ success: boolean; message: string; count?: number }>('/admin/employees/bulk-reject', {
         method: 'POST',
-        body: JSON.stringify({ ids: selectedIds }),
+        body: JSON.stringify({ ids: pendingIds }),
       });
       setActionSuccess(res.message || `Rejected ${res.count || countToReject} registrations.`);
-      setSelectedIds([]);
+
+      setSelectedIds((prev) => prev.filter((id) => !pendingIds.includes(id)));
+
+      const pendingIdsSet = new Set(pendingIds);
+      setEmployees((prev) =>
+        prev.map((emp) =>
+          pendingIdsSet.has(emp.id) ? { ...emp, registrationStatus: 'REJECTED' } : emp
+        )
+      );
+      setStatusCounts((prev) => ({
+        ...prev,
+        pending: Math.max(0, prev.pending - countToReject),
+        rejected: prev.rejected + countToReject,
+      }));
+
       await loadEmployees();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to bulk reject registrations.');
@@ -298,24 +385,53 @@ export default function AdminEmployeesPage() {
     }
   };
 
-  // Selection Helpers
-  const allVisibleSelected = employees.length > 0 && employees.every((e) => selectedIds.includes(e.id));
-  const someVisibleSelected = employees.some((e) => selectedIds.includes(e.id)) && !allVisibleSelected;
+  // Selection Helpers: Only PENDING employees are selectable for approval/rejection
+  const pendingVisibleEmployees = useMemo(
+    () => employees.filter((e) => e.registrationStatus === 'PENDING'),
+    [employees]
+  );
+
+  const pendingSelectedIds = useMemo(
+    () => selectedIds.filter((id) => pendingVisibleEmployees.some((e) => e.id === id)),
+    [selectedIds, pendingVisibleEmployees]
+  );
+
+  const allVisiblePendingSelected =
+    pendingVisibleEmployees.length > 0 &&
+    pendingVisibleEmployees.every((e) => selectedIds.includes(e.id));
+  const someVisiblePendingSelected =
+    pendingVisibleEmployees.some((e) => selectedIds.includes(e.id)) && !allVisiblePendingSelected;
 
   const toggleSelectAll = () => {
-    if (allVisibleSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !employees.some((e) => e.id === id)));
+    if (allVisiblePendingSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !pendingVisibleEmployees.some((e) => e.id === id)));
     } else {
-      const visibleIds = employees.map((e) => e.id);
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+      const visiblePendingIds = pendingVisibleEmployees.map((e) => e.id);
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visiblePendingIds])));
     }
   };
 
   const toggleSelectRow = (id: string) => {
+    const emp = employees.find((e) => e.id === id);
+    if (!emp || emp.registrationStatus !== 'PENDING') return;
+
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
+
+  // Reconcile and purge any non-pending IDs from selectedIds if employees change or get approved
+  useEffect(() => {
+    if (employees.length > 0 && selectedIds.length > 0) {
+      const nonPendingIds = new Set(
+        employees.filter((e) => e.registrationStatus !== 'PENDING').map((e) => e.id)
+      );
+      const hasNonPending = selectedIds.some((id) => nonPendingIds.has(id));
+      if (hasNonPending) {
+        setSelectedIds((prev) => prev.filter((id) => !nonPendingIds.has(id)));
+      }
+    }
+  }, [employees, selectedIds]);
 
   // Load Employees List
   const loadEmployees = useCallback(async () => {
@@ -680,12 +796,12 @@ export default function AdminEmployeesPage() {
         </div>
       </div>
 
-      {/* COMPACT BULK ACTION BAR (VISIBLE ONLY WHEN ROWS ARE SELECTED) */}
-      {selectedIds.length > 0 && (
+      {/* COMPACT BULK ACTION BAR (VISIBLE ONLY WHEN PENDING ROWS ARE SELECTED) */}
+      {selectedIds.length > 0 && pendingSelectedIds.length > 0 && (
         <div className="bg-stone-900 text-white px-3.5 py-2 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs font-semibold shadow-xs animate-in fade-in duration-150">
           <div className="flex items-center gap-2">
             <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-              {selectedIds.length} selected
+              {pendingSelectedIds.length} pending registration{pendingSelectedIds.length > 1 ? 's' : ''} selected
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -696,7 +812,7 @@ export default function AdminEmployeesPage() {
               className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Approve Selected</span>
+              <span>Approve Selected ({pendingSelectedIds.length})</span>
             </button>
             <button
               type="button"
@@ -705,7 +821,7 @@ export default function AdminEmployeesPage() {
               className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
             >
               <X className="w-3.5 h-3.5" />
-              <span>Reject Selected</span>
+              <span>Reject Selected ({pendingSelectedIds.length})</span>
             </button>
             <button
               type="button"
@@ -728,12 +844,18 @@ export default function AdminEmployeesPage() {
                   <input
                     type="checkbox"
                     ref={(el) => {
-                      if (el) el.indeterminate = someVisibleSelected;
+                      if (el) el.indeterminate = someVisiblePendingSelected;
                     }}
-                    checked={allVisibleSelected}
+                    checked={allVisiblePendingSelected}
+                    disabled={pendingVisibleEmployees.length === 0}
                     onChange={toggleSelectAll}
-                    className="w-3.5 h-3.5 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer"
-                    aria-label="Select all visible employees"
+                    className="w-3.5 h-3.5 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    aria-label="Select all pending visible employees"
+                    title={
+                      pendingVisibleEmployees.length === 0
+                        ? 'No pending registrations to select'
+                        : 'Select all pending registrations'
+                    }
                   />
                 </th>
                 <th className="py-2 px-3 font-bold">Employee Name</th>
@@ -781,8 +903,20 @@ export default function AdminEmployeesPage() {
                       <input
                         type="checkbox"
                         checked={selectedIds.includes(emp.id)}
+                        disabled={emp.registrationStatus !== 'PENDING'}
                         onChange={() => toggleSelectRow(emp.id)}
-                        className="w-3.5 h-3.5 rounded border-stone-300 text-maroon focus:ring-maroon cursor-pointer"
+                        className={`w-3.5 h-3.5 rounded border-stone-300 text-maroon focus:ring-maroon ${
+                          emp.registrationStatus !== 'PENDING'
+                            ? 'opacity-30 cursor-not-allowed bg-stone-100'
+                            : 'cursor-pointer'
+                        }`}
+                        title={
+                          emp.registrationStatus === 'APPROVED'
+                            ? 'Already Approved'
+                            : emp.registrationStatus === 'REJECTED'
+                            ? 'Registration Rejected'
+                            : `Select ${emp.name} for approval/rejection`
+                        }
                         aria-label={`Select ${emp.name}`}
                       />
                     </td>
