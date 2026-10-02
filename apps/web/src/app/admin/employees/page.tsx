@@ -362,6 +362,43 @@ export default function AdminEmployeesPage() {
     loadEmployees();
   }, [loadEmployees]);
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (statusFilter !== 'ALL') params.set('status', statusFilter);
+
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token') : null;
+
+      const res = await fetch(`${API_BASE_URL}/admin/employees/export?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to export employee dataset');
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `employee_registrations_export_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Failed to download employee Excel export');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Open Pass View Modal
   const handleOpenPass = async (employeeId: string) => {
     setViewingEmployeeId(employeeId);
@@ -618,6 +655,18 @@ export default function AdminEmployeesPage() {
               </div>
             )}
           </div>
+
+          {/* Download Excel */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={exporting}
+            title="Download Excel / CSV dataset"
+            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-stone-200 bg-white text-stone-700 hover:text-emerald-700 hover:border-emerald-300 text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+          >
+            <FileSpreadsheet className={`w-3.5 h-3.5 text-emerald-600 ${exporting ? 'animate-pulse' : ''}`} />
+            <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Download Excel'}</span>
+          </button>
 
           {/* Refresh */}
           <button

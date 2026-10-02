@@ -6,6 +6,7 @@ import {
   Query,
   Body,
   UseGuards,
+  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
@@ -120,6 +121,28 @@ export class EmployeesController {
       checkinStatus,
       date,
     });
+  }
+
+  @Get('employees/export')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Export complete employee registration dataset to Excel CSV' })
+  async exportEmployees(
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Res() res?: any,
+  ) {
+    const { csv, filename } = await this.employeesService.exportEmployeesToCsv({
+      search,
+      status,
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send('\uFEFF' + csv);
   }
 
   @Get('employees/:id')

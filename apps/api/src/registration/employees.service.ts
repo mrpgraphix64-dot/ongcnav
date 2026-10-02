@@ -864,85 +864,147 @@ export class EmployeesService {
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
 
-    const where: any = { eventDate, isTest: false };
+    // 1. Fetch all active attendees belonging to APPROVED employee registrations
+    const allApprovedAttendees = await this.prisma.attendee.findMany({
+      where: {
+        isLoadTest: false,
+        status: AttendeeStatus.ACTIVE as any,
+        OR: [
+          { registrationType: RegistrationType.EMPLOYEE as any },
+          { employeeId: { not: null } },
+        ],
+        employee: {
+          registrationStatus: RegistrationStatus.APPROVED as any,
+        },
+      },
+      include: {
+        employee: true,
+        familyMember: true,
+        dailyCheckins: {
+          where: { isLoadTest: false, eventDate },
+          take: 1,
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const eligibleAttendees = allApprovedAttendees.filter((att) =>
+      resolveBookingDays(att).includes(eventDate),
+    );
+
+    // 2. Fetch existing daily passes for this event date
+    const existingPasses = await this.prisma.dailyEmployeePass.findMany({
+      where: { eventDate, isTest: false },
+      orderBy: { id: 'desc' },
+    });
+    const passMap = new Map<string, any>();
+    for (const p of existingPasses) {
+      passMap.set(p.attendeeId.toString(), p);
+    }
+
+    // 3. Build unified list distinguishing: ELIGIBLE, PASS_GENERATED, EMAIL_SENT, EMAIL_FAILED, CHECKED_IN
+    const unifiedList = eligibleAttendees.map((att) => {
+      const pass = passMap.get(att.id.toString());
+      const emp = att.employee;
+      const fam = att.familyMember;
+      const attendeeName = fam ? fam.name : (emp?.name || att.name || 'Employee');
+      const relation = fam ? fam.relation : 'Primary Employee';
+      const isCheckedIn = (att.dailyCheckins && att.dailyCheckins.length > 0) || pass?.status === DailyPassStatus.USED;
+
+      let lifecycleStatus = 'ELIGIBLE';
+      if (isCheckedIn) {
+        lifecycleStatus = 'CHECKED_IN';
+      } else if (pass) {
+        if (pass.emailStatus === DailyPassEmailStatus.SENT) {
+          lifecycleStatus = 'EMAIL_SENT';
+        } else if (pass.emailStatus === DailyPassEmailStatus.FAILED) {
+          lifecycleStatus = 'EMAIL_FAILED';
+        } else {
+          lifecycleStatus = 'PASS_GENERATED';
+        }
+      }
+
+      return {
+        id: pass ? pass.id.toString() : `eligible-${att.id}`,
+        passId: pass ? pass.id.toString() : null,
+        attendeeId: att.id.toString(),
+        eventDate,
+        ticketNumber: att.ticketNumber,
+        qrToken: pass ? pass.qrToken : null,
+        attendeeName,
+        relation,
+        isFamily: !!fam,
+        employeeName: emp?.name || attendeeName,
+        cpf: emp?.cpf || '',
+        department: emp?.department || '',
+        email: emp?.email || att.email || '',
+        phone: fam?.phone || emp?.phone || '',
+        status: pass ? pass.status : 'ELIGIBLE',
+        emailStatus: pass ? pass.emailStatus : 'NOT_GENERATED',
+        lifecycleStatus,
+        emailSentAt: pass?.emailSentAt ? pass.emailSentAt.toISOString() : null,
+        emailError: pass?.emailError || null,
+        checkedInAt: isCheckedIn ? (pass?.checkedInAt ? pass.checkedInAt.toISOString() : new Date().toISOString()) : null,
+        createdAt: pass?.createdAt ? pass.createdAt.toISOString() : new Date().toISOString(),
+      };
+    });
+
+    // 4. Apply Filters
+    let filtered = unifiedList;
 
     if (query.emailStatus && query.emailStatus !== 'ALL') {
-      where.emailStatus = query.emailStatus as any;
+      filtered = filtered.filter((item) => item.emailStatus === query.emailStatus);
     }
 
     if (query.status && query.status !== 'ALL') {
-      where.status = query.status as any;
+      const s = query.status.toUpperCase();
+      if (s === 'ELIGIBLE') {
+        filtered = filtered.filter((item) => item.lifecycleStatus === 'ELIGIBLE');
+      } else if (s === 'PASS_GENERATED') {
+        filtered = filtered.filter((item) => item.lifecycleStatus === 'PASS_GENERATED');
+      } else if (s === 'CHECKED_IN' || s === 'USED') {
+        filtered = filtered.filter((item) => item.lifecycleStatus === 'CHECKED_IN');
+      } else if (s === 'EMAIL_SENT') {
+        filtered = filtered.filter((item) => item.lifecycleStatus === 'EMAIL_SENT');
+      } else if (s === 'EMAIL_FAILED') {
+        filtered = filtered.filter((item) => item.lifecycleStatus === 'EMAIL_FAILED');
+      } else {
+        filtered = filtered.filter((item) => item.status === query.status);
+      }
     }
 
     if (query.search && query.search.trim()) {
-      const q = query.search.trim();
-      where.OR = [
-        { qrToken: { contains: q, mode: 'insensitive' } },
-        { attendee: { ticketNumber: { contains: q, mode: 'insensitive' } } },
-        { attendee: { employee: { name: { contains: q, mode: 'insensitive' } } } },
-        { attendee: { employee: { cpf: { contains: q, mode: 'insensitive' } } } },
-        { attendee: { employee: { email: { contains: q, mode: 'insensitive' } } } },
-        { attendee: { familyMember: { name: { contains: q, mode: 'insensitive' } } } },
-      ];
+      const q = query.search.toLowerCase().trim();
+      filtered = filtered.filter(
+        (item) =>
+          item.attendeeName.toLowerCase().includes(q) ||
+          item.employeeName.toLowerCase().includes(q) ||
+          item.cpf.toLowerCase().includes(q) ||
+          item.email.toLowerCase().includes(q) ||
+          item.ticketNumber.toLowerCase().includes(q) ||
+          (item.qrToken && item.qrToken.toLowerCase().includes(q)),
+      );
     }
 
-    const [total, records] = await Promise.all([
-      this.prisma.dailyEmployeePass.count({ where }),
-      this.prisma.dailyEmployeePass.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { id: 'desc' },
-        include: {
-          attendee: {
-            include: {
-              employee: true,
-              familyMember: true,
-            },
-          },
-        },
-      }),
-    ]);
+    const total = filtered.length;
+    const pageItems = filtered.slice(skip, skip + limit);
 
     const passes = await Promise.all(
-      records.map(async (pass) => {
-        const att = pass.attendee;
-        const emp = att.employee;
-        const fam = att.familyMember;
-        const attendeeName = fam ? fam.name : (emp?.name || att.name || 'Employee');
-        const relation = fam ? fam.relation : 'Primary Employee';
-
+      pageItems.map(async (item) => {
         let qrSvg: string | null = null;
-        try {
-          qrSvg = await QRCode.toString(pass.qrToken, {
-            type: 'svg',
-            margin: 1,
-          });
-        } catch {
-          qrSvg = null;
+        if (item.qrToken) {
+          try {
+            qrSvg = await QRCode.toString(item.qrToken, {
+              type: 'svg',
+              margin: 1,
+            });
+          } catch {
+            qrSvg = null;
+          }
         }
-
         return {
-          id: pass.id.toString(),
-          attendeeId: att.id.toString(),
-          eventDate: pass.eventDate,
-          ticketNumber: att.ticketNumber,
-          qrToken: pass.qrToken,
+          ...item,
           qrSvg,
-          attendeeName,
-          relation,
-          isFamily: !!fam,
-          employeeName: emp?.name || attendeeName,
-          cpf: emp?.cpf || '',
-          department: emp?.department || '',
-          email: emp?.email || att.email || '',
-          phone: fam?.phone || emp?.phone || '',
-          status: pass.status,
-          emailStatus: pass.emailStatus,
-          emailSentAt: pass.emailSentAt ? pass.emailSentAt.toISOString() : null,
-          emailError: pass.emailError,
-          checkedInAt: pass.checkedInAt ? pass.checkedInAt.toISOString() : null,
-          createdAt: pass.createdAt.toISOString(),
         };
       }),
     );
@@ -955,6 +1017,140 @@ export class EmployeesService {
       page,
       totalPages,
       limit,
+    };
+  }
+
+  /**
+   * Generates a complete employee registration dataset export in clean Excel-compatible CSV format.
+   * Emits one row per person (Employee row, then Family Member rows) with all operational fields.
+   */
+  async exportEmployeesToCsv(query: { search?: string; status?: string }) {
+    const where: any = {};
+
+    if (query.search && query.search.trim()) {
+      const q = query.search.trim();
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { cpf: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        { department: { contains: q, mode: 'insensitive' } },
+        { designation: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    if (query.status && query.status !== 'ALL') {
+      const s = query.status.toUpperCase();
+      if (['PENDING', 'APPROVED', 'REJECTED'].includes(s)) {
+        where.registrationStatus = s as any;
+      }
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where,
+      orderBy: { id: 'asc' },
+      include: {
+        familyMembers: {
+          orderBy: { id: 'asc' },
+        },
+        attendees: {
+          include: {
+            familyMember: true,
+          },
+        },
+      },
+    });
+
+    const escape = (val: any) => {
+      const s = String(val ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const headers = [
+      'Employee Name',
+      'Employee CPF',
+      'Person Type',
+      'Family Member Name',
+      'Family Member Relationship',
+      'Mobile',
+      'Email',
+      'Department',
+      'Designation',
+      'DOB',
+      'Joining Date',
+      'Employee Selected Dates',
+      'Family Member Selected Dates',
+      'Registration Status',
+      'Ticket Number',
+      'Pass Status',
+    ];
+
+    const rows: string[] = [headers.join(',')];
+
+    for (const emp of employees) {
+      const empAttendee = emp.attendees.find((a) => a.familyMemberId === null);
+      const empDates = resolveBookingDays(empAttendee || emp).join('; ');
+      const categoryData: any = emp.categoryData || {};
+      const dob = categoryData.dob || '';
+      const joiningDate = categoryData.joiningDate || '';
+
+      // 1. Primary Employee Row
+      rows.push(
+        [
+          escape(emp.name),
+          escape(emp.cpf),
+          escape('Employee'),
+          escape('-'),
+          escape('-'),
+          escape(emp.phone),
+          escape(emp.email),
+          escape(emp.department),
+          escape(emp.designation),
+          escape(dob),
+          escape(joiningDate),
+          escape(empDates),
+          escape('-'),
+          escape(emp.registrationStatus),
+          escape(empAttendee?.ticketNumber || '-'),
+          escape(empAttendee?.status || '-'),
+        ].join(','),
+      );
+
+      // 2. Family Member Rows
+      for (const fam of emp.familyMembers) {
+        const famAttendee = emp.attendees.find((a) => a.familyMemberId === fam.id);
+        const famDates = famAttendee ? resolveBookingDays(famAttendee).join('; ') : empDates;
+
+        rows.push(
+          [
+            escape(emp.name),
+            escape(emp.cpf),
+            escape('Family'),
+            escape(fam.name),
+            escape(fam.relation),
+            escape(fam.phone || emp.phone),
+            escape(emp.email),
+            escape(emp.department),
+            escape(emp.designation),
+            escape('-'),
+            escape('-'),
+            escape(empDates),
+            escape(famDates),
+            escape(emp.registrationStatus),
+            escape(famAttendee?.ticketNumber || '-'),
+            escape(famAttendee?.status || '-'),
+          ].join(','),
+        );
+      }
+    }
+
+    const nowStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    return {
+      csv: rows.join('\r\n'),
+      filename: `employee_registrations_export_${nowStr}.csv`,
     };
   }
 }

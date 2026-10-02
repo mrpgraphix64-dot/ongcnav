@@ -2,9 +2,17 @@ import { IsString, IsNotEmpty, IsOptional, IsEmail, IsBoolean, IsNumber } from '
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GenerateTestPassDto {
-  @ApiProperty({ description: 'ID of the Attendee (employee or family member) to generate test pass for' })
-  @IsNotEmpty()
-  attendeeId: string | number;
+  @ApiPropertyOptional({ description: 'ID of the Attendee (employee or family member) to generate test pass for' })
+  @IsOptional()
+  attendeeId?: string | number;
+
+  @ApiPropertyOptional({ description: 'Array of attendee IDs to generate test passes for' })
+  @IsOptional()
+  attendeeIds?: (string | number)[];
+
+  @ApiPropertyOptional({ description: 'Array of employee IDs - automatically includes employee and all family members' })
+  @IsOptional()
+  employeeIds?: (string | number)[];
 
   @ApiProperty({ description: 'Official event date (e.g. 2026-10-11)', example: '2026-10-11' })
   @IsString()

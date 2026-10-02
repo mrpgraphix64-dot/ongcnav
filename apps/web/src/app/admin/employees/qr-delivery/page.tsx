@@ -59,6 +59,7 @@ interface DailyPassItem {
   email: string;
   phone: string;
   status: string;
+  lifecycleStatus?: 'ELIGIBLE' | 'PASS_GENERATED' | 'EMAIL_SENT' | 'EMAIL_FAILED' | 'CHECKED_IN' | string;
   emailStatus: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
   emailSentAt: string | null;
   emailError: string | null;
@@ -467,8 +468,9 @@ export default function DailyQrDeliveryPage() {
           </div>
 
           {/* Pass Status */}
+          {/* Pass Lifecycle Status Filter */}
           <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs">
-            <span className="text-ink-soft">Pass:</span>
+            <span className="text-ink-soft">Status:</span>
             <select
               value={passStatusFilter}
               onChange={(e) => {
@@ -477,14 +479,37 @@ export default function DailyQrDeliveryPage() {
               }}
               className="bg-transparent border-none text-xs font-bold text-ink focus:outline-none cursor-pointer"
             >
-              <option value="ALL">All Passes</option>
-              <option value="ACTIVE">Active</option>
-              <option value="USED">Checked In</option>
-              <option value="REVOKED">Revoked</option>
+              <option value="ALL">All Attendees &amp; Passes</option>
+              <option value="ELIGIBLE">Eligible (Pass Not Generated)</option>
+              <option value="PASS_GENERATED">Pass Generated (Email Pending)</option>
+              <option value="EMAIL_SENT">Email Sent</option>
+              <option value="EMAIL_FAILED">Email Failed</option>
+              <option value="CHECKED_IN">Checked In</option>
             </select>
           </div>
         </div>
       </div>
+
+      {/* ELIGIBLE NOTICE BANNER */}
+      {stats && stats.eligibleCount > 0 && stats.generatedCount === 0 && (
+        <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+            <div>
+              <strong>{stats.eligibleCount} approved attendees</strong> are eligible for {formatDateDisplay(selectedDate)}.
+              <span className="text-stone-600 ml-1">Daily passes have not yet been generated.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleGeneratePasses}
+            disabled={generating}
+            className="px-3.5 py-1.5 bg-maroon text-white font-bold text-xs rounded-xl hover:bg-maroon-dark transition-all shrink-0 shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            {generating ? 'Generating...' : "1. Generate Today's Passes"}
+          </button>
+        </div>
+      )}
 
       {/* PASSES DATA TABLE */}
       <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
@@ -514,129 +539,159 @@ export default function DailyQrDeliveryPage() {
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-ink-soft">
                     <QrCode className="w-8 h-8 text-stone-300 mx-auto mb-2" />
-                    <p className="font-semibold text-ink text-sm">No daily passes found for this date</p>
+                    <p className="font-semibold text-ink text-sm">No attendees found matching filter for this date</p>
                     <p className="text-xs text-ink-soft mt-1">
-                      Click <strong>"Generate Today's Passes"</strong> above to issue passes for registered attendees.
+                      {stats && stats.eligibleCount > 0
+                        ? `Click "Generate Today's Passes" above to generate passes for ${stats.eligibleCount} eligible attendees.`
+                        : 'No employees are registered or approved for this event date.'}
                     </p>
                   </td>
                 </tr>
               ) : (
-                passes.map((p) => (
-                  <tr key={p.id} className="hover:bg-cream/40 transition-colors">
-                    {/* Attendee */}
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-ink text-sm">{p.attendeeName}</div>
-                      <div className="font-mono text-[10px] text-stone-400 mt-0.5">{p.ticketNumber}</div>
-                    </td>
+                passes.map((p) => {
+                  const isEligibleOnly = p.lifecycleStatus === 'ELIGIBLE' || p.status === 'ELIGIBLE';
+                  const isPassGenerated = p.lifecycleStatus === 'PASS_GENERATED';
+                  const isEmailSent = p.lifecycleStatus === 'EMAIL_SENT' || p.emailStatus === 'SENT';
+                  const isEmailFailed = p.lifecycleStatus === 'EMAIL_FAILED' || p.emailStatus === 'FAILED';
+                  const isCheckedIn = p.lifecycleStatus === 'CHECKED_IN' || !!p.checkedInAt;
 
-                    {/* Role / Family */}
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                          p.isFamily
-                            ? 'bg-purple-50 text-purple-800 border-purple-200'
-                            : 'bg-blue-50 text-blue-800 border-blue-200'
-                        }`}
-                      >
-                        {p.relation}
-                      </span>
-                    </td>
+                  return (
+                    <tr key={p.id} className="hover:bg-cream/40 transition-colors">
+                      {/* Attendee */}
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-ink text-sm">{p.attendeeName}</div>
+                        <div className="font-mono text-[10px] text-stone-400 mt-0.5">{p.ticketNumber}</div>
+                      </td>
 
-                    {/* Employee & CPF */}
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-ink">{p.employeeName}</div>
-                      {p.cpf && (
-                        <div className="font-mono text-[11px] text-maroon font-bold mt-0.5">CPF: {p.cpf}</div>
-                      )}
-                    </td>
-
-                    {/* Recipient Email */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1 text-ink-soft">
-                        <Mail className="w-3 h-3 text-stone-400 shrink-0" />
-                        <span className="truncate max-w-[170px]">{p.email}</span>
-                      </div>
-                    </td>
-
-                    {/* Email Status */}
-                    <td className="py-3 px-4">
-                      {p.emailStatus === 'SENT' ? (
-                        <div>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Sent</span>
-                          </span>
-                          {p.emailSentAt && (
-                            <div className="text-[9px] text-ink-soft mt-0.5">
-                              {new Date(p.emailSentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          )}
-                        </div>
-                      ) : p.emailStatus === 'FAILED' ? (
-                        <div>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200 uppercase">
-                            <AlertCircle className="w-3 h-3 text-rose-600" />
-                            <span>Failed</span>
-                          </span>
-                          {p.emailError && (
-                            <div className="text-[9px] text-rose-600 truncate max-w-[120px] mt-0.5" title={p.emailError}>
-                              {p.emailError}
-                            </div>
-                          )}
-                        </div>
-                      ) : p.emailStatus === 'SENDING' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200 uppercase">
-                          <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />
-                          <span>Sending</span>
+                      {/* Role / Family */}
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                            p.isFamily
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-blue-50 text-blue-800 border-blue-200'
+                          }`}
+                        >
+                          {p.relation}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 uppercase">
-                          <Clock className="w-3 h-3 text-amber-600" />
-                          <span>Pending</span>
-                        </span>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Pass Status */}
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
-                          p.status === 'USED'
-                            ? 'bg-blue-50 text-blue-800 border-blue-200'
-                            : p.status === 'ACTIVE'
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : 'bg-rose-50 text-rose-800 border-rose-200'
-                        }`}
-                      >
-                        {p.status}
-                      </span>
-                    </td>
+                      {/* Employee & CPF */}
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-ink">{p.employeeName}</div>
+                        {p.cpf && (
+                          <div className="font-mono text-[11px] text-maroon font-bold mt-0.5">CPF: {p.cpf}</div>
+                        )}
+                      </td>
 
-                    {/* Check-in */}
-                    <td className="py-3 px-4">
-                      {p.checkedInAt ? (
-                        <div className="text-[10px] font-bold text-blue-800">
-                          {new Date(p.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {/* Recipient Email */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1 text-ink-soft">
+                          <Mail className="w-3 h-3 text-stone-400 shrink-0" />
+                          <span className="truncate max-w-[170px]">{p.email || '—'}</span>
                         </div>
-                      ) : (
-                        <span className="text-[10px] text-stone-400 font-semibold">—</span>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Actions */}
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setViewPass(p)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-maroon hover:text-white text-ink text-xs font-bold transition-colors cursor-pointer"
-                        title="View Scannable QR Pass"
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                        <span>View QR</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      {/* Email Status */}
+                      <td className="py-3 px-4">
+                        {isEligibleOnly ? (
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-500 border border-stone-200">
+                            Pass Not Generated
+                          </span>
+                        ) : isEmailSent ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Email Sent</span>
+                            </span>
+                            {p.emailSentAt && (
+                              <div className="text-[9px] text-ink-soft mt-0.5">
+                                {new Date(p.emailSentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            )}
+                          </div>
+                        ) : isEmailFailed ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200 uppercase">
+                              <AlertCircle className="w-3 h-3 text-rose-600" />
+                              <span>Email Failed</span>
+                            </span>
+                            {p.emailError && (
+                              <div className="text-[9px] text-rose-600 truncate max-w-[120px] mt-0.5" title={p.emailError}>
+                                {p.emailError}
+                              </div>
+                            )}
+                          </div>
+                        ) : p.emailStatus === 'SENDING' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200 uppercase">
+                            <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />
+                            <span>Sending</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 uppercase">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            <span>Email Pending</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Pass Status */}
+                      <td className="py-3 px-4">
+                        {isEligibleOnly ? (
+                          <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
+                            ELIGIBLE
+                          </span>
+                        ) : isCheckedIn ? (
+                          <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-300">
+                            CHECKED IN
+                          </span>
+                        ) : isPassGenerated ? (
+                          <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-900 border border-purple-300">
+                            PASS GENERATED
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                              p.status === 'ACTIVE'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-rose-50 text-rose-800 border-rose-200'
+                            }`}
+                          >
+                            {p.status}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Check-in */}
+                      <td className="py-3 px-4">
+                        {p.checkedInAt ? (
+                          <div className="text-[10px] font-bold text-blue-800">
+                            {new Date(p.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-stone-400 font-semibold">—</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-right">
+                        {p.qrToken ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewPass(p)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-maroon hover:text-white text-ink text-xs font-bold transition-colors cursor-pointer"
+                            title="View Scannable QR Pass"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>View QR</span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-stone-400 italic">Pass Not Generated</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -115,23 +115,6 @@ export class EmployeeDailyPassTestService {
       );
     }
 
-    const attendeeIdBigInt = BigInt(dto.attendeeId);
-    const attendee = await this.prisma.attendee.findUnique({
-      where: { id: attendeeIdBigInt },
-      include: {
-        employee: true,
-        familyMember: {
-          include: {
-            employee: true,
-          },
-        },
-      },
-    });
-
-    if (!attendee) {
-      throw new NotFoundException(`Attendee with ID ${dto.attendeeId} not found`);
-    }
-
     // Auto-generate test session ID if not provided
     const sessionId =
       dto.testSessionId?.trim() ||
@@ -140,79 +123,253 @@ export class EmployeeDailyPassTestService {
         .toString('hex')
         .toUpperCase()}`;
 
-    // Clean up any prior test pass for this exact attendee, date, and isTest: true
-    await this.prisma.dailyEmployeePass.deleteMany({
-      where: {
-        attendeeId: attendee.id,
-        eventDate: dto.eventDate,
-        isTest: true,
-      },
-    });
+    // 1. Single attendee mode (full backward compatibility with existing tests and flows)
+    if (
+      dto.attendeeId &&
+      (!dto.employeeIds || dto.employeeIds.length === 0) &&
+      (!dto.attendeeIds || dto.attendeeIds.length === 0)
+    ) {
+      const attendeeIdBigInt = BigInt(dto.attendeeId);
+      const attendee = await this.prisma.attendee.findUnique({
+        where: { id: attendeeIdBigInt },
+        include: {
+          employee: true,
+          familyMember: {
+            include: {
+              employee: true,
+            },
+          },
+        },
+      });
 
-    // Generate standard 32-byte hex QR token matching production architecture
-    const qrToken = crypto.randomBytes(32).toString('hex');
+      if (!attendee) {
+        throw new NotFoundException(`Attendee with ID ${dto.attendeeId} not found`);
+      }
 
-    const pass = await this.prisma.dailyEmployeePass.create({
-      data: {
-        attendeeId: attendee.id,
-        eventDate: dto.eventDate,
-        qrToken,
-        status: DailyPassStatus.ACTIVE as any,
-        emailStatus: DailyPassEmailStatus.PENDING as any,
-        isTest: true,
+      // Clean up any prior test pass for this exact attendee, date, and isTest: true
+      await this.prisma.dailyEmployeePass.deleteMany({
+        where: {
+          attendeeId: attendee.id,
+          eventDate: dto.eventDate,
+          isTest: true,
+        },
+      });
+
+      const qrToken = crypto.randomBytes(32).toString('hex');
+      const pass = await this.prisma.dailyEmployeePass.create({
+        data: {
+          attendeeId: attendee.id,
+          eventDate: dto.eventDate,
+          qrToken,
+          status: DailyPassStatus.ACTIVE as any,
+          emailStatus: DailyPassEmailStatus.PENDING as any,
+          isTest: true,
+          testSessionId: sessionId,
+        },
+      });
+
+      const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
+      const attendeeName =
+        attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
+      const isFamily = !!attendee.familyMember;
+      const relation = attendee.familyMember?.relation || 'Self';
+      const employeeName = primaryEmployee?.name || attendeeName;
+      const employeeCpf = primaryEmployee?.cpf || 'N/A';
+      const department = primaryEmployee?.department || 'EWC Ahmedabad';
+      const passType = isFamily
+        ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
+        : 'ONGC Employee Pass';
+      const dayTheme = getEventDayTheme(dto.eventDate);
+
+      const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
+        eventDate: pass.eventDate,
+        ticketNumber: attendee.ticketNumber,
+        qrToken: pass.qrToken,
+        status: pass.status,
+        attendeeName,
+        isFamily,
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
+      });
+
+      const singlePass = {
+        testPassId: pass.id.toString(),
         testSessionId: sessionId,
-      },
-    });
+        qrToken: pass.qrToken,
+        attendeeId: attendee.id.toString(),
+        attendeeName,
+        isFamily,
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
+        passType,
+        ticketNumber: attendee.ticketNumber,
+        eventDate: pass.eventDate,
+        status: pass.status,
+        emailStatus: pass.emailStatus,
+        dayTheme,
+        presentation,
+        createdAt: pass.createdAt,
+      };
 
-    const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
-    const attendeeName =
-      attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
-    const isFamily = !!attendee.familyMember;
-    const relation = attendee.familyMember?.relation || 'Self';
-    const employeeName = primaryEmployee?.name || attendeeName;
-    const employeeCpf = primaryEmployee?.cpf || 'N/A';
-    const department = primaryEmployee?.department || 'EWC Ahmedabad';
-    const passType = isFamily
-      ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
-      : 'ONGC Employee Pass';
-    const dayTheme = getEventDayTheme(dto.eventDate);
+      return {
+        ...singlePass,
+        passes: [singlePass],
+        totalEmployees: 1,
+        totalPasses: 1,
+        newlyGeneratedCount: 1,
+        existingCount: 0,
+        testSessionId: sessionId,
+      };
+    }
 
-    const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
-      eventDate: pass.eventDate,
-      ticketNumber: attendee.ticketNumber,
-      qrToken: pass.qrToken,
-      status: pass.status,
-      attendeeName,
-      isFamily,
-      relation,
-      employeeName,
-      employeeCpf,
-      department,
-    });
+    // 2. Multi-Employee / Batch Attendee Mode
+    let targetAttendees: any[] = [];
+    let totalEmployees = 1;
+
+    if (dto.employeeIds && dto.employeeIds.length > 0) {
+      const empIds = dto.employeeIds.map((id) => BigInt(id));
+      const employees = await this.prisma.employee.findMany({
+        where: { id: { in: empIds } },
+        include: {
+          familyMembers: true,
+          attendees: {
+            include: {
+              employee: true,
+              familyMember: {
+                include: {
+                  employee: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      totalEmployees = employees.length;
+      for (const emp of employees) {
+        for (const att of emp.attendees) {
+          targetAttendees.push(att);
+        }
+      }
+    } else if (dto.attendeeIds && dto.attendeeIds.length > 0) {
+      const attIds = dto.attendeeIds.map((id) => BigInt(id));
+      targetAttendees = await this.prisma.attendee.findMany({
+        where: { id: { in: attIds } },
+        include: {
+          employee: true,
+          familyMember: {
+            include: {
+              employee: true,
+            },
+          },
+        },
+      });
+    } else {
+      throw new BadRequestException('Either employeeIds, attendeeIds, or attendeeId must be provided.');
+    }
+
+    if (targetAttendees.length === 0) {
+      throw new NotFoundException('No attendees found for the specified selection.');
+    }
+
+    const resultPasses: any[] = [];
+    let newlyGeneratedCount = 0;
+    let existingCount = 0;
+
+    for (const attendee of targetAttendees) {
+      // Idempotency check: Reuse existing test pass if already generated for this attendee, date, and isTest: true
+      const existingPass = await this.prisma.dailyEmployeePass.findFirst({
+        where: {
+          attendeeId: attendee.id,
+          eventDate: dto.eventDate,
+          isTest: true,
+        },
+      });
+
+      let pass = existingPass;
+      if (pass) {
+        existingCount++;
+      } else {
+        const qrToken = crypto.randomBytes(32).toString('hex');
+        pass = await this.prisma.dailyEmployeePass.create({
+          data: {
+            attendeeId: attendee.id,
+            eventDate: dto.eventDate,
+            qrToken,
+            status: DailyPassStatus.ACTIVE as any,
+            emailStatus: DailyPassEmailStatus.PENDING as any,
+            isTest: true,
+            testSessionId: sessionId,
+          },
+        });
+        newlyGeneratedCount++;
+      }
+
+      const primaryEmployee = attendee.familyMember?.employee || attendee.employee;
+      const attendeeName =
+        attendee.familyMember?.name || primaryEmployee?.name || attendee.name || 'Attendee';
+      const isFamily = !!attendee.familyMember;
+      const relation = attendee.familyMember?.relation || 'Self';
+      const employeeName = primaryEmployee?.name || attendeeName;
+      const employeeCpf = primaryEmployee?.cpf || 'N/A';
+      const department = primaryEmployee?.department || 'EWC Ahmedabad';
+      const passType = isFamily
+        ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
+        : 'ONGC Employee Pass';
+      const dayTheme = getEventDayTheme(dto.eventDate);
+
+      const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
+        eventDate: pass.eventDate,
+        ticketNumber: attendee.ticketNumber,
+        qrToken: pass.qrToken,
+        status: pass.status,
+        attendeeName,
+        isFamily,
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
+      });
+
+      resultPasses.push({
+        testPassId: pass.id.toString(),
+        testSessionId: sessionId,
+        qrToken: pass.qrToken,
+        attendeeId: attendee.id.toString(),
+        attendeeName,
+        isFamily,
+        relation,
+        employeeName,
+        employeeCpf,
+        department,
+        passType,
+        ticketNumber: attendee.ticketNumber,
+        eventDate: pass.eventDate,
+        status: pass.status,
+        emailStatus: pass.emailStatus,
+        dayTheme,
+        presentation,
+        createdAt: pass.createdAt,
+      });
+    }
 
     this.logger.log(
-      `[TEST_LAB] Generated isolated test pass ${pass.id} for session ${sessionId} (${attendeeName}, ${dto.eventDate})`,
+      `[TEST_LAB] Processed ${resultPasses.length} test passes for session ${sessionId} (${newlyGeneratedCount} new, ${existingCount} reused) on ${dto.eventDate}`,
     );
 
+    const firstPass = resultPasses[0] || {};
     return {
-      testPassId: pass.id.toString(),
+      ...firstPass,
+      passes: resultPasses,
+      totalEmployees,
+      totalPasses: resultPasses.length,
+      newlyGeneratedCount,
+      existingCount,
       testSessionId: sessionId,
-      qrToken: pass.qrToken,
-      attendeeId: attendee.id.toString(),
-      attendeeName,
-      isFamily,
-      relation,
-      employeeName,
-      employeeCpf,
-      department,
-      passType,
-      ticketNumber: attendee.ticketNumber,
-      eventDate: pass.eventDate,
-      status: pass.status,
-      emailStatus: pass.emailStatus,
-      dayTheme,
-      presentation,
-      createdAt: pass.createdAt,
     };
   }
 
