@@ -360,8 +360,13 @@ export class CheckinService {
         };
       }
 
-      // Validate daily pass date against active event date
-      if (dailyEmployeePass.eventDate !== activeDate) {
+      // Validate attendee bookingDays against active event date (permanent QR architecture)
+      const attendeeBookingDays = resolveBookingDays(attendee);
+      const isDateValid = attendeeBookingDays.length > 0
+        ? attendeeBookingDays.includes(activeDate)
+        : dailyEmployeePass.eventDate === activeDate;
+
+      if (!isDateValid) {
         await this.recordScanLog({
           attendeeId: attendee.id,
           gateId,
@@ -381,7 +386,7 @@ export class CheckinService {
         return {
           success: false,
           result: CheckinResult.NOT_BOOKED_TODAY,
-          message: `Pass is not valid for today (${activeDate}). This pass was issued for ${dailyEmployeePass.eventDate}.`,
+          message: `Attendee is not registered for today (${activeDate}).`,
           statusCode: 403,
           attendeeName,
         };

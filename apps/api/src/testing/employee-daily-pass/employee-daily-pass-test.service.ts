@@ -168,7 +168,7 @@ export class EmployeeDailyPassTestService {
       throw new ForbiddenException('Only SUPER_ADMIN can generate test daily passes.');
     }
 
-    if (!dto.eventDate || !isOfficialEventDate(dto.eventDate)) {
+    if (dto.eventDate && !isOfficialEventDate(dto.eventDate)) {
       throw new BadRequestException(
         `Invalid event date: "${dto.eventDate}". Allowed dates: ${OFFICIAL_EVENT_DATES.join(', ')}`,
       );
@@ -206,7 +206,8 @@ export class EmployeeDailyPassTestService {
       }
 
       const bookingDays = resolveBookingDays(attendee);
-      if (!bookingDays.includes(dto.eventDate)) {
+      const targetDate = dto.eventDate || bookingDays[0] || OFFICIAL_EVENT_DATES[0];
+      if (dto.eventDate && !bookingDays.includes(dto.eventDate)) {
         throw new BadRequestException(
           `Attendee ${attendee.id} did not select event date ${dto.eventDate}.`,
         );
@@ -216,7 +217,7 @@ export class EmployeeDailyPassTestService {
       await this.prisma.dailyEmployeePass.deleteMany({
         where: {
           attendeeId: attendee.id,
-          eventDate: dto.eventDate,
+          eventDate: targetDate,
           isTest: true,
         },
       });
@@ -225,7 +226,7 @@ export class EmployeeDailyPassTestService {
       await this.prisma.dailyCheckin.deleteMany({
         where: {
           attendeeId: attendee.id,
-          eventDate: dto.eventDate,
+          eventDate: targetDate,
           isLoadTest: true,
         },
       });
@@ -246,7 +247,7 @@ export class EmployeeDailyPassTestService {
       const pass = await this.prisma.dailyEmployeePass.create({
         data: {
           attendeeId: attendee.id,
-          eventDate: dto.eventDate,
+          eventDate: targetDate,
           qrToken,
           status: DailyPassStatus.ACTIVE as any,
           emailStatus: DailyPassEmailStatus.PENDING as any,
@@ -266,7 +267,7 @@ export class EmployeeDailyPassTestService {
       const passType = isFamily
         ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
         : 'ONGC Employee Pass';
-      const dayTheme = getEventDayTheme(dto.eventDate);
+      const dayTheme = getEventDayTheme(targetDate);
 
       const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
         eventDate: pass.eventDate,
@@ -295,6 +296,7 @@ export class EmployeeDailyPassTestService {
         passType,
         ticketNumber: attendee.ticketNumber,
         eventDate: pass.eventDate,
+        bookingDays: resolveBookingDays(attendee),
         status: pass.status,
         emailStatus: pass.emailStatus,
         dayTheme,
@@ -366,8 +368,8 @@ export class EmployeeDailyPassTestService {
       throw new NotFoundException('No attendees found for the specified selection.');
     }
 
-    // Filter attendees into eligible and ineligible for this specific event date
-    const eligibleAttendees: any[] = [];
+    // Filter attendees into eligible and ineligible
+    const eligibleAttendees: Array<{ attendee: any; targetDate: string }> = [];
     const ineligibleAttendees: any[] = [];
 
     for (const att of targetAttendees) {
@@ -381,20 +383,39 @@ export class EmployeeDailyPassTestService {
       const employeeCpf = primaryEmployee?.cpf || 'N/A';
       const department = primaryEmployee?.department || 'EWC Ahmedabad';
 
-      if (bookingDays.includes(dto.eventDate)) {
-        eligibleAttendees.push(att);
+      if (dto.eventDate) {
+        if (bookingDays.includes(dto.eventDate)) {
+          eligibleAttendees.push({ attendee: att, targetDate: dto.eventDate });
+        } else {
+          ineligibleAttendees.push({
+            attendeeId: att.id.toString(),
+            attendeeName,
+            isFamily,
+            relation,
+            employeeName,
+            employeeCpf,
+            department,
+            reason: 'Did not select this date',
+            selectedDates: bookingDays,
+          });
+        }
       } else {
-        ineligibleAttendees.push({
-          attendeeId: att.id.toString(),
-          attendeeName,
-          isFamily,
-          relation,
-          employeeName,
-          employeeCpf,
-          department,
-          reason: 'Did not select this date',
-          selectedDates: bookingDays,
-        });
+        // Permanent QR test mode: eligible if attendee has at least 1 selected event date
+        if (bookingDays.length > 0) {
+          eligibleAttendees.push({ attendee: att, targetDate: bookingDays[0] });
+        } else {
+          ineligibleAttendees.push({
+            attendeeId: att.id.toString(),
+            attendeeName,
+            isFamily,
+            relation,
+            employeeName,
+            employeeCpf,
+            department,
+            reason: 'No event dates selected',
+            selectedDates: [],
+          });
+        }
       }
     }
 
@@ -402,12 +423,12 @@ export class EmployeeDailyPassTestService {
     let newlyGeneratedCount = 0;
     let existingCount = 0;
 
-    for (const attendee of eligibleAttendees) {
+    for (const { attendee, targetDate } of eligibleAttendees) {
       // Idempotency check: Reuse existing test pass if already generated for this attendee, date, and isTest: true
       const existingPass = await this.prisma.dailyEmployeePass.findFirst({
         where: {
           attendeeId: attendee.id,
-          eventDate: dto.eventDate,
+          eventDate: targetDate,
           isTest: true,
         },
       });
@@ -428,18 +449,30 @@ export class EmployeeDailyPassTestService {
           await this.prisma.dailyCheckin.deleteMany({
             where: {
               attendeeId: attendee.id,
-              eventDate: dto.eventDate,
+              eventDate: targetDate,
               isLoadTest: true,
             },
           });
         }
         existingCount++;
       } else {
-        const qrToken = crypto.randomBytes(32).toString('hex');
+        // Reuse attendee's permanent token if available
+        let qrToken = attendee.qrCodeToken;
+        if (!qrToken || qrToken.trim() === '') {
+          qrToken = crypto.randomBytes(32).toString('hex');
+          if (this.prisma.attendee && typeof this.prisma.attendee.update === 'function') {
+            await this.prisma.attendee.update({
+              where: { id: attendee.id },
+              data: { qrCodeToken: qrToken },
+            });
+          }
+          attendee.qrCodeToken = qrToken;
+        }
+
         pass = await this.prisma.dailyEmployeePass.create({
           data: {
             attendeeId: attendee.id,
-            eventDate: dto.eventDate,
+            eventDate: targetDate,
             qrToken,
             status: DailyPassStatus.ACTIVE as any,
             emailStatus: DailyPassEmailStatus.PENDING as any,
@@ -461,7 +494,7 @@ export class EmployeeDailyPassTestService {
       const passType = isFamily
         ? (relation && relation.toLowerCase() !== 'family member' ? `Family Member Pass (${relation})` : 'Family Member Pass')
         : 'ONGC Employee Pass';
-      const dayTheme = getEventDayTheme(dto.eventDate);
+      const dayTheme = getEventDayTheme(targetDate);
 
       const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
         eventDate: pass.eventDate,
@@ -490,6 +523,7 @@ export class EmployeeDailyPassTestService {
         passType,
         ticketNumber: attendee.ticketNumber,
         eventDate: pass.eventDate,
+        bookingDays: resolveBookingDays(attendee),
         status: pass.status,
         emailStatus: pass.emailStatus,
         dayTheme,

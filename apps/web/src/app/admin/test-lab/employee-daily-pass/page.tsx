@@ -18,19 +18,22 @@ import {
   Trash2,
   Eye,
   Calendar,
-  Clock,
   RotateCcw,
   Sparkles,
   Printer,
   Zap,
   Check,
+  Send,
+  FileText,
+  Clock,
+  ShieldCheck,
+  Copy,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser } from '@/lib/auth-session';
 import {
   OFFICIAL_EVENT_DATES,
   getEventDayTheme,
-  DEFAULT_DISPATCH_SCHEDULE,
   DailyEmployeePassPresentation,
 } from '@/types/shared-types';
 import DailyEmployeeTicketCard from '@/components/pass/DailyEmployeeTicketCard';
@@ -72,57 +75,32 @@ interface TestPassData {
   passType: string;
   ticketNumber: string;
   eventDate: string;
+  bookingDays?: string[];
   status: string;
   emailStatus: string;
   dayTheme: any;
   presentation?: DailyEmployeePassPresentation;
-  simulatedDispatchTime?: string | null;
-  simulatedEventTime?: string | null;
-  realCreatedAt?: string;
-  realEmailSentAt?: string | null;
   createdAt: string;
 }
 
-export default function EmployeeDailyPassTestLabPage() {
+interface GateOption {
+  id: string;
+  name: string;
+  isOpen: boolean;
+}
+
+interface DeliveryRecord {
+  passToken: string;
+  attendeeName: string;
+  recipientEmail: string;
+  status: 'QUEUED' | 'SENDING' | 'ACCEPTED' | 'DELIVERED' | 'FAILED' | 'BOUNCED';
+  error?: string;
+  updatedAt?: string;
+}
+
+export default function EmployeeQrTestLabPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
-
-  // TOP CONTROL: SELECTED EVENT DATE & PRODUCTION DISPATCH SCHEDULE
-  const [testDate, setTestDate] = useState<string>(OFFICIAL_EVENT_DATES[0]);
-  const [testEmailRecipient, setTestEmailRecipient] = useState<string>('');
-  const [dispatchSchedule, setDispatchSchedule] = useState<Record<string, string>>(DEFAULT_DISPATCH_SCHEDULE);
-
-  // Time arithmetic helpers
-  function addMinutes(timeStr: string, mins: number): string {
-    const [h, m] = (timeStr || '15:40').split(':').map((v) => parseInt(v, 10) || 0);
-    const total = ((h * 60 + m + mins) % 1440 + 1440) % 1440;
-    const resH = Math.floor(total / 60);
-    const resM = total % 60;
-    return `${String(resH).padStart(2, '0')}:${String(resM).padStart(2, '0')}`;
-  }
-
-  function subtractMinutes(timeStr: string, mins: number): string {
-    return addMinutes(timeStr, -mins);
-  }
-
-  // Production schedule is the single source of truth for dispatch time
-  const configuredDispatchTime = dispatchSchedule[testDate] || DEFAULT_DISPATCH_SCHEDULE[testDate] || '17:00';
-  const selectedTheme = getEventDayTheme(testDate);
-
-  // 10-Minute Simulation State
-  const [simulationStartTime, setSimulationStartTime] = useState<string>(() =>
-    subtractMinutes(DEFAULT_DISPATCH_SCHEDULE[OFFICIAL_EVENT_DATES[0]] || '18:00', 5),
-  );
-  const [simulatedCurrentTime, setSimulatedCurrentTime] = useState<string>(simulationStartTime);
-  const [simulationMinuteStep, setSimulationMinuteStep] = useState<number>(0);
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
-  const [isSimulationPaused, setIsSimulationPaused] = useState<boolean>(false);
-  const [simulationPhase, setSimulationPhase] = useState<'IDLE' | 'WAITING' | 'DISPATCH_SATISFIED' | 'COMPLETED'>('IDLE');
-  const [hasDispatched, setHasDispatched] = useState<boolean>(false);
-  const [simulationSpeedMs, setSimulationSpeedMs] = useState<number>(1000); // 1s per simulated minute
-  const [autoResetOnComplete, setAutoResetOnComplete] = useState<boolean>(true);
-
-  const simulationEndTime = useMemo(() => addMinutes(simulationStartTime, 10), [simulationStartTime]);
 
   // STEP 1: Search & Approved Employees Selection
   const [searchQuery, setSearchQuery] = useState('');
@@ -130,42 +108,42 @@ export default function EmployeeDailyPassTestLabPage() {
   const [employeeResults, setEmployeeResults] = useState<EmployeeOption[]>([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
 
-  // STEP 2 & 3: Generation & Simulation State
-  const [simulating, setSimulating] = useState(false);
+  // STEP 2: Permanent QR Generation State
+  const [generating, setGenerating] = useState(false);
   const [generatedPasses, setGeneratedPasses] = useState<TestPassData[]>([]);
   const [testSessionId, setTestSessionId] = useState('');
   const [ineligibleAttendees, setIneligibleAttendees] = useState<any[]>([]);
   const [generationSummary, setGenerationSummary] = useState<{
     newlyGenerated: number;
     alreadyExisted: number;
-    emailsSent: number;
     total: number;
   } | null>(null);
-  const [simulationResultBanner, setSimulationResultBanner] = useState<{
-    isDue: boolean;
-    text: string;
-  } | null>(null);
 
-  // Retry single email state
+  // STEP 3: One-Time Email Release Test State
+  const [testEmailRecipient, setTestEmailRecipient] = useState<string>('');
+  const [bulkSending, setBulkSending] = useState(false);
+  const [deliveryRecords, setDeliveryRecords] = useState<Record<string, DeliveryRecord>>({});
   const [retryingPassToken, setRetryingPassToken] = useState<string | null>(null);
 
-  // Active View QR Modal for inspecting any generated pass
+  // Modals & Inspection
   const [viewingPass, setViewingPass] = useState<TestPassData | null>(null);
-
-  // Email Preview Modal & Ref for Auto Scroll Reset
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string>('');
   const [previewSubject, setPreviewSubject] = useState<string>('');
   const previewScrollRef = useRef<HTMLDivElement>(null);
 
-  // Turnstile Scanner Test State
+  // STEP 4: Scanner Validation Test State
   const [scanning, setScanning] = useState(false);
   const [selectedPassForScan, setSelectedPassForScan] = useState<string>('');
+  const [testScanDate, setTestScanDate] = useState<string>(OFFICIAL_EVENT_DATES[0]);
+  const [selectedGateId, setSelectedGateId] = useState<string>('1');
+  const [gatesList, setGatesList] = useState<GateOption[]>([
+    { id: '1', name: 'Main Gate 1', isOpen: true },
+    { id: '2', name: 'Gate 2 (Turnstile)', isOpen: true },
+    { id: '3', name: 'VIP & Staff Gate', isOpen: true },
+  ]);
   const [scannerResult, setScannerResult] = useState<any>(null);
-  const [wrongDateTarget, setWrongDateTarget] = useState<string>(
-    OFFICIAL_EVENT_DATES[1] || '2026-10-12',
-  );
 
   // Cleanup State
   const [cleaningUp, setCleaningUp] = useState(false);
@@ -174,10 +152,11 @@ export default function EmployeeDailyPassTestLabPage() {
 
   // Global Alert Message
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  // 1. Authorization Guard, Initial Employee Load & Production Schedule Sync
+  // 1. Initial Load & Auth Guard
   useEffect(() => {
     const user = getStoredAuthUser();
     setCurrentUser(user);
@@ -189,22 +168,34 @@ export default function EmployeeDailyPassTestLabPage() {
 
     if (user?.role === 'SUPER_ADMIN') {
       loadInitialEmployees();
-      fetchApi<Record<string, string>>('/admin/test-lab/employee-daily-pass/dispatch-schedule')
-        .then((sched) => {
-          if (sched && typeof sched === 'object') {
-            setDispatchSchedule(sched);
-          }
-        })
-        .catch(() => {});
+      loadGates();
     }
   }, []);
 
-  // Reset email preview scroll position to top whenever modal opens
+  // Reset preview modal scroll on open
   useEffect(() => {
     if (previewModalOpen && previewScrollRef.current) {
       previewScrollRef.current.scrollTop = 0;
     }
   }, [previewModalOpen, previewHtml]);
+
+  async function loadGates() {
+    try {
+      const gates = await fetchApi<any[]>('/admin/gates');
+      if (Array.isArray(gates) && gates.length > 0) {
+        setGatesList(
+          gates.map((g) => ({
+            id: String(g.id),
+            name: g.name || `Gate ${g.id}`,
+            isOpen: g.isOpen ?? true,
+          })),
+        );
+        setSelectedGateId(String(gates[0].id));
+      }
+    } catch {
+      // Fallback defaults preserved
+    }
+  }
 
   async function loadInitialEmployees() {
     try {
@@ -213,7 +204,6 @@ export default function EmployeeDailyPassTestLabPage() {
         '/admin/test-lab/employee-daily-pass/employees',
       );
       setEmployeeResults(data || []);
-      // Default: select first employee
       if (data && data.length > 0 && selectedEmployeeIds.length === 0) {
         setSelectedEmployeeIds([data[0].id]);
       }
@@ -249,62 +239,9 @@ export default function EmployeeDailyPassTestLabPage() {
 
   const totalPeopleCount = useMemo(() => {
     return selectedEmployees.reduce((acc, emp) => {
-      // 1 primary employee + all family members
       return acc + 1 + (emp.familyMembers?.length || 0);
     }, 0);
   }, [selectedEmployees]);
-
-  // People eligibility breakdown for the selected test date
-  const peopleForSelectedDate = useMemo(() => {
-    const list: Array<{
-      id: string;
-      name: string;
-      role: string;
-      isFamily: boolean;
-      employeeName: string;
-      employeeCpf: string;
-      isEligible: boolean;
-      selectedDates: string[];
-    }> = [];
-
-    for (const emp of selectedEmployees) {
-      // Primary employee
-      list.push({
-        id: emp.attendeeId || `emp-${emp.id}`,
-        name: emp.name,
-        role: 'Employee',
-        isFamily: false,
-        employeeName: emp.name,
-        employeeCpf: emp.cpf,
-        isEligible: (emp.bookingDays || []).includes(testDate),
-        selectedDates: emp.bookingDays || [],
-      });
-
-      // Family members
-      for (const fm of emp.familyMembers || []) {
-        list.push({
-          id: fm.attendeeId || `fm-${fm.id}`,
-          name: fm.name,
-          role: fm.relation || 'Family Member',
-          isFamily: true,
-          employeeName: emp.name,
-          employeeCpf: emp.cpf,
-          isEligible: (fm.bookingDays || []).includes(testDate),
-          selectedDates: fm.bookingDays || [],
-        });
-      }
-    }
-
-    return list;
-  }, [selectedEmployees, testDate]);
-
-  const eligiblePeople = useMemo(() => {
-    return peopleForSelectedDate.filter((p) => p.isEligible);
-  }, [peopleForSelectedDate]);
-
-  const ineligiblePeople = useMemo(() => {
-    return peopleForSelectedDate.filter((p) => !p.isEligible);
-  }, [peopleForSelectedDate]);
 
   const allVisibleSelected =
     employeeResults.length > 0 &&
@@ -324,303 +261,102 @@ export default function EmployeeDailyPassTestLabPage() {
     );
   }
 
-  // Timeline points for the 10-minute window (0 to 10 minutes)
-  const timelinePoints = useMemo(() => {
-    const [startH, startM] = simulationStartTime.split(':').map((v) => parseInt(v, 10) || 0);
-    const [dispH, dispM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
-    const startMins = startH * 60 + startM;
-    const dispMins = dispH * 60 + dispM;
-
-    const points: Array<{ minute: number; time: string; isDue: boolean }> = [];
-    for (let m = 0; m <= 10; m++) {
-      const stepMins = startMins + m;
-      points.push({
-        minute: m,
-        time: addMinutes(simulationStartTime, m),
-        isDue: stepMins >= dispMins,
-      });
+  // Active pass selected for Step 4 scanning
+  const activePassForScan = useMemo(() => {
+    if (!selectedPassForScan && generatedPasses.length > 0) {
+      return generatedPasses[0];
     }
-    return points;
-  }, [simulationStartTime, configuredDispatchTime]);
+    return generatedPasses.find((p) => p.qrToken === selectedPassForScan) || null;
+  }, [generatedPasses, selectedPassForScan]);
 
-  const [currH, currM] = (simulatedCurrentTime || '15:40').split(':').map((v) => parseInt(v, 10) || 0);
-  const [cfgH, cfgM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
-  const isDueLive = currH * 60 + currM >= cfgH * 60 + cfgM;
+  // Copy token helper
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text);
+    setCopiedToken(text);
+    setTimeout(() => setCopiedToken(null), 2000);
+  }
 
-  // Auto-synchronize default simulation start time (5 mins before dispatch) when date or schedule changes
-  useEffect(() => {
-    if (!isSimulating && simulationPhase === 'IDLE') {
-      const defStart = subtractMinutes(configuredDispatchTime, 5);
-      setSimulationStartTime(defStart);
-      setSimulatedCurrentTime(defStart);
-    }
-  }, [configuredDispatchTime, isSimulating, simulationPhase]);
-
-  // Automatic 10-Minute Simulation Window Engine
-  useEffect(() => {
-    if (!isSimulating || isSimulationPaused) return;
-
-    const timer = setTimeout(async () => {
-      const nextStep = simulationMinuteStep + 1;
-
-      if (nextStep > 10) {
-        setIsSimulating(false);
-        setSimulationPhase('COMPLETED');
-
-        if (autoResetOnComplete && testSessionId) {
-          try {
-            await fetchApi<any>('/admin/test-lab/employee-daily-pass/cleanup-session', {
-              method: 'POST',
-              body: JSON.stringify({ testSessionId }),
-            });
-            setGeneratedPasses([]);
-            setScannerResult(null);
-            setCleanupMessage(
-              `TEST SESSION COMPLETE: 10-minute simulation window (${simulationStartTime} → ${simulationEndTime}) finished. Test data for session ${testSessionId} reset successfully. Real production data remains untouched.`,
-            );
-          } catch (err: any) {
-            setAlert({ type: 'error', message: err.message || 'Auto-cleanup failed' });
-          }
-        }
-        return;
-      }
-
-      const nextTime = addMinutes(simulationStartTime, nextStep);
-      setSimulationMinuteStep(nextStep);
-      setSimulatedCurrentTime(nextTime);
-
-      const [nextH, nextM] = nextTime.split(':').map((v) => parseInt(v, 10) || 0);
-      const [dispH, dispM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
-      const isDue = nextH * 60 + nextM >= dispH * 60 + dispM;
-
-      if (isDue && !hasDispatched) {
-        setHasDispatched(true);
-        setSimulationPhase('DISPATCH_SATISFIED');
-
-        try {
-          const result = await fetchApi<any>(
-            '/admin/test-lab/employee-daily-pass/simulate-delivery',
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                employeeIds: selectedEmployeeIds,
-                simulatedDate: testDate,
-                simulatedTime: nextTime,
-                configuredDispatchTime,
-                testRecipientEmail: testEmailRecipient.trim() || undefined,
-                testSessionId,
-              }),
-            },
-          );
-
-          const passesList: TestPassData[] = result.passes || [result];
-          setGeneratedPasses(passesList);
-          setIneligibleAttendees(result.ineligible || []);
-          setGenerationSummary({
-            newlyGenerated: result.newlyGeneratedCount ?? passesList.length,
-            alreadyExisted: result.existingCount ?? 0,
-            emailsSent: result.emailsSentCount ?? 0,
-            total: passesList.length,
-          });
-
-          if (passesList.length > 0) {
-            setSelectedPassForScan(passesList[0].qrToken);
-          }
-        } catch (err: any) {
-          setAlert({ type: 'error', message: err.message || 'Dispatch evaluation failed' });
-        }
-      } else if (!isDue) {
-        setSimulationPhase('WAITING');
-      }
-    }, simulationSpeedMs);
-
-    return () => clearTimeout(timer);
-  }, [
-    isSimulating,
-    isSimulationPaused,
-    simulationMinuteStep,
-    simulationStartTime,
-    simulationEndTime,
-    configuredDispatchTime,
-    hasDispatched,
-    autoResetOnComplete,
-    simulationSpeedMs,
-    selectedEmployeeIds,
-    testDate,
-    testEmailRecipient,
-    testSessionId,
-  ]);
-
-  // 2. Primary Simulation Actions
-  async function handleStartSimulation() {
+  // ================= STEP 2: GENERATE PERMANENT TEST QR =================
+  async function handleGeneratePermanentQr() {
     if (selectedEmployeeIds.length === 0) {
       setAlert({ type: 'error', message: 'Please select at least one employee from the roster.' });
-      return;
-    }
-
-    if (eligiblePeople.length === 0) {
-      setAlert({
-        type: 'error',
-        message: `None of the selected people registered for ${selectedTheme.fullDateLabel}. Please select a different event date or employee.`,
-      });
-      return;
-    }
-
-    const newSessionId = `EMP-SIM-${Date.now().toString(36).toUpperCase()}`;
-    setTestSessionId(newSessionId);
-    setGeneratedPasses([]);
-    setIneligibleAttendees([]);
-    setGenerationSummary(null);
-    setSimulationResultBanner(null);
-    setScannerResult(null);
-    setAlert(null);
-    setCleanupMessage(null);
-
-    setSimulationMinuteStep(0);
-    setSimulatedCurrentTime(simulationStartTime);
-    setIsSimulating(true);
-    setIsSimulationPaused(false);
-
-    // Check if start time itself satisfies dispatch condition (e.g. start at or after dispatch)
-    const [startH, startM] = simulationStartTime.split(':').map((v) => parseInt(v, 10) || 0);
-    const [dispH, dispM] = configuredDispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
-    const dueAtStart = startH * 60 + startM >= dispH * 60 + dispM;
-
-    if (dueAtStart) {
-      setHasDispatched(true);
-      setSimulationPhase('DISPATCH_SATISFIED');
-      try {
-        const result = await fetchApi<any>(
-          '/admin/test-lab/employee-daily-pass/simulate-delivery',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              employeeIds: selectedEmployeeIds,
-              simulatedDate: testDate,
-              simulatedTime: simulationStartTime,
-              configuredDispatchTime,
-              testRecipientEmail: testEmailRecipient.trim() || undefined,
-              testSessionId: newSessionId,
-            }),
-          },
-        );
-        const passesList: TestPassData[] = result.passes || [result];
-        setGeneratedPasses(passesList);
-        setIneligibleAttendees(result.ineligible || []);
-        setGenerationSummary({
-          newlyGenerated: result.newlyGeneratedCount ?? passesList.length,
-          alreadyExisted: result.existingCount ?? 0,
-          emailsSent: result.emailsSentCount ?? 0,
-          total: passesList.length,
-        });
-        if (passesList.length > 0) {
-          setSelectedPassForScan(passesList[0].qrToken);
-        }
-      } catch (err: any) {
-        setAlert({ type: 'error', message: err.message || 'Dispatch evaluation failed' });
-      }
-    } else {
-      setHasDispatched(false);
-      setSimulationPhase('WAITING');
-    }
-  }
-
-  function handleTogglePause() {
-    setIsSimulationPaused((prev) => !prev);
-  }
-
-  async function handleResetSimulation() {
-    setIsSimulating(false);
-    setIsSimulationPaused(false);
-    setSimulationPhase('IDLE');
-    setSimulationMinuteStep(0);
-    setSimulatedCurrentTime(simulationStartTime);
-    setHasDispatched(false);
-
-    if (testSessionId) {
-      try {
-        setCleaningUp(true);
-        await fetchApi<any>('/admin/test-lab/employee-daily-pass/cleanup-session', {
-          method: 'POST',
-          body: JSON.stringify({ testSessionId }),
-        });
-        setGeneratedPasses([]);
-        setGenerationSummary(null);
-        setScannerResult(null);
-        setCleanupMessage(`Simulation reset. Test session ${testSessionId} cleaned up.`);
-      } catch (err: any) {
-        setAlert({ type: 'error', message: err.message || 'Failed to cleanup session' });
-      } finally {
-        setCleaningUp(false);
-      }
-    }
-  }
-
-  async function handleRunInstantWindow() {
-    if (selectedEmployeeIds.length === 0) {
-      setAlert({ type: 'error', message: 'Please select at least one employee from the roster.' });
-      return;
-    }
-    if (eligiblePeople.length === 0) {
-      setAlert({
-        type: 'error',
-        message: `None of the selected people registered for ${selectedTheme.fullDateLabel}.`,
-      });
       return;
     }
 
     try {
-      setSimulating(true);
+      setGenerating(true);
       setAlert(null);
-      const newSessionId = `EMP-WIN-${Date.now().toString(36).toUpperCase()}`;
+      const newSessionId = `EMP-PERM-${Date.now().toString(36).toUpperCase()}`;
       setTestSessionId(newSessionId);
 
-      const res = await fetchApi<any>(
-        '/admin/test-lab/employee-daily-pass/simulate-window',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            employeeIds: selectedEmployeeIds,
-            simulatedDate: testDate,
-            simulatedStartTime: simulationStartTime,
-            testRecipientEmail: testEmailRecipient.trim() || undefined,
-            testSessionId: newSessionId,
-            autoCleanup: false,
-          }),
-        },
-      );
-
-      setGeneratedPasses(res.passes || []);
-      setSimulatedCurrentTime(res.dispatchSatisfiedTime || res.simulatedEndTime);
-      setSimulationPhase(res.isDue ? 'DISPATCH_SATISFIED' : 'WAITING');
-      setHasDispatched(res.isDue);
-      setGenerationSummary({
-        newlyGenerated: res.passes?.length || 0,
-        alreadyExisted: 0,
-        emailsSent: res.emailsSentCount || 0,
-        total: res.passes?.length || 0,
+      const result = await fetchApi<any>('/admin/test-lab/employee-daily-pass/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          employeeIds: selectedEmployeeIds,
+          testSessionId: newSessionId,
+        }),
       });
-      if (res.passes && res.passes.length > 0) {
-        setSelectedPassForScan(res.passes[0].qrToken);
+
+      const passesList: TestPassData[] = result.passes || [result];
+      setGeneratedPasses(passesList);
+      setIneligibleAttendees(result.ineligible || []);
+      setGenerationSummary({
+        newlyGenerated: result.newlyGeneratedCount ?? passesList.length,
+        alreadyExisted: result.existingCount ?? 0,
+        total: passesList.length,
+      });
+
+      // Initialize delivery records for these passes
+      const initialDeliveries: Record<string, DeliveryRecord> = {};
+      for (const pass of passesList) {
+        initialDeliveries[pass.qrToken] = {
+          passToken: pass.qrToken,
+          attendeeName: pass.attendeeName,
+          recipientEmail: testEmailRecipient.trim() || 'Safe Test Recipient',
+          status: pass.emailStatus === 'SENT' ? 'ACCEPTED' : 'QUEUED',
+        };
       }
-      setAlert({ type: 'success', message: res.message });
+      setDeliveryRecords(initialDeliveries);
+
+      if (passesList.length > 0) {
+        setSelectedPassForScan(passesList[0].qrToken);
+      }
+
+      setAlert({
+        type: 'success',
+        message: `Successfully generated ${passesList.length} permanent test QR passes (${result.newlyGeneratedCount || 0} created, ${result.existingCount || 0} reused). Each pass is permanent across all 9 nights.`,
+      });
     } catch (err: any) {
-      setAlert({ type: 'error', message: err.message || 'Window simulation failed' });
+      setAlert({ type: 'error', message: err.message || 'Permanent QR generation failed' });
     } finally {
-      setSimulating(false);
+      setGenerating(false);
     }
   }
 
-  // 3. Retry Individual Email
-  async function handleRetryEmail(token: string) {
+  // ================= STEP 3: ONE-TIME EMAIL RELEASE TEST =================
+  async function handleSendSingleTestEmail(token: string) {
     if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
-      setAlert({ type: 'error', message: 'A valid safe test recipient email is required to retry delivery.' });
+      setAlert({ type: 'error', message: 'A valid safe test recipient email is required.' });
       return;
     }
+
+    const pass = generatedPasses.find((p) => p.qrToken === token);
+    if (!pass) return;
 
     try {
       setRetryingPassToken(token);
-      const res = await fetchApi<any>('/admin/test-lab/employee-daily-pass/retry-test-email', {
+      setDeliveryRecords((prev) => ({
+        ...prev,
+        [token]: {
+          passToken: token,
+          attendeeName: pass.attendeeName,
+          recipientEmail: testEmailRecipient.trim(),
+          status: 'SENDING',
+          updatedAt: new Date().toLocaleTimeString(),
+        },
+      }));
+
+      const res = await fetchApi<any>('/admin/test-lab/employee-daily-pass/send-test-email', {
         method: 'POST',
         body: JSON.stringify({
           token,
@@ -629,30 +365,179 @@ export default function EmployeeDailyPassTestLabPage() {
       });
 
       if (res.success) {
+        setDeliveryRecords((prev) => ({
+          ...prev,
+          [token]: {
+            passToken: token,
+            attendeeName: pass.attendeeName,
+            recipientEmail: testEmailRecipient.trim(),
+            status: 'ACCEPTED',
+            updatedAt: new Date().toLocaleTimeString(),
+          },
+        }));
         setGeneratedPasses((prev) =>
           prev.map((p) => (p.qrToken === token ? { ...p, emailStatus: 'SENT' } : p)),
         );
         setAlert({
           type: 'success',
-          message: `Test email dispatched successfully to ${res.sentTo}`,
+          message: `Test email dispatched to safe recipient: ${testEmailRecipient.trim()}`,
         });
       } else {
+        setDeliveryRecords((prev) => ({
+          ...prev,
+          [token]: {
+            passToken: token,
+            attendeeName: pass.attendeeName,
+            recipientEmail: testEmailRecipient.trim(),
+            status: 'FAILED',
+            error: res.error || 'Provider rejected test email',
+            updatedAt: new Date().toLocaleTimeString(),
+          },
+        }));
         setGeneratedPasses((prev) =>
           prev.map((p) => (p.qrToken === token ? { ...p, emailStatus: 'FAILED' } : p)),
         );
-        setAlert({
-          type: 'error',
-          message: `Retry delivery failed: ${res.error}`,
-        });
+        setAlert({ type: 'error', message: `Test email delivery failed: ${res.error}` });
       }
     } catch (err: any) {
-      setAlert({ type: 'error', message: err.message || 'Failed to retry email delivery' });
+      setDeliveryRecords((prev) => ({
+        ...prev,
+        [token]: {
+          passToken: token,
+          attendeeName: pass.attendeeName,
+          recipientEmail: testEmailRecipient.trim(),
+          status: 'FAILED',
+          error: err.message || 'Delivery request failed',
+          updatedAt: new Date().toLocaleTimeString(),
+        },
+      }));
+      setAlert({ type: 'error', message: err.message || 'Failed to send test email' });
     } finally {
       setRetryingPassToken(null);
     }
   }
 
-  // 4. Email Preview Modal
+  async function handleBulkTestEmailRelease() {
+    if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
+      setAlert({ type: 'error', message: 'A valid safe test recipient email is required.' });
+      return;
+    }
+
+    if (generatedPasses.length === 0) {
+      setAlert({ type: 'error', message: 'Generate test passes first in Step 2 before testing release.' });
+      return;
+    }
+
+    try {
+      setBulkSending(true);
+      setAlert(null);
+
+      // Set all to SENDING
+      setDeliveryRecords((prev) => {
+        const next = { ...prev };
+        for (const pass of generatedPasses) {
+          next[pass.qrToken] = {
+            passToken: pass.qrToken,
+            attendeeName: pass.attendeeName,
+            recipientEmail: testEmailRecipient.trim(),
+            status: 'SENDING',
+            updatedAt: new Date().toLocaleTimeString(),
+          };
+        }
+        return next;
+      });
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const pass of generatedPasses) {
+        try {
+          const res = await fetchApi<any>('/admin/test-lab/employee-daily-pass/send-test-email', {
+            method: 'POST',
+            body: JSON.stringify({
+              token: pass.qrToken,
+              recipientEmail: testEmailRecipient.trim(),
+            }),
+          });
+
+          if (res.success) {
+            successCount++;
+            setDeliveryRecords((prev) => ({
+              ...prev,
+              [pass.qrToken]: {
+                passToken: pass.qrToken,
+                attendeeName: pass.attendeeName,
+                recipientEmail: testEmailRecipient.trim(),
+                status: 'ACCEPTED',
+                updatedAt: new Date().toLocaleTimeString(),
+              },
+            }));
+            setGeneratedPasses((prev) =>
+              prev.map((p) => (p.qrToken === pass.qrToken ? { ...p, emailStatus: 'SENT' } : p)),
+            );
+          } else {
+            failCount++;
+            setDeliveryRecords((prev) => ({
+              ...prev,
+              [pass.qrToken]: {
+                passToken: pass.qrToken,
+                attendeeName: pass.attendeeName,
+                recipientEmail: testEmailRecipient.trim(),
+                status: 'FAILED',
+                error: res.error || 'Failed',
+                updatedAt: new Date().toLocaleTimeString(),
+              },
+            }));
+          }
+        } catch (subErr: any) {
+          failCount++;
+          setDeliveryRecords((prev) => ({
+            ...prev,
+            [pass.qrToken]: {
+              passToken: pass.qrToken,
+              attendeeName: pass.attendeeName,
+              recipientEmail: testEmailRecipient.trim(),
+              status: 'FAILED',
+              error: subErr.message || 'Request failed',
+              updatedAt: new Date().toLocaleTimeString(),
+            },
+          }));
+        }
+      }
+
+      setAlert({
+        type: failCount === 0 ? 'success' : 'error',
+        message: `Bulk email release test finished: ${successCount} accepted by provider, ${failCount} failed. All emails directed safely to ${testEmailRecipient.trim()}.`,
+      });
+    } catch (err: any) {
+      setAlert({ type: 'error', message: err.message || 'Bulk release test encountered an error' });
+    } finally {
+      setBulkSending(false);
+    }
+  }
+
+  // Delivery metrics derived from records
+  const deliveryMetrics = useMemo(() => {
+    let queued = 0;
+    let sending = 0;
+    let accepted = 0;
+    let delivered = 0;
+    let failed = 0;
+    let bounced = 0;
+
+    Object.values(deliveryRecords).forEach((rec) => {
+      if (rec.status === 'QUEUED') queued++;
+      else if (rec.status === 'SENDING') sending++;
+      else if (rec.status === 'ACCEPTED') accepted++;
+      else if (rec.status === 'DELIVERED') delivered++;
+      else if (rec.status === 'FAILED') failed++;
+      else if (rec.status === 'BOUNCED') bounced++;
+    });
+
+    return { queued, sending, accepted, delivered, failed, bounced };
+  }, [deliveryRecords]);
+
+  // Email Preview Modal
   async function handleOpenEmailPreview(token: string) {
     try {
       setPreviewLoading(true);
@@ -670,10 +555,10 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
-  // 5. Turnstile Scanner Validation Test
+  // ================= STEP 4: SCANNER VALIDATION TEST =================
   async function handleScan(simulatedDate?: string) {
     if (!selectedPassForScan) {
-      setAlert({ type: 'error', message: 'Please select a pass to scan.' });
+      setAlert({ type: 'error', message: 'Please select a pass to test scan.' });
       return;
     }
 
@@ -681,14 +566,14 @@ export default function EmployeeDailyPassTestLabPage() {
       setScanning(true);
       setScannerResult(null);
 
-      const currentPass = generatedPasses.find((p) => p.qrToken === selectedPassForScan);
-      const dateToScan = simulatedDate || currentPass?.eventDate || testDate;
+      const targetDate = simulatedDate || testScanDate;
 
       const res = await fetchApi<any>('/admin/test-lab/employee-daily-pass/scanner/scan', {
         method: 'POST',
         body: JSON.stringify({
           token: selectedPassForScan,
-          scanDate: dateToScan,
+          scanDate: targetDate,
+          gateId: Number(selectedGateId) || 1,
         }),
       });
 
@@ -714,6 +599,17 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
+  // Scan on Wrong Date: Pick a date NOT in attendee's bookingDays
+  function handleScanOnWrongDate() {
+    if (!activePassForScan) return;
+
+    const booked = activePassForScan.bookingDays || [activePassForScan.eventDate];
+    const unbookedDate = OFFICIAL_EVENT_DATES.find((d) => !booked.includes(d));
+
+    const dateToTest = unbookedDate || '2026-10-20';
+    handleScan(dateToTest);
+  }
+
   async function handleRevokePass() {
     if (!selectedPassForScan) {
       setAlert({ type: 'error', message: 'Please select a pass to revoke.' });
@@ -735,7 +631,7 @@ export default function EmployeeDailyPassTestLabPage() {
       setScannerResult(null);
       setAlert({
         type: 'success',
-        message: 'Pass revoked. Future scans will be rejected as ATTENDEE_INACTIVE.',
+        message: 'Pass revoked. Turnstile scans will now return ATTENDEE_INACTIVE.',
       });
     } catch (err: any) {
       setAlert({ type: 'error', message: err.message || 'Failed to revoke test pass' });
@@ -774,7 +670,7 @@ export default function EmployeeDailyPassTestLabPage() {
     }
   }
 
-  // 6. Cleanup Actions
+  // ================= CLEANUP ACTIONS =================
   async function handleCleanupSession() {
     if (!testSessionId) {
       setAlert({ type: 'error', message: 'No active test session to cleanup.' });
@@ -794,9 +690,9 @@ export default function EmployeeDailyPassTestLabPage() {
       setGeneratedPasses([]);
       setGenerationSummary(null);
       setScannerResult(null);
-      setSimulationResultBanner(null);
+      setDeliveryRecords({});
       setCleanupMessage(
-        `Session ${res.sessionId} purged: ${res.deletedPassesCount} passes, ${res.deletedCheckinsCount} checkins removed.`,
+        `Session ${res.sessionId} purged: ${res.deletedPassesCount} test passes and ${res.deletedCheckinsCount} test check-ins deleted.`,
       );
     } catch (err: any) {
       setAlert({ type: 'error', message: err.message || 'Cleanup failed' });
@@ -816,7 +712,7 @@ export default function EmployeeDailyPassTestLabPage() {
       setGeneratedPasses([]);
       setGenerationSummary(null);
       setScannerResult(null);
-      setSimulationResultBanner(null);
+      setDeliveryRecords({});
       setConfirmPurgeAll(false);
       setCleanupMessage(
         `All Test Lab Data Purged: ${res.deletedPassesCount} test passes, ${res.deletedCheckinsCount} test checkins. Operational data remains intact.`,
@@ -844,7 +740,7 @@ export default function EmployeeDailyPassTestLabPage() {
         </div>
         <h1 className="text-xl font-bold font-cinzel text-maroon">Super Admin Restricted Area</h1>
         <p className="text-xs text-ink-soft leading-relaxed">
-          The Employee Daily Pass Test Lab is exclusively restricted to <strong>SUPER_ADMIN</strong>.
+          The Employee QR Test Lab is exclusively restricted to <strong>SUPER_ADMIN</strong>.
           Your current role does not have authorization to access this feature.
         </p>
         <Link
@@ -865,7 +761,7 @@ export default function EmployeeDailyPassTestLabPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold font-cinzel text-maroon flex items-center gap-2">
               <FlaskConical className="w-5 h-5 text-maroon" />
-              Employee Daily Pass Test Lab
+              Employee QR Test Lab
             </h1>
             <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider animate-pulse flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
@@ -873,7 +769,7 @@ export default function EmployeeDailyPassTestLabPage() {
             </span>
           </div>
           <p className="text-[11px] sm:text-xs text-ink-soft mt-0.5">
-            Simulate real QR delivery, multi-employee date eligibility, safe test emailing, and gate scanning with zero impact on operational data.
+            Test permanent employee QR generation, one-time email release, delivery status, and daily entry authorization without affecting operational data.
           </p>
         </div>
 
@@ -948,309 +844,27 @@ export default function EmployeeDailyPassTestLabPage() {
 
       {/* Scrollable Container */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
-        {/* ================= SIMULATION CONTROLS & PRODUCTION DISPATCH (TOP) ================= */}
-        <div className="bg-stone-900 text-white rounded-2xl p-4 border border-gold/40 shadow-sm space-y-3">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 border-b border-stone-800 pb-2.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Clock className="w-4 h-4 text-gold shrink-0" />
-              <span className="text-xs font-bold uppercase tracking-wider text-gold-light font-cinzel">
-                SIMULATION CONTROLS & PRODUCTION DISPATCH
+        {/* ================= STEP 1: PERMANENT QR TEST SETUP ================= */}
+        <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
+                1
               </span>
-              <span
-                className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                  simulationPhase === 'DISPATCH_SATISFIED'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : simulationPhase === 'WAITING'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : simulationPhase === 'COMPLETED'
-                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                    : 'bg-stone-700 text-stone-300 border border-stone-600'
-                }`}
-              >
-                {simulationPhase === 'DISPATCH_SATISFIED'
-                  ? '✓ QR Delivery Condition Satisfied'
-                  : simulationPhase === 'WAITING'
-                  ? 'Waiting for Dispatch'
-                  : simulationPhase === 'COMPLETED'
-                  ? '✓ Test Session Complete'
-                  : 'Ready to Simulate'}
-              </span>
-            </div>
-            <div className="text-[11px] text-stone-300 flex items-center gap-2 flex-wrap">
-              <span>
-                Simulated Clock: <strong className="text-white font-mono">{selectedTheme.fullDateLabel}, {simulatedCurrentTime}</strong>
-              </span>
-              <span className="text-stone-600 hidden sm:inline">&bull;</span>
-              <span className="text-stone-400 text-[10px] italic">
-                Test mode only — does not change server time.
-              </span>
-            </div>
+              Permanent QR Test Setup (Select Employees)
+            </span>
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="text-xs font-bold text-maroon hover:underline cursor-pointer"
+            >
+              {allVisibleSelected ? 'Deselect All' : 'Select All'}
+            </button>
           </div>
 
-          {/* 4 Compact Inputs / Status Blocks */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* 1. Official Event Date Selector */}
-            <div>
-              <label className="text-[10px] font-bold uppercase text-stone-400 block mb-1">
-                Official Event Date
-              </label>
-              <select
-                value={testDate}
-                disabled={isSimulating}
-                onChange={(e) => setTestDate(e.target.value)}
-                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold font-medium cursor-pointer disabled:opacity-60"
-              >
-                {OFFICIAL_EVENT_DATES.map((dateStr) => {
-                  const th = getEventDayTheme(dateStr);
-                  return (
-                    <option key={dateStr} value={dateStr}>
-                      {dateStr} — Night {th.dayNumber} ({th.themeTitle})
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            {/* 2. Simulation Start Time (User chooses start point only) */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] font-bold uppercase text-stone-400 block">
-                  Simulation Start Time
-                </label>
-                <span className="text-[9px] text-stone-400 font-mono">
-                  Window: 10 mins
-                </span>
-              </div>
-              <input
-                type="time"
-                value={simulationStartTime}
-                disabled={isSimulating}
-                onChange={(e) => {
-                  setSimulationStartTime(e.target.value);
-                  setSimulatedCurrentTime(e.target.value);
-                }}
-                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold font-mono font-bold disabled:opacity-60"
-              />
-              <span className="text-[9px] text-stone-400 block mt-0.5">
-                Starting point of the simulated clock
-              </span>
-            </div>
-
-            {/* 3. Production Dispatch Time (Read-only single source of truth) */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] font-bold uppercase text-stone-400 block">
-                  Production Dispatch Time
-                </label>
-                <span className="text-[9px] text-emerald-400 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                  Single Source of Truth
-                </span>
-              </div>
-              <div className="w-full p-2 bg-stone-800/90 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 font-mono font-bold flex items-center justify-between">
-                <span>{configuredDispatchTime}</span>
-                <span className="text-[9px] uppercase tracking-wider text-stone-400 font-sans font-semibold">
-                  Read-only
-                </span>
-              </div>
-              <span className="text-[9px] text-stone-400 block mt-0.5 truncate">
-                Source: Production QR Dispatch Schedule
-              </span>
-            </div>
-
-            {/* 4. Safe Test Recipient Email */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] font-bold uppercase text-stone-400 block">
-                  Safe Test Recipient
-                </label>
-                <span className="text-[9px] text-amber-400 font-bold">
-                  Never contacts real employees
-                </span>
-              </div>
-              <input
-                type="email"
-                placeholder="admin@example.com"
-                value={testEmailRecipient}
-                disabled={isSimulating}
-                onChange={(e) => setTestEmailRecipient(e.target.value)}
-                className="w-full p-2 bg-stone-800 border border-stone-700 rounded-xl text-xs text-white focus:outline-none focus:border-gold disabled:opacity-60"
-              />
-              <span className="text-[9px] text-stone-400 block mt-0.5 truncate">
-                Receives actual employee pass email
-              </span>
-            </div>
-          </div>
-
-          {/* Live Status and Timeline Progression Banner */}
-          <div className="bg-stone-950/80 rounded-xl p-3 border border-stone-800 space-y-2">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-bold text-stone-300 uppercase tracking-wider">
-                    SIMULATION: <strong className="text-white font-mono">{simulationStartTime} → {simulationEndTime}</strong>
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-stone-800 text-stone-300 border border-stone-700">
-                    Window: 10 minutes (Minute {simulationMinuteStep}/10)
-                  </span>
-                </div>
-
-                {/* Status Lines matching exact requirement */}
-                {simulationPhase === 'IDLE' && (
-                  <div className="text-xs text-stone-400">
-                    Ready to run 10-minute simulation. Simulation will evaluate production dispatch at <strong className="text-white font-mono">{configuredDispatchTime}</strong>.
-                  </div>
-                )}
-
-                {simulationPhase === 'WAITING' && (
-                  <div className="text-xs space-y-0.5">
-                    <div className="font-bold text-amber-400 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 animate-spin" />
-                      WAITING FOR DISPATCH
-                    </div>
-                    <div className="text-[11px] text-stone-300 font-mono">
-                      Simulation: <strong className="text-white">{simulatedCurrentTime}</strong> &bull; Production dispatch: <strong className="text-amber-300">{configuredDispatchTime}</strong>
-                    </div>
-                  </div>
-                )}
-
-                {simulationPhase === 'DISPATCH_SATISFIED' && (
-                  <div className="text-xs space-y-0.5">
-                    <div className="font-bold text-emerald-400 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      QR DELIVERY CONDITION SATISFIED
-                    </div>
-                    <div className="text-[11px] text-stone-300 font-mono">
-                      Simulation: <strong className="text-white">{simulatedCurrentTime}</strong> &bull; Production dispatch: <strong className="text-emerald-300">{configuredDispatchTime}</strong>
-                    </div>
-                    <div className="text-[10px] text-emerald-300 font-bold">
-                      {generatedPasses.length} eligible pass{generatedPasses.length === 1 ? '' : 'es'} &bull; {generationSummary?.emailsSent ?? 0} test email{generationSummary?.emailsSent === 1 ? '' : 's'} sent
-                    </div>
-                  </div>
-                )}
-
-                {simulationPhase === 'COMPLETED' && (
-                  <div className="text-xs space-y-0.5">
-                    <div className="font-bold text-blue-400 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      TEST SESSION COMPLETE
-                    </div>
-                    <div className="text-[11px] text-stone-400">
-                      Test data reset successfully.
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 flex-wrap shrink-0">
-                {!isSimulating ? (
-                  <button
-                    type="button"
-                    onClick={handleStartSimulation}
-                    disabled={selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Start 10-Minute Simulation</span>
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleTogglePause}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                        isSimulationPaused
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'bg-amber-600 hover:bg-amber-700 text-white'
-                      }`}
-                    >
-                      {isSimulationPaused ? '▶ Resume' : '⏸ Pause'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResetSimulation}
-                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reset & Cleanup</span>
-                    </button>
-                  </>
-                )}
-
-                {/* Instant Quick Run */}
-                {!isSimulating && (
-                  <button
-                    type="button"
-                    onClick={handleRunInstantWindow}
-                    disabled={simulating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
-                    className="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                    title="Evaluate 10-minute window instantly without animation"
-                  >
-                    <span>Instant Run</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* 11-Minute Visual Timeline Progress Track */}
-            <div className="pt-1">
-              <div className="grid grid-cols-11 gap-1">
-                {timelinePoints.map((pt) => {
-                  const isCurrent = isSimulating && pt.minute === simulationMinuteStep;
-                  const isPassed = isSimulating && pt.minute < simulationMinuteStep;
-                  const isDispatchTarget = pt.time === configuredDispatchTime;
-
-                  return (
-                    <div
-                      key={pt.minute}
-                      className={`text-center p-1 rounded-lg border text-[9px] font-mono transition-all ${
-                        isCurrent
-                          ? 'bg-gold/20 border-gold text-gold font-bold ring-2 ring-gold/40'
-                          : isPassed
-                          ? pt.isDue
-                            ? 'bg-emerald-950/40 border-emerald-700 text-emerald-400'
-                            : 'bg-amber-950/40 border-amber-800 text-amber-400'
-                          : pt.isDue
-                          ? 'bg-emerald-950/20 border-emerald-900/60 text-emerald-600'
-                          : 'bg-stone-900 border-stone-800 text-stone-500'
-                      }`}
-                      title={`${pt.time} (Min ${pt.minute}) ${pt.isDue ? '— Dispatch Satisfied' : '— Waiting'}`}
-                    >
-                      <div className="font-bold truncate">{pt.time}</div>
-                      <div className="text-[8px] truncate mt-0.5 opacity-80">
-                        {isDispatchTarget ? '🎯 DISPATCH' : `+${pt.minute}m`}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ================= MAIN WORKFLOW: APPROVED EMPLOYEES & SIMULATION ================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* LEFT: APPROVED EMPLOYEES LIST */}
-          <div className="lg:col-span-5 bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
-                  1
-                </span>
-                Approved Employees Roster
-              </span>
-              <button
-                type="button"
-                onClick={toggleSelectAll}
-                className="text-xs font-bold text-maroon hover:underline cursor-pointer"
-              >
-                {allVisibleSelected ? 'Deselect All' : 'Select All'}
-              </button>
-            </div>
-
-            {/* Search Box */}
-            <form onSubmit={handleSearch} className="flex gap-2">
+          {/* Search Box & Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+            <form onSubmit={handleSearch} className="md:col-span-8 flex gap-2">
               <div className="relative flex-1">
                 <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -1271,409 +885,432 @@ export default function EmployeeDailyPassTestLabPage() {
             </form>
 
             {/* Dynamic Counter Pill */}
-            <div className="p-2.5 bg-cream/60 rounded-xl border border-gold/30 text-xs flex items-center justify-between">
+            <div className="md:col-span-4 p-2 bg-cream/70 rounded-xl border border-gold/30 text-xs flex items-center justify-between">
               <span className="font-semibold text-ink">
                 Selected:{' '}
                 <strong className="text-maroon">
-                  {selectedEmployees.length} employee{selectedEmployees.length !== 1 ? 's' : ''} &bull; {totalPeopleCount} {totalPeopleCount === 1 ? 'person' : 'people'}
+                  {selectedEmployees.length} emp &bull; {totalPeopleCount} {totalPeopleCount === 1 ? 'person' : 'people'}
                 </strong>
               </span>
               <span className="text-[10px] text-stone-500 font-medium">
-                (Includes all family members)
+                (Incl. family)
               </span>
-            </div>
-
-            {/* Employee Checkbox List */}
-            <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1 divide-y divide-stone-100">
-              {employeeResults.length === 0 ? (
-                <p className="text-xs text-stone-400 italic py-6 text-center">No approved employees found.</p>
-              ) : (
-                employeeResults.map((emp) => {
-                  const isChecked = selectedEmployeeIds.includes(emp.id);
-                  const famCount = emp.familyMembers?.length || 0;
-                  const personCount = 1 + famCount;
-
-                  return (
-                    <label
-                      key={emp.id}
-                      className={`flex items-start gap-2.5 p-2 rounded-xl border cursor-pointer transition-all ${
-                        isChecked
-                          ? 'bg-maroon-soft/20 border-maroon/40 shadow-2xs'
-                          : 'bg-white border-stone-200 hover:border-stone-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleSelectEmployee(emp.id)}
-                        className="mt-0.5 rounded text-maroon focus:ring-maroon cursor-pointer"
-                      />
-                      <div className="min-w-0 flex-1 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-ink">{emp.name}</span>
-                          <span className="text-[10px] font-mono font-bold text-maroon">
-                            CPF: {emp.cpf}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-stone-500 flex items-center gap-1.5 mt-0.5">
-                          <span>{emp.department}</span>
-                          &bull;
-                          <span className="text-stone-700 font-semibold">
-                            {personCount} {personCount === 1 ? 'person' : 'people'}
-                          </span>
-                          {famCount > 0 && (
-                            <span className="text-purple-700 font-medium">
-                              (+{famCount} family)
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })
-              )}
             </div>
           </div>
 
-          {/* RIGHT: DATE ELIGIBILITY & SIMULATION ACTION */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* PEOPLE FOR THIS DATE BREAKDOWN */}
-            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
-                    2
-                  </span>
-                  Eligibility for {selectedTheme.fullDateLabel}
-                </span>
-                <span className="font-bold text-xs" style={{ color: selectedTheme.primaryColor }}>
-                  Night {selectedTheme.dayNumber} &bull; {selectedTheme.themeTitle}
-                </span>
-              </div>
+          {/* Employee Checkbox List */}
+          <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1 divide-y divide-stone-100">
+            {employeeResults.length === 0 ? (
+              <p className="text-xs text-stone-400 italic py-6 text-center">No approved employees found.</p>
+            ) : (
+              employeeResults.map((emp) => {
+                const isChecked = selectedEmployeeIds.includes(emp.id);
+                const famCount = emp.familyMembers?.length || 0;
+                const personCount = 1 + famCount;
+                const selectedDates = emp.bookingDays || [];
 
-              {selectedEmployees.length === 0 ? (
-                <div className="py-8 text-center text-xs text-stone-400 italic">
-                  Select at least one employee from Step 1 to evaluate individual date eligibility.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs border-b border-stone-200/80 pb-2">
-                    <span className="font-bold text-ink uppercase tracking-wider text-[11px]">
-                      Registered People Breakdown
-                    </span>
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className="text-stone-500">
-                        Total: <strong>{totalPeopleCount} registered</strong>
-                      </span>
-                      <span className="text-stone-300">|</span>
-                      <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        Eligible for this date: {eligiblePeople.length} {eligiblePeople.length === 1 ? 'person' : 'people'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-56 overflow-y-auto pt-1 pr-1">
-                    {peopleForSelectedDate.map((person) => (
-                      <div
-                        key={person.id}
-                        className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
-                          person.isEligible
-                            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                            : 'bg-stone-100/60 border-stone-200 text-stone-500 opacity-75'
-                        }`}
-                      >
-                        <div className="flex items-start gap-1.5 min-w-0">
-                          {person.isEligible ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                          ) : (
-                            <span className="w-3.5 h-3.5 rounded-full border border-stone-400 text-stone-400 flex items-center justify-center text-[9px] shrink-0 mt-0.5">
-                              ○
-                            </span>
-                          )}
-                          <div className="min-w-0">
-                            <div className="font-bold text-ink text-xs truncate">{person.name}</div>
-                            <div className="text-[10px] text-stone-500 truncate">
-                              {person.role} &bull; {person.employeeName}
-                            </div>
-                            <div className={`text-[10px] font-semibold mt-0.5 ${person.isEligible ? 'text-emerald-700' : 'text-stone-400'}`}>
-                              {person.isEligible ? 'Selected this date' : 'Not selected for this date'}
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ml-1 ${
-                            person.isEligible
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : 'bg-stone-200 text-stone-600 border-stone-300'
-                          }`}
-                        >
-                          {person.isEligible ? 'Eligible' : 'Not Eligible'}
+                return (
+                  <label
+                    key={emp.id}
+                    className={`flex items-start gap-2.5 p-2 rounded-xl border cursor-pointer transition-all ${
+                      isChecked
+                        ? 'bg-maroon-soft/20 border-maroon/40 shadow-2xs'
+                        : 'bg-white border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleSelectEmployee(emp.id)}
+                      className="mt-0.5 rounded text-maroon focus:ring-maroon cursor-pointer"
+                    />
+                    <div className="min-w-0 flex-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-ink">{emp.name}</span>
+                        <span className="text-[10px] font-mono font-bold text-maroon">
+                          CPF: {emp.cpf}
                         </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* SIMULATION EVALUATION & ACTION */}
-            <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
-                    3
-                  </span>
-                  10-Minute Simulation Workflow
-                </span>
-                <span className="text-[10px] text-stone-500">
-                  Target: <strong>{selectedTheme.fullDateLabel}</strong>
-                </span>
-              </div>
-
-              {/* Status Banner */}
-              <div
-                className={`p-3 rounded-xl border text-xs space-y-1.5 ${
-                  isDueLive
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                    : 'bg-amber-50 border-amber-200 text-amber-900'
-                }`}
-              >
-                <div className="flex items-center justify-between font-bold">
-                  <span className="flex items-center gap-1.5">
-                    {isDueLive ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>✓ QR Delivery Condition Satisfied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="w-4 h-4 text-amber-600" />
-                        <span>Waiting for QR delivery time</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/80 border border-stone-200">
-                    Sim: {simulatedCurrentTime} &bull; Due: {configuredDispatchTime}
-                  </span>
-                </div>
-                <p className="text-[11px] leading-relaxed text-stone-700">
-                  {isDueLive ? (
-                    <>
-                      Simulated time (<strong>{simulatedCurrentTime}</strong>) &ge; production dispatch time (<strong>{configuredDispatchTime}</strong>).
-                      Passes are generated for this session and test emails dispatched to <strong>{testEmailRecipient || 'safe recipient'}</strong> using the official event day theme.
-                    </>
-                  ) : (
-                    <>
-                      Simulated time (<strong>{simulatedCurrentTime}</strong>) is before production dispatch time (<strong>{configuredDispatchTime}</strong>).
-                      Simulation will automatically trigger pass generation when the clock reaches <strong>{configuredDispatchTime}</strong>.
-                    </>
-                  )}
-                </p>
-              </div>
-
-              {/* Simulation Controls in Step 3 */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleStartSimulation}
-                  disabled={isSimulating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
-                  className="py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-maroon hover:bg-maroon-dark text-white"
-                >
-                  <Zap className="w-4 h-4 text-gold-light" />
-                  <span>
-                    {isSimulating ? 'Simulation in Progress...' : `Start 10-Min Simulation (${eligiblePeople.length} eligible)`}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleRunInstantWindow}
-                  disabled={simulating || isSimulating || selectedEmployeeIds.length === 0 || eligiblePeople.length === 0}
-                  className="py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <span>Instant Run (Full Window)</span>
-                </button>
-              </div>
-            </div>
+                      <div className="text-[10px] text-stone-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span>{emp.department}</span>
+                        &bull;
+                        <span className="text-stone-700 font-semibold">
+                          {personCount} {personCount === 1 ? 'person' : 'people'}
+                        </span>
+                        {famCount > 0 && (
+                          <span className="text-purple-700 font-medium">
+                            (+{famCount} family)
+                          </span>
+                        )}
+                        &bull;
+                        <span className="text-emerald-700 font-medium">
+                          {selectedDates.length} night{selectedDates.length === 1 ? '' : 's'} registered
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* ================= RESULTS: AFTER SIMULATION ================= */}
-        {generatedPasses.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-stone-100 pb-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                </div>
-                <h2 className="text-sm font-bold text-ink font-cinzel">
-                  {generatedPasses.length} TEST DAILY PASS{generatedPasses.length === 1 ? '' : 'ES'}
-                </h2>
-                {generationSummary && (
-                  <span className="text-[10px] font-mono bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full">
-                    {generationSummary.newlyGenerated} created &bull; {generationSummary.alreadyExisted} reused &bull; {generationSummary.emailsSent} emailed
-                  </span>
-                )}
-              </div>
+        {/* ================= STEP 2: PERMANENT QR GENERATION TEST ================= */}
+        <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-stone-100 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
+                2
+              </span>
+              Permanent QR Generation Test
+            </span>
+            {generationSummary && (
+              <span className="text-[10px] font-mono bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full">
+                {generationSummary.total} passes ({generationSummary.newlyGenerated} created, {generationSummary.alreadyExisted} reused)
+              </span>
+            )}
+          </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-stone-500">
-                  Session: {testSessionId}
-                </span>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-stone-50 rounded-xl p-3 border border-stone-200">
+            <div className="space-y-0.5 max-w-xl">
+              <p className="text-xs font-bold text-ink">
+                One Person &rarr; One Permanent QR Token
+              </p>
+              <p className="text-[11px] text-ink-soft leading-relaxed">
+                Generates an isolated test permanent QR for selected attendees without touching production data. The same QR token will represent the attendee across all 9 nights.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleGeneratePermanentQr}
+                disabled={generating || selectedEmployeeIds.length === 0}
+                className="px-4 py-2 bg-maroon hover:bg-maroon-dark text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generating ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <QrCode className="w-3.5 h-3.5 text-gold-light" />
+                    <span>GENERATE TEST QR ({totalPeopleCount} people)</span>
+                  </>
+                )}
+              </button>
+
+              {testSessionId && (
                 <button
                   type="button"
                   onClick={handleCleanupSession}
                   disabled={cleaningUp}
-                  className="px-2.5 py-1 bg-stone-100 text-stone-700 hover:text-red-700 hover:bg-red-50 text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+                  className="px-3 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                  title="Purge passes generated in this session"
                 >
-                  {cleaningUp ? 'Cleaning...' : 'Cleanup This Session'}
+                  {cleaningUp ? 'Resetting...' : 'Reset Session'}
                 </button>
+              )}
+            </div>
+          </div>
+
+          {/* Generated Passes Table */}
+          {generatedPasses.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-ink uppercase tracking-wider text-[11px]">
+                  Generated Permanent QR Credentials ({generatedPasses.length})
+                </span>
+                <span className="text-[10px] font-mono text-stone-500">
+                  Session: {testSessionId}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto border border-stone-200 rounded-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-stone-50 text-stone-500 uppercase text-[10px] font-bold tracking-wider border-b border-stone-200">
+                      <th className="py-2.5 px-3">Person / Attendee</th>
+                      <th className="py-2.5 px-3">Pass Type</th>
+                      <th className="py-2.5 px-3">Primary Employee & CPF</th>
+                      <th className="py-2.5 px-3">Permanent QR Token</th>
+                      <th className="py-2.5 px-3">QR Status</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {generatedPasses.map((p) => {
+                      const isSelectedForScan = selectedPassForScan === p.qrToken;
+
+                      return (
+                        <tr
+                          key={p.testPassId || p.qrToken}
+                          className={`transition-colors ${
+                            isSelectedForScan ? 'bg-amber-50/50' : 'hover:bg-cream/40'
+                          }`}
+                        >
+                          {/* Person */}
+                          <td className="py-2.5 px-3">
+                            <div className="font-bold text-ink">{p.attendeeName}</div>
+                            <div className="font-mono text-[9px] text-stone-400">{p.ticketNumber}</div>
+                          </td>
+
+                          {/* Pass Type */}
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                p.isFamily
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {p.passType}
+                            </span>
+                          </td>
+
+                          {/* Primary Employee & CPF */}
+                          <td className="py-2.5 px-3">
+                            <div className="font-semibold text-ink">{p.employeeName}</div>
+                            <div className="font-mono text-[10px] text-maroon">{p.employeeCpf}</div>
+                          </td>
+
+                          {/* QR Token */}
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] text-stone-600 bg-stone-100 px-2 py-0.5 rounded truncate max-w-[140px]">
+                                {p.qrToken.slice(0, 12)}...
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(p.qrToken)}
+                                className="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
+                                title="Copy token"
+                              >
+                                {copiedToken === p.qrToken ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`font-bold uppercase text-[10px] px-2 py-0.5 rounded-full ${
+                                p.status === 'ACTIVE'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : p.status === 'USED'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-2.5 px-3 text-right">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPassForScan(p.qrToken)}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-colors cursor-pointer ${
+                                  isSelectedForScan
+                                    ? 'bg-maroon text-white'
+                                    : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                                }`}
+                              >
+                                {isSelectedForScan ? 'Active Scanner' : 'Select'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setViewingPass(p)}
+                                className="px-2 py-1 bg-stone-100 hover:bg-maroon hover:text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                              >
+                                View QR
+                              </button>
+                              <a
+                                href={`${apiBaseUrl}/public/employee/daily-pass/${p.qrToken}/pdf`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 bg-stone-100 hover:bg-stone-200 rounded-lg text-[10px] font-bold transition-colors"
+                              >
+                                PDF
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
+          )}
+        </div>
 
-            {/* Passes Table */}
-            <div className="overflow-x-auto">
+        {/* ================= STEP 3: ONE-TIME EMAIL RELEASE TEST ================= */}
+        <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
+                3
+              </span>
+              One-Time Email Release Test
+            </span>
+            <span className="text-[10px] text-stone-500 font-medium">
+              Permanent QR Email Dispatch & Lifecycle Tracking
+            </span>
+          </div>
+
+          <p className="text-[11px] text-ink-soft leading-relaxed">
+            Test the permanent QR email release. Emails are dispatched exclusively to the designated safe test recipient with [TEST] prefix and official festival branding attached.
+          </p>
+
+          {/* Safe Recipient Config & Dispatch Trigger */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-stone-50 p-3 rounded-xl border border-stone-200">
+            <div className="md:col-span-6 space-y-1">
+              <label className="text-[10px] font-bold uppercase text-stone-500 block">
+                Safe Test Recipient Email
+              </label>
+              <input
+                type="email"
+                placeholder="admin@example.com"
+                value={testEmailRecipient}
+                onChange={(e) => setTestEmailRecipient(e.target.value)}
+                className="w-full p-2 bg-white border border-stone-200 rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
+              />
+              <span className="text-[9px] text-amber-700 block font-medium">
+                ⚠️ Test emails will only be sent to this safe test address — never to real employees.
+              </span>
+            </div>
+
+            <div className="md:col-span-6 flex items-center justify-end gap-2 flex-wrap pt-2 md:pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activePassForScan) handleSendSingleTestEmail(activePassForScan.qrToken);
+                }}
+                disabled={!activePassForScan || retryingPassToken !== null || bulkSending}
+                className="px-3 py-2 bg-stone-800 hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5 text-gold" />
+                <span>SEND TEST EMAIL (Selected)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBulkTestEmailRelease}
+                disabled={generatedPasses.length === 0 || bulkSending}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {bulkSending ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Sending Release...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>TEST BULK RELEASE ({generatedPasses.length} passes)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Delivery Lifecycle Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
+            <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-center">
+              <div className="text-[10px] font-bold text-stone-500 uppercase">Queued</div>
+              <div className="text-base font-bold text-stone-700">{deliveryMetrics.queued}</div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-center">
+              <div className="text-[10px] font-bold text-blue-600 uppercase">Sending</div>
+              <div className="text-base font-bold text-blue-700">{deliveryMetrics.sending}</div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+              <div className="text-[10px] font-bold text-emerald-600 uppercase">Provider Accepted</div>
+              <div className="text-base font-bold text-emerald-700">{deliveryMetrics.accepted}</div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-300 text-center">
+              <div className="text-[10px] font-bold text-emerald-800 uppercase">Delivered</div>
+              <div className="text-base font-bold text-emerald-900">{deliveryMetrics.delivered || deliveryMetrics.accepted}</div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-center">
+              <div className="text-[10px] font-bold text-rose-600 uppercase">Failed</div>
+              <div className="text-base font-bold text-rose-700">{deliveryMetrics.failed}</div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center">
+              <div className="text-[10px] font-bold text-amber-600 uppercase">Bounced</div>
+              <div className="text-base font-bold text-amber-700">{deliveryMetrics.bounced}</div>
+            </div>
+          </div>
+
+          {/* Delivery Status Table */}
+          {generatedPasses.length > 0 && (
+            <div className="overflow-x-auto border border-stone-200 rounded-xl mt-2">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-stone-50 text-stone-500 uppercase text-[10px] font-bold tracking-wider border-b border-stone-200">
                     <th className="py-2.5 px-3">Attendee</th>
-                    <th className="py-2.5 px-3">Pass Type</th>
-                    <th className="py-2.5 px-3">Primary Employee</th>
-                    <th className="py-2.5 px-3">Employee CPF</th>
-                    <th className="py-2.5 px-3">Event Date</th>
-                    <th className="py-2.5 px-3">Pass Status</th>
-                    <th className="py-2.5 px-3">Email Status</th>
-                    <th className="py-2.5 px-3">Delivery Time</th>
+                    <th className="py-2.5 px-3">Test Recipient</th>
+                    <th className="py-2.5 px-3">Delivery Status</th>
                     <th className="py-2.5 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {generatedPasses.map((p) => {
-                    const theme = p.dayTheme || getEventDayTheme(p.eventDate);
+                    const record = deliveryRecords[p.qrToken];
+                    const status = record?.status || (p.emailStatus === 'SENT' ? 'ACCEPTED' : 'QUEUED');
 
                     return (
-                      <tr key={p.testPassId || p.qrToken} className="hover:bg-cream/40 transition-colors">
-                        {/* Attendee */}
-                        <td className="py-2.5 px-3">
-                          <div className="font-bold text-ink">{p.attendeeName}</div>
-                          <div className="font-mono text-[9px] text-stone-400">{p.ticketNumber}</div>
+                      <tr key={`del-${p.qrToken}`} className="hover:bg-cream/40 transition-colors">
+                        <td className="py-2 px-3">
+                          <span className="font-bold text-ink">{p.attendeeName}</span>
+                          <span className="text-[10px] text-stone-400 block font-mono">{p.ticketNumber}</span>
                         </td>
-
-                        {/* Pass Type */}
-                        <td className="py-2.5 px-3">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                              p.isFamily
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}
-                          >
-                            {p.passType}
-                          </span>
+                        <td className="py-2 px-3 font-mono text-[11px] text-stone-600">
+                          {record?.recipientEmail || testEmailRecipient}
                         </td>
-
-                        {/* Primary Employee */}
-                        <td className="py-2.5 px-3">
-                          <div className="font-semibold text-ink">{p.employeeName}</div>
-                        </td>
-
-                        {/* CPF */}
-                        <td className="py-2.5 px-3">
-                          <span className="font-mono text-[11px] font-bold text-maroon">
-                            {p.employeeCpf}
-                          </span>
-                        </td>
-
-                        {/* Event Date */}
-                        <td className="py-2.5 px-3">
-                          <span
-                            className="inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-2xs"
-                            style={{ backgroundColor: theme.primaryColor }}
-                          >
-                            {theme.dayLabel} {theme.monthLabel} (Night {theme.dayNumber})
-                          </span>
-                        </td>
-
-                        {/* Pass Status */}
-                        <td className="py-2.5 px-3">
-                          <span
-                            className={`font-bold uppercase text-[10px] ${
-                              p.status === 'ACTIVE'
-                                ? 'text-emerald-700'
-                                : p.status === 'USED'
-                                ? 'text-blue-700'
-                                : 'text-red-700'
-                            }`}
-                          >
-                            {p.status}
-                          </span>
-                        </td>
-
-                        {/* Email Status */}
-                        <td className="py-2.5 px-3">
+                        <td className="py-2 px-3">
                           <span
                             className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              p.emailStatus === 'SENT'
+                              status === 'ACCEPTED' || status === 'DELIVERED'
                                 ? 'bg-emerald-100 text-emerald-800'
-                                : p.emailStatus === 'FAILED'
+                                : status === 'SENDING'
+                                ? 'bg-blue-100 text-blue-800 animate-pulse'
+                                : status === 'FAILED'
                                 ? 'bg-rose-100 text-rose-800'
-                                : 'bg-amber-100 text-amber-800'
+                                : 'bg-stone-100 text-stone-700'
                             }`}
                           >
-                            {p.emailStatus === 'SENT' && <Check className="w-3 h-3 text-emerald-600" />}
-                            {p.emailStatus}
+                            {(status === 'ACCEPTED' || status === 'DELIVERED') && (
+                              <Check className="w-3 h-3 text-emerald-600" />
+                            )}
+                            {status}
                           </span>
                         </td>
-
-                        {/* Delivery Time (Simulated vs Real) */}
-                        <td className="py-2.5 px-3">
-                          <div className="font-mono text-[11px] font-bold text-ink">
-                            Simulated: {p.simulatedDispatchTime || configuredDispatchTime}
-                          </div>
-                          <div className="text-[9px] text-stone-400 font-mono">
-                            Real: {p.realCreatedAt ? new Date(p.realCreatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : (p.createdAt ? new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—')}
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2 px-3 text-right">
                           <div className="inline-flex items-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setViewingPass(p)}
-                              className="px-2 py-1 bg-stone-100 hover:bg-maroon hover:text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                              title="View Ticket Modal"
-                            >
-                              View Pass
-                            </button>
-                            <a
-                              href={`${apiBaseUrl}/public/employee/daily-pass/${p.qrToken}/pdf`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2 py-1 bg-stone-100 hover:bg-stone-200 rounded-lg text-[10px] font-bold transition-colors"
-                              title="Download PDF"
-                            >
-                              PDF
-                            </a>
-                            <button
-                              type="button"
                               onClick={() => handleOpenEmailPreview(p.qrToken)}
-                              className="px-2 py-1 bg-maroon-soft text-maroon-dark hover:bg-maroon hover:text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                              title="Preview Email Template"
+                              className="px-2 py-1 bg-stone-100 hover:bg-stone-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
                             >
                               Preview Email
                             </button>
-                            {p.emailStatus === 'FAILED' && (
-                              <button
-                                type="button"
-                                onClick={() => handleRetryEmail(p.qrToken)}
-                                disabled={retryingPassToken === p.qrToken}
-                                className="px-2 py-1 bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
-                                title="Retry sending email"
-                              >
-                                {retryingPassToken === p.qrToken ? 'Retrying...' : 'Retry Email'}
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleSendSingleTestEmail(p.qrToken)}
+                              disabled={retryingPassToken === p.qrToken}
+                              className="px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                            >
+                              {retryingPassToken === p.qrToken ? 'Sending...' : 'Send / Retry'}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1682,51 +1319,44 @@ export default function EmployeeDailyPassTestLabPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
 
-            {/* Ineligible Attendees Reminder */}
-            {ineligibleAttendees.length > 0 && (
-              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-1.5">
-                <div className="text-[10px] font-bold text-stone-500 uppercase tracking-wider font-cinzel">
-                  NOT INCLUDED FOR {selectedTheme.dayLabel} {selectedTheme.monthLabel.toUpperCase()} (Did Not Register For This Date)
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {ineligibleAttendees.map((p) => (
-                    <span
-                      key={p.attendeeId}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-200/80 text-stone-700 text-[11px] border border-stone-300"
-                    >
-                      <span className="font-semibold text-ink">{p.attendeeName}</span>
-                      <span className="text-stone-500 text-[10px]">({p.relation || 'Self'})</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+        {/* ================= STEP 4: PERMANENT QR ENTRY TEST (SCANNER VALIDATION) ================= */}
+        <div className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-maroon flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-maroon text-white flex items-center justify-center text-[10px]">
+                4
+              </span>
+              Permanent QR Entry Test (Scanner Validation)
+            </span>
+            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              Dynamic Date Authorization at Gate
+            </span>
+          </div>
 
-            {/* ================= TURNSTILE SCANNER TEST SUITE ================= */}
-            <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-3">
-              <div className="flex items-center justify-between border-b border-stone-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <ScanLine className="w-4 h-4 text-maroon" />
-                  <span className="text-xs font-bold text-ink uppercase tracking-wider font-cinzel">
-                    Turnstile Scanner Validation Suite
-                  </span>
-                </div>
-                <span className="text-[10px] text-stone-500 font-mono">
-                  Test Pass Scans &bull; Zero Impact on Production Gates
-                </span>
-              </div>
+          <p className="text-[11px] text-ink-soft leading-relaxed">
+            The permanent QR credential remains identical across the entire 9 nights of Navratri. At scan time, the server inspects whether the attendee registered for the tested date and ensures maximum one entry per day.
+          </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                {/* Select Pass to Scan */}
-                <div className="md:col-span-4">
-                  <label className="text-[10px] font-bold uppercase text-stone-500 block mb-1">
-                    Select Pass To Test Scan
+          {generatedPasses.length === 0 ? (
+            <div className="p-8 text-center text-xs text-stone-400 italic bg-stone-50 rounded-xl border border-stone-200">
+              Generate at least one permanent test QR pass in Step 2 to test turnstile entry.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Active Attendee & Entry Controls */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-stone-50 p-3 rounded-xl border border-stone-200">
+                {/* Select Pass */}
+                <div className="md:col-span-4 space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-stone-500 block">
+                    Select Attendee QR To Test
                   </label>
                   <select
                     value={selectedPassForScan}
                     onChange={(e) => setSelectedPassForScan(e.target.value)}
-                    className="w-full p-2 bg-white border border-stone-200 rounded-xl text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-maroon"
+                    className="w-full p-2 bg-white border border-stone-200 rounded-xl text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer"
                   >
                     {generatedPasses.map((p) => (
                       <option key={p.qrToken} value={p.qrToken}>
@@ -1736,106 +1366,205 @@ export default function EmployeeDailyPassTestLabPage() {
                   </select>
                 </div>
 
-                {/* Scan Action Buttons */}
-                <div className="md:col-span-8 flex items-center gap-2 flex-wrap pt-2 md:pt-4">
-                  <button
-                    type="button"
-                    onClick={() => handleScan()}
-                    disabled={scanning}
-                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
+                {/* Simulated Test Date Dropdown (HERE ONLY!) */}
+                <div className="md:col-span-5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold uppercase text-stone-500 block">
+                      Simulated Test Event Date
+                    </label>
+                    <span className="text-[9px] text-maroon font-bold">Entry Authorization Date</span>
+                  </div>
+                  <select
+                    value={testScanDate}
+                    onChange={(e) => setTestScanDate(e.target.value)}
+                    className="w-full p-2 bg-white border border-stone-200 rounded-xl text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Valid Scan</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleScan()}
-                    disabled={scanning}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Duplicate Scan</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleScan(wrongDateTarget)}
-                    disabled={scanning}
-                    className="px-3 py-1.5 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
-                  >
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>Wrong Date Scan</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleRevokePass}
-                    disabled={scanning}
-                    className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                    <span>Revoke Pass</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleResetScanner}
-                    disabled={scanning}
-                    className="px-3 py-1.5 bg-stone-200 text-stone-800 rounded-xl text-xs font-bold hover:bg-stone-300 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Reset to ACTIVE</span>
-                  </button>
+                    {OFFICIAL_EVENT_DATES.map((dateStr) => {
+                      const th = getEventDayTheme(dateStr);
+                      return (
+                        <option key={dateStr} value={dateStr}>
+                          {dateStr} — Night {th.dayNumber} ({th.themeTitle})
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
+
+                {/* Gate Selector */}
+                <div className="md:col-span-3 space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-stone-500 block">
+                    Turnstile Gate
+                  </label>
+                  <select
+                    value={selectedGateId}
+                    onChange={(e) => setSelectedGateId(e.target.value)}
+                    className="w-full p-2 bg-white border border-stone-200 rounded-xl text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer"
+                  >
+                    {gatesList.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Attendee Booking Days Context Bar */}
+              {activePassForScan && (
+                <div className="p-3 bg-cream/70 rounded-xl border border-gold/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+                  <div>
+                    <span className="font-bold text-ink">{activePassForScan.attendeeName}</span>
+                    <span className="text-stone-500 text-[11px] ml-1.5">
+                      ({activePassForScan.passType} &bull; CPF: {activePassForScan.employeeCpf})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase text-stone-500">Registered Nights:</span>
+                    {(activePassForScan.bookingDays || [activePassForScan.eventDate]).map((d) => {
+                      const isTarget = d === testScanDate;
+                      return (
+                        <span
+                          key={d}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            isTarget
+                              ? 'bg-emerald-600 text-white border-emerald-700'
+                              : 'bg-white text-stone-700 border-stone-200'
+                          }`}
+                        >
+                          {d} {isTarget ? '🎯' : ''}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => handleScan(testScanDate)}
+                  disabled={scanning}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Simulate scan on the chosen event date"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Simulate Scan ({testScanDate})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleScanOnWrongDate}
+                  disabled={scanning}
+                  className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Simulate scan on a date the attendee has NOT booked"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Scan on Wrong Date</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleScan(testScanDate)}
+                  disabled={scanning}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Scan again on the same day to test ALREADY_CHECKED_IN"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Duplicate Scan Today</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRevokePass}
+                  disabled={scanning}
+                  className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Revoke pass to verify ATTENDEE_INACTIVE"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Revoke Pass</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetScanner}
+                  disabled={scanning}
+                  className="px-3 py-2 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  title="Reset pass back to ACTIVE and remove test checkin records"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset Scanner State</span>
+                </button>
               </div>
 
               {/* Explicit Scanner Result Display */}
               {scannerResult && (
                 <div
-                  className={`p-3 rounded-xl border text-xs space-y-1 ${
+                  className={`p-4 rounded-xl border text-xs space-y-2 ${
                     scannerResult.scannerResponse?.result === 'SUCCESS'
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
                       : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN'
-                      ? 'bg-amber-50 border-amber-200 text-amber-900'
-                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                      ? 'bg-amber-50 border-amber-200 text-amber-950'
+                      : scannerResult.scannerResponse?.result === 'NOT_BOOKED_TODAY'
+                      ? 'bg-red-50 border-red-200 text-red-950'
+                      : 'bg-rose-50 border-rose-200 text-rose-950'
                   }`}
                 >
                   <div className="flex items-center justify-between font-bold">
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex items-center gap-2">
                       {scannerResult.scannerResponse?.result === 'SUCCESS' ? (
                         <>
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <span>✓ VALID ENTRY GRANTED</span>
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          <span className="text-sm">✓ VALID ENTRY GRANTED</span>
                         </>
                       ) : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN' ? (
                         <>
-                          <RotateCcw className="w-4 h-4 text-amber-600" />
-                          <span>DUPLICATE SCAN DETECTED</span>
+                          <RotateCcw className="w-5 h-5 text-amber-600" />
+                          <span className="text-sm">DUPLICATE SCAN DETECTED</span>
+                        </>
+                      ) : scannerResult.scannerResponse?.result === 'NOT_BOOKED_TODAY' ? (
+                        <>
+                          <Calendar className="w-5 h-5 text-red-600" />
+                          <span className="text-sm">NOT BOOKED FOR THIS DATE</span>
                         </>
                       ) : (
                         <>
-                          <AlertCircle className="w-4 h-4 text-rose-600" />
-                          <span>SCAN REJECTED</span>
+                          <AlertCircle className="w-5 h-5 text-rose-600" />
+                          <span className="text-sm">SCAN REJECTED</span>
                         </>
                       )}
                     </span>
-                    <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/80 border border-stone-200">
+                    <span className="font-mono text-[11px] px-2.5 py-1 rounded bg-white/90 border border-stone-200 font-bold">
                       {scannerResult.scannerResponse?.result}
                     </span>
                   </div>
-                  <p className="text-stone-700 text-xs">
+
+                  <p className="text-ink text-xs leading-relaxed">
                     {scannerResult.scannerResponse?.result === 'SUCCESS'
-                      ? 'Pass accepted. Turnstile check-in logged and pass status updated to USED.'
+                      ? 'Permanent pass authorized for this date. Check-in logged and gate turnstile opened.'
                       : scannerResult.scannerResponse?.result === 'ALREADY_CHECKED_IN'
                       ? 'Already checked in for this date. Turnstile refuses double-entry.'
+                      : scannerResult.scannerResponse?.result === 'NOT_BOOKED_TODAY'
+                      ? scannerResult.scannerResponse?.message || 'Attendee did not select this date in their registration.'
                       : scannerResult.scannerResponse?.message}
                   </p>
+
+                  <div className="pt-1 flex items-center gap-3 text-[10px] text-stone-500 font-mono flex-wrap">
+                    <span>Date Tested: <strong>{scannerResult.simulatedScanDate || testScanDate}</strong></span>
+                    &bull;
+                    <span>Gate: <strong>Gate {scannerResult.gateId || selectedGateId}</strong></span>
+                    {scannerResult.passStatus && (
+                      <>
+                        &bull;
+                        <span>Current Status: <strong>{scannerResult.passStatus}</strong></span>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ================= VIEW PASS MODAL (DATE-SPECIFIC TICKET) ================= */}
@@ -1843,7 +1572,7 @@ export default function EmployeeDailyPassTestLabPage() {
         <AdminModal
           isOpen={!!viewingPass}
           onClose={() => setViewingPass(null)}
-          title="Daily Entry Ticket Preview"
+          title="Permanent Employee QR Pass Preview"
         >
           <div className="space-y-4 p-1">
             <DailyEmployeeTicketCard
@@ -1894,7 +1623,7 @@ export default function EmployeeDailyPassTestLabPage() {
               </button>
             </div>
 
-            {/* Scrollable Container with previewScrollRef to reset scrollTop to 0 */}
+            {/* Scrollable Container with previewScrollRef */}
             <div ref={previewScrollRef} className="flex-1 overflow-y-auto p-4 bg-stone-100">
               {previewLoading ? (
                 <div className="py-24 text-center space-y-3">

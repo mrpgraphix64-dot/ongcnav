@@ -14,10 +14,10 @@ export class GenerateTestPassDto {
   @IsOptional()
   employeeIds?: (string | number)[];
 
-  @ApiProperty({ description: 'Official event date (e.g. 2026-10-11)', example: '2026-10-11' })
+  @ApiPropertyOptional({ description: 'Optional simulated event date for backward compatibility', example: '2026-10-11' })
   @IsString()
-  @IsNotEmpty()
-  eventDate: string;
+  @IsOptional()
+  eventDate?: string;
 
   @ApiPropertyOptional({ description: 'Optional unique test session ID', example: 'EMP-TEST-20261001-001' })
   @IsString()
