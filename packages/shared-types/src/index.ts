@@ -236,6 +236,41 @@ export interface EmployeeQrEmailReleaseSummary {
   createdAt: string;
 }
 
+export interface SponsorVoucherConfig {
+  enabled: boolean;
+  sponsorName: string;
+  voucherLabel: string;
+  offerHeadline: string;
+  offerSubtext: string;
+  audienceLabel: string;
+  instructionText: string;
+  validityNote: string;
+  address?: string;
+  phone?: string;
+  voucherImagePath?: string; // e.g. '/images/sponsors/mahavir-jewellers-voucher.jpg'
+  sponsorLogoPath?: string;
+  terms?: string[];
+}
+
+export const DEFAULT_SPONSOR_VOUCHER_CONFIG: SponsorVoucherConfig = {
+  enabled: true,
+  sponsorName: 'MAHAVIR JEWELLERS',
+  voucherLabel: 'GIFT VOUCHER',
+  offerHeadline: '₹5,000 OFF',
+  offerSubtext: 'ON MAKING CHARGES',
+  audienceLabel: 'FOR ONGC NAVRATRI 2026 PARTICIPANTS',
+  instructionText: 'Show this voucher at Mahavir Jewellers to avail the offer.',
+  validityNote: 'Valid: Lifetime | No expiry',
+  address: '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda',
+  phone: '90330 56098',
+  voucherImagePath: '/images/sponsors/mahavir-jewellers-voucher.jpg',
+  terms: [
+    'One voucher per bill.',
+    'Not redeemable for cash.',
+    'Not applicable on silver jewellery.',
+  ],
+};
+
 export enum OrderStatus {
   PENDING = 'PENDING',
   PAID = 'PAID',

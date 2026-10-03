@@ -259,6 +259,45 @@ export class EmployeesController {
     return { success: false, message: 'Delivery service unavailable.' };
   }
 
+  @Get('employees/qr-release/preview-email')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Preview the rendered permanent QR pass email with current sponsor voucher configuration' })
+  async previewTestEmail() {
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.previewTestPermanentQrEmail();
+    }
+    return { subject: '', html: '', text: '' };
+  }
+
+  @Get('employees/qr-release/sponsor-voucher')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Get current sponsor voucher configuration' })
+  async getSponsorVoucherConfig() {
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.getSponsorVoucherConfig();
+    }
+    return null;
+  }
+
+  @Post('employees/qr-release/sponsor-voucher')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Update sponsor voucher configuration (toggle, sponsor details, offer text)' })
+  async updateSponsorVoucherConfig(@Body() body: any, @Req() req: Request) {
+    const user = (req as any).user;
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.updateSponsorVoucherConfig(body, user);
+    }
+    return null;
+  }
+
   @Post('employees/qr-release/reconcile-hostinger')
   @Roles(
     UserRole.SUPER_ADMIN,

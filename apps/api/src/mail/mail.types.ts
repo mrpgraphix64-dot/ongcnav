@@ -51,6 +51,7 @@ export interface EmployeeDailyPassEmailData {
   viewTicketUrl?: string;
   downloadPdfUrl?: string;
   subjectOverride?: string;
+  sponsorVoucher?: import('@ongc/shared-types').SponsorVoucherConfig;
 }
 
 export interface MailSendResult {

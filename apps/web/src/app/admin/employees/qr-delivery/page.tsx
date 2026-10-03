@@ -33,8 +33,11 @@ import {
   DailyEmployeePassPresentation,
   EmployeeQrEmailDeliveryItem,
   EmailDeliveryStatus,
+  SponsorVoucherConfig,
+  DEFAULT_SPONSOR_VOUCHER_CONFIG,
 } from '@ongc/shared-types';
 import DailyEmployeeTicketCard from '@/components/pass/DailyEmployeeTicketCard';
+import { Gift, Sparkles } from 'lucide-react';
 
 interface QrReleaseScheduleState {
   enabled: boolean;
@@ -104,6 +107,79 @@ export default function EmployeeQrReleasePage() {
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  // Sponsor voucher state
+  const [voucherConfig, setVoucherConfig] = useState<SponsorVoucherConfig>(DEFAULT_SPONSOR_VOUCHER_CONFIG);
+  const [voucherLoading, setVoucherLoading] = useState(true);
+  const [updatingVoucher, setUpdatingVoucher] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewSubject, setPreviewSubject] = useState<string>('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+  // Load Sponsor Voucher Config
+  const loadSponsorVoucher = useCallback(async () => {
+    try {
+      setVoucherLoading(true);
+      const res = await fetchApi<SponsorVoucherConfig>('/admin/employees/qr-release/sponsor-voucher');
+      if (res) {
+        setVoucherConfig(res);
+      }
+    } catch (err: any) {
+      console.error('Failed to load sponsor voucher configuration:', err);
+    } finally {
+      setVoucherLoading(false);
+    }
+  }, []);
+
+  const handleToggleVoucher = async () => {
+    const nextState = !voucherConfig.enabled;
+    try {
+      setUpdatingVoucher(true);
+      const res = await fetchApi<SponsorVoucherConfig>('/admin/employees/qr-release/sponsor-voucher', {
+        method: 'POST',
+        body: JSON.stringify({ enabled: nextState }),
+      });
+      if (res) {
+        setVoucherConfig(res);
+      } else {
+        setVoucherConfig((prev) => ({ ...prev, enabled: nextState }));
+      }
+      setActionMessage({
+        type: 'success',
+        text: `Sponsor gift voucher ${nextState ? 'ENABLED' : 'DISABLED'} successfully.`,
+      });
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err.message || 'Failed to update sponsor voucher status.',
+      });
+    } finally {
+      setUpdatingVoucher(false);
+    }
+  };
+
+  const handleOpenPreview = async () => {
+    try {
+      setPreviewLoading(true);
+      setShowPreviewModal(true);
+      const res = await fetchApi<{ subject: string; html: string; text: string }>(
+        '/admin/employees/qr-release/preview-email',
+      );
+      if (res) {
+        setPreviewSubject(res.subject || 'Pass Preview');
+        setPreviewHtml(res.html || '');
+      }
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err.message || 'Failed to fetch email preview.',
+      });
+      setShowPreviewModal(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   // Confirmation dialogs
   const [confirmModal, setConfirmModal] = useState<{
@@ -178,6 +254,10 @@ export default function EmployeeQrReleasePage() {
   useEffect(() => {
     loadScheduleAndStats();
   }, [loadScheduleAndStats]);
+
+  useEffect(() => {
+    loadSponsorVoucher();
+  }, [loadSponsorVoucher]);
 
   useEffect(() => {
     loadDeliveries();
@@ -603,26 +683,86 @@ export default function EmployeeQrReleasePage() {
           </div>
         </div>
 
-        {/* SEND TEST EMAIL BOX */}
-        <div className="pt-3 border-t border-stone-100">
-          <form onSubmit={handleSendTestEmail} className="flex flex-col sm:flex-row items-center gap-2">
-            <div className="text-xs text-stone-600 font-bold whitespace-nowrap">Send Test Pass:</div>
-            <input
-              type="email"
-              placeholder="admin@ongc.co.in"
-              value={testEmailAddress}
-              onChange={(e) => setTestEmailAddress(e.target.value)}
-              className="py-1.5 px-3 rounded-xl border border-stone-200 text-xs w-full sm:w-64 focus:border-maroon focus:outline-hidden"
-            />
-            <button
-              type="submit"
-              disabled={sendingTestEmail || !testEmailAddress.trim()}
-              className="py-1.5 px-3 rounded-xl border border-stone-300 hover:bg-stone-100 text-xs font-bold text-stone-700 transition-colors disabled:opacity-40 cursor-pointer shrink-0"
-            >
-              {sendingTestEmail ? 'Sending...' : 'Send Test Email'}
-            </button>
-            <span className="text-[10px] text-stone-400">Isolated (isTest=true, never affects production metrics)</span>
-          </form>
+        {/* SEND TEST EMAIL BOX & SPONSOR CONTROLS */}
+        <div className="pt-3 border-t border-stone-100 space-y-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <form onSubmit={handleSendTestEmail} className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="text-xs text-stone-600 font-bold whitespace-nowrap">Send Test Pass:</div>
+              <input
+                type="email"
+                placeholder="admin@ongc.co.in"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                className="py-1.5 px-3 rounded-xl border border-stone-200 text-xs w-full sm:w-64 focus:border-maroon focus:outline-hidden"
+              />
+              <button
+                type="submit"
+                disabled={sendingTestEmail || !testEmailAddress.trim()}
+                className="py-1.5 px-3 rounded-xl border border-stone-300 hover:bg-stone-100 text-xs font-bold text-stone-700 transition-colors disabled:opacity-40 cursor-pointer shrink-0"
+              >
+                {sendingTestEmail ? 'Sending...' : 'Send Test Email'}
+              </button>
+              <span className="text-[10px] text-stone-400">Isolated (isTest=true, never affects production metrics)</span>
+            </form>
+
+            {/* PREVIEW PASS EMAIL BUTTON */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleOpenPreview}
+                disabled={previewLoading}
+                className="py-1.5 px-3.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Eye className="w-3.5 h-3.5 text-amber-700" />
+                <span>{previewLoading ? 'Loading Preview...' : 'Preview Email Template'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* COMPACT SPONSOR OFFER STATUS CHIP & TOGGLE */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-linear-to-r from-amber-50/60 via-stone-50 to-amber-50/40 border border-amber-200/80">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-amber-200 text-[11px] font-bold">
+                <Gift className="w-3.5 h-3.5 text-maroon" />
+                <span className="text-stone-500 uppercase tracking-wider text-[10px]">SPONSOR OFFER:</span>
+                <span
+                  className={`inline-flex items-center gap-1 font-extrabold uppercase text-[10px] ${
+                    voucherConfig.enabled ? 'text-emerald-700' : 'text-stone-400'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${voucherConfig.enabled ? 'bg-emerald-600' : 'bg-stone-400'}`}
+                  />
+                  {voucherConfig.enabled ? 'ENABLED' : 'DISABLED'}
+                </span>
+              </div>
+
+              <div className="text-xs text-stone-700 font-semibold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>
+                  <strong className="text-maroon font-bold">{voucherConfig.sponsorName}</strong>
+                  {' — '}
+                  <span className="text-amber-800 font-bold">{voucherConfig.offerHeadline} {voucherConfig.offerSubtext}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleToggleVoucher}
+                disabled={updatingVoucher || voucherLoading}
+                className={`py-1 px-3 rounded-lg text-xs font-bold transition-all border cursor-pointer flex items-center gap-1.5 ${
+                  voucherConfig.enabled
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                    : 'bg-white text-stone-600 border-stone-300 hover:bg-stone-50'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${voucherConfig.enabled ? 'bg-emerald-600' : 'bg-stone-400'}`} />
+                <span>{updatingVoucher ? 'Updating...' : voucherConfig.enabled ? 'Voucher Active' : 'Enable Voucher'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1007,6 +1147,63 @@ export default function EmployeeQrReleasePage() {
                 className="px-4 py-2 rounded-xl bg-maroon hover:bg-maroon-dark text-white font-bold"
               >
                 {confirmModal.type === 'SEND_NOW' ? 'Start Release' : 'Retry Failed'}
+              </button>
+            </div>
+          </div>
+        </AdminModal>
+      )}
+      {/* EMAIL PREVIEW MODAL */}
+      {showPreviewModal && (
+        <AdminModal
+          isOpen={showPreviewModal}
+          onClose={() => setShowPreviewModal(false)}
+          title="Permanent Pass Email Template Preview"
+          subtitle={previewSubject || 'Subject preview'}
+          maxWidth="4xl"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs text-stone-600 bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+              <div>
+                <span className="font-bold text-ink">Subject:</span>{' '}
+                <span className="font-mono text-stone-700">{previewSubject || 'Loading subject...'}</span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] uppercase font-bold text-stone-400">Voucher Status:</span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    voucherConfig.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-700'
+                  }`}
+                >
+                  {voucherConfig.enabled ? 'Voucher Enabled' : 'Voucher Disabled'}
+                </span>
+              </div>
+            </div>
+
+            {previewLoading ? (
+              <div className="py-20 flex flex-col items-center justify-center gap-2 text-stone-500">
+                <RefreshCw className="w-6 h-6 animate-spin text-maroon" />
+                <span className="text-xs font-medium">Generating email preview...</span>
+              </div>
+            ) : previewHtml ? (
+              <div className="rounded-xl border border-stone-300 overflow-hidden bg-white shadow-inner max-h-[70vh] overflow-y-auto">
+                <iframe
+                  title="Email Preview"
+                  srcDoc={previewHtml}
+                  className="w-full min-h-[680px] border-none"
+                  sandbox="allow-same-origin"
+                />
+              </div>
+            ) : (
+              <div className="py-12 text-center text-xs text-stone-500">No preview HTML available.</div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-black text-white text-xs font-bold transition-all cursor-pointer"
+              >
+                Close Preview
               </button>
             </div>
           </div>

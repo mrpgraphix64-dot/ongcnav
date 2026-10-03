@@ -809,5 +809,80 @@ describe('MailService (Hostinger Mail API)', () => {
       expect(preview.text.toLowerCase()).not.toContain('each event morning');
       expect(preview.text.toLowerCase()).not.toContain('this morning');
     });
+
+    it('renders optional sponsor voucher when voucher is enabled', async () => {
+      const preview = await testService.previewEmployeeDailyPassEmail({
+        recipientEmail: 'emp@ongc.co.in',
+        employeeName: 'Rajesh Kumar',
+        attendeeName: 'Rajesh Kumar',
+        relation: 'Self',
+        cpf: '12345',
+        department: 'Drilling',
+        eventDate: '2026-10-11',
+        ticketNumber: 'TK-EMP-20261011-0001',
+        qrToken: 'tok_rajesh_voucher_1',
+        sponsorVoucher: {
+          enabled: true,
+          sponsorName: 'MAHAVIR JEWELLERS',
+          voucherLabel: 'GIFT VOUCHER',
+          offerHeadline: '₹5,000 OFF',
+          offerSubtext: 'ON MAKING CHARGES',
+          audienceLabel: 'FOR ONGC NAVRATRI 2026 PARTICIPANTS',
+          instructionText: 'Show this voucher at Mahavir Jewellers to avail the offer.',
+          validityNote: 'Valid: Lifetime | No expiry',
+          address: '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda',
+          phone: '90330 56098',
+          voucherImagePath: '/images/sponsors/mahavir-jewellers-voucher.jpg',
+          terms: [
+            'One voucher per bill.',
+            'Not redeemable for cash.',
+            'Not applicable on silver jewellery.',
+          ],
+        },
+      });
+
+      expect(preview.html).toContain('SPECIAL SPONSOR OFFER');
+      expect(preview.html).toContain('MAHAVIR JEWELLERS');
+      expect(preview.html).toContain('₹5,000 OFF');
+      expect(preview.html).toContain('ON MAKING CHARGES');
+      expect(preview.html).toContain('mahavir-jewellers-voucher.jpg');
+      expect(preview.html).toContain('Valid: Lifetime | No expiry');
+      expect(preview.html).toContain('2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda');
+      expect(preview.html).toContain('90330 56098');
+      expect(preview.html).toContain('One voucher per bill.');
+      expect(preview.text).toContain('MAHAVIR JEWELLERS');
+      expect(preview.text).toContain('₹5,000 OFF');
+      expect(preview.text).toContain('90330 56098');
+    });
+
+    it('does NOT render sponsor voucher when voucher is disabled', async () => {
+      const preview = await testService.previewEmployeeDailyPassEmail({
+        recipientEmail: 'emp@ongc.co.in',
+        employeeName: 'Rajesh Kumar',
+        attendeeName: 'Rajesh Kumar',
+        relation: 'Self',
+        cpf: '12345',
+        department: 'Drilling',
+        eventDate: '2026-10-11',
+        ticketNumber: 'TK-EMP-20261011-0001',
+        qrToken: 'tok_rajesh_voucher_2',
+        sponsorVoucher: {
+          enabled: false,
+          sponsorName: 'MAHAVIR JEWELLERS',
+          voucherLabel: 'GIFT VOUCHER',
+          offerHeadline: '₹5,000 OFF',
+          offerSubtext: 'ON MAKING CHARGES',
+          audienceLabel: 'FOR ONGC NAVRATRI 2026 PARTICIPANTS',
+          instructionText: 'Show this voucher at Mahavir Jewellers to avail the offer.',
+          validityNote: 'Valid: Lifetime | No expiry',
+          address: '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda',
+          phone: '90330 56098',
+        },
+      });
+
+      expect(preview.html).not.toContain('SPECIAL SPONSOR OFFER');
+      expect(preview.html).not.toContain('MAHAVIR JEWELLERS');
+      expect(preview.text).not.toContain('SPECIAL SPONSOR OFFER');
+    });
   });
 });

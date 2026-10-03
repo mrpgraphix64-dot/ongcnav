@@ -921,6 +921,14 @@ Reworkzone.com (https://reworkzone.com)
     const brandingUrls = getEmailBrandingUrls(this.webUrl);
     const attachments: EmailAttachment[] = [];
 
+    // Optional Sponsor Voucher Configuration (defaults to Mahavir Jewellers voucher if not overridden)
+    const voucher = data.sponsorVoucher;
+    const voucherImageUrl = voucher?.voucherImagePath
+      ? voucher.voucherImagePath.startsWith('http')
+        ? voucher.voucherImagePath
+        : `${this.webUrl.replace(/\/+$/, '')}${voucher.voucherImagePath}`
+      : brandingUrls.mahavirJewellersVoucherUrl;
+
     const formattedDate = this.formatDates([data.eventDate]);
     const cid = `qr-daily-${data.ticketNumber.replace(/[^A-Za-z0-9]/g, '')}`;
 
@@ -1162,6 +1170,81 @@ Reworkzone.com (https://reworkzone.com)
                 </ul>
               </div>
 
+              ${
+                voucher?.enabled
+                  ? `
+              <!-- ==================== SPECIAL SPONSOR OFFER / GIFT VOUCHER ==================== -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0 24px 0; background: linear-gradient(145deg, #071739 0%, #0B1E48 100%); border: 2px solid #D4AF37; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 14px rgba(7, 23, 57, 0.25);">
+                <tr>
+                  <td style="background: linear-gradient(135deg, #0A1C44 0%, #05102B 100%); padding: 12px 20px; text-align: center; border-bottom: 2px solid #D4AF37;">
+                    <div style="font-size: 10px; font-weight: 800; letter-spacing: 2.5px; color: #F5E6B3; text-transform: uppercase;">
+                      &#x2728; SPECIAL SPONSOR OFFER &bull; EXCLUSIVE VOUCHER
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 20px 16px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 800; color: #E5C378; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px;">
+                      OFFICIAL FESTIVAL SPONSOR
+                    </div>
+                    <div style="font-family: 'Cinzel', Georgia, serif, -apple-system; font-size: 22px; font-weight: 900; color: #FFFFFF; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px;">
+                      ${this.escapeHtml(voucher.sponsorName)}
+                    </div>
+                    <div style="display: inline-block; background-color: rgba(212, 175, 55, 0.15); border: 1px solid #D4AF37; border-radius: 20px; padding: 4px 16px; font-size: 10px; font-weight: 800; color: #F5E6B3; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px;">
+                      ${this.escapeHtml(voucher.voucherLabel)}
+                    </div>
+
+                    <!-- VOUCHER ARTWORK IMAGE (RESPONSIVE, FULL CONTAINER WIDTH) -->
+                    <div style="max-width: 560px; margin: 0 auto 16px auto; border-radius: 12px; overflow: hidden; border: 1px solid #D4AF37; box-shadow: 0 4px 16px rgba(0,0,0,0.3);">
+                      <img src="${voucherImageUrl}" alt="${this.escapeHtml(voucher.sponsorName)} ${this.escapeHtml(voucher.voucherLabel)}" width="560" style="display: block; width: 100%; max-width: 560px; height: auto; border: 0; margin: 0 auto;" />
+                    </div>
+
+                    <!-- OFFER HIGHLIGHT -->
+                    <div style="background: rgba(255, 255, 255, 0.05); border: 1px dashed #D4AF37; border-radius: 12px; padding: 14px 16px; margin: 0 auto 14px auto; max-width: 500px;">
+                      <div style="font-size: 24px; font-weight: 900; color: #FDFBF7; letter-spacing: 0.5px; line-height: 1.2;">
+                        ${this.escapeHtml(voucher.offerHeadline)}
+                      </div>
+                      <div style="font-size: 13px; font-weight: 800; color: #D4AF37; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 2px;">
+                        ${this.escapeHtml(voucher.offerSubtext)}
+                      </div>
+                      <div style="font-size: 11px; font-weight: 700; color: #CBD5E1; margin-top: 6px;">
+                        ${this.escapeHtml(voucher.audienceLabel)}
+                      </div>
+                    </div>
+
+                    <!-- STORE ADDRESS & PHONE -->
+                    ${
+                      voucher.address || voucher.phone
+                        ? `
+                    <div style="background: rgba(0, 0, 0, 0.25); border-radius: 10px; padding: 10px 14px; margin: 0 auto 12px auto; max-width: 500px; font-size: 11px; color: #E2E8F0; line-height: 1.5;">
+                      ${voucher.address ? `<div>&#x1F4CD; <strong>Store:</strong> ${this.escapeHtml(voucher.address)}</div>` : ''}
+                      ${voucher.phone ? `<div style="margin-top: 3px;">&#x1F4DE; <strong>Contact:</strong> <span style="color: #F5E6B3; font-weight: 800;">${this.escapeHtml(voucher.phone)}</span></div>` : ''}
+                    </div>
+                    `
+                        : ''
+                    }
+
+                    <!-- INSTRUCTIONS -->
+                    <p style="font-size: 12px; font-weight: 600; color: #F1F5F9; margin: 0 0 10px 0; line-height: 1.5;">
+                      &#x1F48E; ${this.escapeHtml(voucher.instructionText)}
+                    </p>
+
+                    <!-- TERMS & CONDITIONS NOTE -->
+                    <div style="font-size: 10px; color: #94A3B8; line-height: 1.5; border-top: 1px solid rgba(212, 175, 55, 0.3); padding-top: 10px; max-width: 500px; margin: 0 auto;">
+                      ${
+                        voucher.terms && voucher.terms.length > 0
+                          ? voucher.terms.map((t) => `&bull; ${this.escapeHtml(t)}`).join(' &nbsp;|&nbsp; ') + '<br/>'
+                          : ''
+                      }
+                      <strong style="color: #F5E6B3;">${this.escapeHtml(voucher.validityNote)}</strong>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              `
+                  : ''
+              }
+
               <!-- ==================== ORGANISED BY (BOTTOM CENTER) ==================== -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0 12px 0; border-top: 1px solid #E5D5BA; padding-top: 16px;">
                 <tr>
@@ -1204,6 +1287,21 @@ Reworkzone.com (https://reworkzone.com)
 </html>
     `.trim();
 
+    const voucherText =
+      voucher?.enabled
+        ? `
+--------------------------------------------------
+SPECIAL SPONSOR OFFER
+${voucher.sponsorName.toUpperCase()}
+${voucher.voucherLabel}
+${voucher.offerHeadline} ${voucher.offerSubtext}
+${voucher.audienceLabel}
+${voucher.address ? `Store: ${voucher.address}\n` : ''}${voucher.phone ? `Contact: ${voucher.phone}\n` : ''}${voucher.instructionText}
+${voucher.validityNote}
+--------------------------------------------------
+`
+        : '';
+
     const textContent = `
 ONGC NAVRATRI 2026
 Official Permanent Entry Pass
@@ -1228,7 +1326,7 @@ IMPORTANT PASS RULES:
 2. Daily Authorization: Entry is validated by the server at the gate on each registered date.
 3. Single Entry Per Day: Maximum one entry per person per event day. Repeated scans on the same day are rejected.
 4. Non-Transferable: Please carry valid ID matching your registration.
-
+${voucherText}
 Organised by Digant Art
 E-Ticketing & E-Pass System by Reworkzone.com
 ONGC Navratri 2026 Organizing Committee

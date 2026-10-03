@@ -13,6 +13,7 @@ export const EMAIL_BRANDING_PATHS = {
   omSanctuaryLogo: '/images/sponsors/om-sanctuary-palace-logo.png',
   lalkaarLogo: '/images/sponsors/lalkaar-news-logo.png',
   digantArtLogo: '/images/digant-art-logo.png',
+  mahavirJewellersVoucher: '/images/sponsors/mahavir-jewellers-voucher.jpg',
 } as const;
 
 export interface EmailBrandingUrls {
@@ -23,6 +24,7 @@ export interface EmailBrandingUrls {
   omSanctuaryLogoUrl: string;
   lalkaarLogoUrl: string;
   digantArtLogoUrl: string;
+  mahavirJewellersVoucherUrl: string;
 }
 
 export function getEmailBrandingUrls(baseUrl: string): EmailBrandingUrls {
@@ -35,5 +37,6 @@ export function getEmailBrandingUrls(baseUrl: string): EmailBrandingUrls {
     omSanctuaryLogoUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.omSanctuaryLogo}`,
     lalkaarLogoUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.lalkaarLogo}`,
     digantArtLogoUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.digantArtLogo}`,
+    mahavirJewellersVoucherUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.mahavirJewellersVoucher}`,
   };
 }

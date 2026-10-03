@@ -28,6 +28,7 @@ describe('EmployeeQrDeliveryService', () => {
         upsert: jest.fn().mockResolvedValue({}),
       },
       attendee: {
+        findFirst: jest.fn().mockResolvedValue({ id: BigInt(1) }),
         findMany: jest.fn(),
         update: jest.fn(),
       },
@@ -467,6 +468,70 @@ describe('EmployeeQrDeliveryService', () => {
       expect(res.failedCount).toBe(0);
       expect(res.unchangedCount).toBe(1);
       expect(prisma.employeeQrEmailDelivery.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Sponsor Voucher Configuration & Test Email', () => {
+    it('returns default Mahavir Jewellers config when no setting exists in DB', async () => {
+      prisma.setting.findUnique.mockResolvedValueOnce(null);
+      const config = await service.getSponsorVoucherConfig();
+      expect(config.enabled).toBe(true);
+      expect(config.sponsorName).toBe('MAHAVIR JEWELLERS');
+      expect(config.offerHeadline).toBe('₹5,000 OFF');
+      expect(config.offerSubtext).toBe('ON MAKING CHARGES');
+      expect(config.address).toContain('Chandkheda');
+      expect(config.phone).toBe('90330 56098');
+      expect(config.validityNote).toBe('Valid: Lifetime | No expiry');
+    });
+
+    it('persists sponsor voucher updates to DB setting', async () => {
+      prisma.setting.findUnique.mockResolvedValueOnce(null);
+      prisma.setting.upsert.mockResolvedValueOnce({
+        key: 'employee.sponsor_voucher_config',
+        value: JSON.stringify({
+          enabled: false,
+          sponsorName: 'MAHAVIR JEWELLERS',
+        }),
+      });
+
+      const updated = await service.updateSponsorVoucherConfig(
+        { enabled: false },
+        { id: '1', role: 'SUPER_ADMIN' },
+      );
+
+      expect(updated.enabled).toBe(false);
+      expect(prisma.setting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'employee.sponsor_voucher_config' },
+        }),
+      );
+    });
+
+    it('passes sponsor voucher configuration into test email dispatch', async () => {
+      prisma.attendee.findMany.mockResolvedValueOnce([mockAttendee(1, 'admin@ongc.co.in')]);
+      prisma.employeeQrEmailDelivery.create.mockResolvedValueOnce({
+        id: BigInt(999),
+        status: EmailDeliveryStatus.QUEUED,
+      });
+      prisma.employeeQrEmailDelivery.update.mockResolvedValue({});
+      mailService.sendEmployeeDailyPassEmail.mockResolvedValueOnce({
+        success: true,
+        messageId: 'hostinger-msg-123',
+      });
+
+      const result = await service.sendTestPermanentQrEmail('admin@ongc.co.in');
+      expect(result.success).toBe(true);
+      expect(mailService.sendEmployeeDailyPassEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientEmail: 'admin@ongc.co.in',
+          sponsorVoucher: expect.objectContaining({
+            sponsorName: 'MAHAVIR JEWELLERS',
+            offerHeadline: '₹5,000 OFF',
+            address: expect.stringContaining('Chandkheda'),
+            phone: '90330 56098',
+          }),
+        }),
+      );
     });
   });
 });

@@ -20,6 +20,8 @@ import {
   EmployeeQrReleaseSchedule,
   EmployeeQrEmailReleaseSummary,
   EmployeeQrEmailDeliveryItem,
+  SponsorVoucherConfig,
+  DEFAULT_SPONSOR_VOUCHER_CONFIG,
 } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import { classifyEmailError } from '../mail/email-error-classifier';
@@ -227,6 +229,64 @@ export class EmployeeQrDeliveryService {
       update: { value: JSON.stringify(updated) },
       create: { key: 'employee.qr_release_schedule', value: JSON.stringify(updated) },
     });
+
+    return updated;
+  }
+
+  /**
+   * Retrieves the current sponsor voucher configuration.
+   * Defaults to Mahavir Jewellers voucher (enabled=true) if not configured.
+   */
+  async getSponsorVoucherConfig(): Promise<SponsorVoucherConfig> {
+    const key = 'employee.sponsor_voucher_config';
+    const setting = await this.prisma.setting.findUnique({ where: { key } });
+    if (!setting?.value) {
+      return { ...DEFAULT_SPONSOR_VOUCHER_CONFIG };
+    }
+    try {
+      const parsed = JSON.parse(setting.value);
+      return {
+        ...DEFAULT_SPONSOR_VOUCHER_CONFIG,
+        ...parsed,
+      };
+    } catch {
+      return { ...DEFAULT_SPONSOR_VOUCHER_CONFIG };
+    }
+  }
+
+  /**
+   * Updates sponsor voucher configuration (toggle, sponsor details, offer text, validity).
+   */
+  async updateSponsorVoucherConfig(
+    partial: Partial<SponsorVoucherConfig>,
+    adminUser?: any,
+  ): Promise<SponsorVoucherConfig> {
+    const current = await this.getSponsorVoucherConfig();
+    const updated: SponsorVoucherConfig = {
+      ...current,
+      ...partial,
+    };
+
+    const key = 'employee.sponsor_voucher_config';
+    await this.prisma.setting.upsert({
+      where: { key },
+      update: { value: JSON.stringify(updated) },
+      create: { key, value: JSON.stringify(updated) },
+    });
+
+    if (adminUser) {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'SPONSOR_VOUCHER_CONFIG_UPDATE',
+          details: {
+            admin: adminUser.email || adminUser.name || 'Admin',
+            enabled: updated.enabled,
+            sponsorName: updated.sponsorName,
+            offerHeadline: updated.offerHeadline,
+          },
+        },
+      });
+    }
 
     return updated;
   }
@@ -908,6 +968,8 @@ export class EmployeeQrDeliveryService {
       } catch {}
     }
 
+    const voucherConfig = await this.getSponsorVoucherConfig();
+
     let sendResult: any = { success: true };
     if (this.mailService) {
       sendResult = await this.mailService.sendEmployeeDailyPassEmail({
@@ -922,13 +984,15 @@ export class EmployeeQrDeliveryService {
         referenceNumber: 'ONGC-TEST-001',
         department: 'Event Administration',
         pdfBuffer,
+        sponsorVoucher: voucherConfig,
       });
     }
 
-    // Record test delivery
+    // Record test delivery using an existing attendee id to satisfy foreign key constraint
+    const fallbackAttendee = await this.prisma.attendee.findFirst({ select: { id: true } });
     const delivery = await this.prisma.employeeQrEmailDelivery.create({
       data: {
-        attendeeId: BigInt(0), // Placeholder for test
+        attendeeId: fallbackAttendee?.id || BigInt(1),
         referenceNumber: 'ONGC-TEST-001',
         recipientEmail: testEmail.trim(),
         status: sendResult.success ? EmailDeliveryStatus.ACCEPTED : EmailDeliveryStatus.FAILED,
@@ -949,6 +1013,8 @@ export class EmployeeQrDeliveryService {
           deliveryId: delivery.id.toString(),
           success: sendResult.success,
           triggeredBy,
+          sponsorVoucherEnabled: voucherConfig.enabled,
+          sponsorName: voucherConfig.sponsorName,
         },
       },
     });
@@ -959,6 +1025,29 @@ export class EmployeeQrDeliveryService {
         ? `Test permanent QR pass email successfully dispatched to ${testEmail}.`
         : `Test email dispatch failed: ${sendResult.error}`,
     };
+  }
+
+  /**
+   * Generates the rendered HTML preview for the Super Admin Test Email / Release Preview.
+   * Uses the single shared email renderer with current sponsor voucher configuration.
+   */
+  async previewTestPermanentQrEmail() {
+    const voucherConfig = await this.getSponsorVoucherConfig();
+    const testToken = 'test_perm_qr_sample_preview_token';
+
+    return this.mailService.previewEmployeeDailyPassEmail({
+      recipientEmail: 'preview@ongcnavratri.reworkzone.in',
+      employeeName: 'Test Administrator',
+      attendeeName: 'Test Administrator',
+      relation: 'Self',
+      eventDate: '2026-10-11',
+      ticketNumber: 'TK-TEST-PERM-001',
+      qrToken: testToken,
+      cpf: 'TEST-ADMIN',
+      referenceNumber: 'ONGC-TEST-001',
+      department: 'Event Administration',
+      sponsorVoucher: voucherConfig,
+    });
   }
 
   /**
