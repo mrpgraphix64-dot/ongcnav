@@ -240,5 +240,39 @@ describe('3-Card Scratch & Reveal Experience (ONGC Navratri 2026)', () => {
       // Section renders cleanly
       expect(html).toContain('Card One');
     });
+
+    it('supports compact prop for reduced vertical footprint (~20-30% smaller)', () => {
+      const cards = getDefaultScratchCards();
+      const htmlCompact = ReactDOMServer.renderToStaticMarkup(
+        <ScratchCard
+          card={cards[1]}
+          isRevealed={false}
+          onReveal={jest.fn()}
+          cardIndex={1}
+          compact={true}
+        />,
+      );
+
+      // Compact layout renders with reduced min-height (320px) and compact styling
+      expect(htmlCompact).toContain('min-height:320px');
+      expect(htmlCompact).toContain('touch-action:none');
+      expect(htmlCompact).toContain('MAHAVIR JEWELLERS');
+    });
+
+    it('supports persistState=false for test environments without saving to localStorage', () => {
+      const refNo = 'ONGC-TEST-ISOLATED';
+      // Render with persistState={false}
+      const html = ReactDOMServer.renderToStaticMarkup(
+        <ScratchCardsSection
+          referenceNumber={refNo}
+          persistState={false}
+          compact={true}
+        />,
+      );
+
+      expect(html).toContain(refNo);
+      // No localStorage entry should be created for this test pass
+      expect(loadRevealedCardIds(refNo)).toEqual([]);
+    });
   });
 });

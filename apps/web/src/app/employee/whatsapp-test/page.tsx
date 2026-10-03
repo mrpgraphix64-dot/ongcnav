@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Info,
@@ -243,43 +243,48 @@ function DateChipGrid({
 
 function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 | 5 }) {
   const steps = [
-    { num: 1, label: 'Verification', icon: ShieldCheck },
-    { num: 2, label: 'Guidelines', icon: FileText },
-    { num: 3, label: 'Employee', icon: User },
-    { num: 4, label: 'Family', icon: Users },
-    { num: 5, label: 'Review', icon: ClipboardCheck },
+    { num: 1, label: 'Verification', short: 'Verify', icon: ShieldCheck },
+    { num: 2, label: 'Guidelines', short: 'Rules', icon: FileText },
+    { num: 3, label: 'Employee', short: 'Details', icon: User },
+    { num: 4, label: 'Family', short: 'Family', icon: Users },
+    { num: 5, label: 'Review', short: 'Review', icon: ClipboardCheck },
   ];
 
   return (
-    <div className="w-full pb-4 border-b border-stone-200">
-      <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+    <div className="w-full pb-3 border-b border-stone-200">
+      <div className="grid grid-cols-5 gap-1 sm:gap-2">
         {steps.map((s) => {
           const active = step === s.num;
           const done = step > s.num;
           return (
             <div
               key={s.num}
-              className={`flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-xl border transition-all ${
+              className={`flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-2 p-1.5 sm:p-2 rounded-xl border transition-all text-center sm:text-left ${
                 active
-                  ? 'bg-maroon text-white border-maroon shadow-sm'
+                  ? 'bg-maroon text-white border-maroon shadow-sm ring-1 ring-maroon/20'
                   : done
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : 'bg-cream-light text-ink-soft border-stone-200'
+                  : 'bg-stone-50 text-stone-500 border-stone-200'
               }`}
             >
               <div
-                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center text-[10px] sm:text-xs font-bold shrink-0 ${
+                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold shrink-0 ${
                   active
-                    ? 'bg-white/20 text-white'
+                    ? 'bg-white text-maroon font-black shadow-xs'
                     : done
                     ? 'bg-emerald-600 text-white'
-                    : 'bg-stone-200 text-ink-soft'
+                    : 'bg-stone-200 text-stone-600'
                 }`}
               >
                 {done ? <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> : s.num}
               </div>
-              <div className="hidden sm:block min-w-0">
-                <div className="text-[11px] font-bold truncate leading-tight">{s.label}</div>
+              <div className="min-w-0 leading-none">
+                <span className="block sm:hidden text-[9px] font-bold truncate max-w-[52px]">
+                  {s.short}
+                </span>
+                <span className="hidden sm:block text-[11px] font-bold truncate">
+                  {s.label}
+                </span>
               </div>
             </div>
           );
@@ -379,6 +384,17 @@ export default function WhatsAppTestRegistrationPage() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMemberForm[]>([]);
 
   const todayStr = typeof window !== 'undefined' ? new Date().toISOString().split('T')[0] : '2026-10-03';
+
+  const registrationFormRef = useRef<HTMLDivElement>(null);
+
+  const scrollToFormTop = () => {
+    if (typeof window !== 'undefined' && registrationFormRef.current) {
+      const yOffset = -96; // Offset to clear sticky header (80px header + 16px buffer)
+      const element = registrationFormRef.current;
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }
+  };
 
   const scrollTop = () => {
     if (typeof window !== 'undefined') {
@@ -597,13 +613,13 @@ export default function WhatsAppTestRegistrationPage() {
         }
 
         setStep(2);
-        scrollTop();
+        scrollToFormTop();
       } catch (err: any) {
         const msg =
           err.message ||
           'The CPF No. and Mobile No. do not match official records. In test mode, you can also use test CPF 99999.';
         setStepError(msg);
-        scrollTop();
+        scrollToFormTop();
       } finally {
         setVerifying(false);
       }
@@ -617,7 +633,7 @@ export default function WhatsAppTestRegistrationPage() {
         return;
       }
       setStep(3);
-      scrollTop();
+      scrollToFormTop();
       return;
     }
 
@@ -628,7 +644,7 @@ export default function WhatsAppTestRegistrationPage() {
         return;
       }
       setStep(4);
-      scrollTop();
+      scrollToFormTop();
       return;
     }
 
@@ -639,7 +655,7 @@ export default function WhatsAppTestRegistrationPage() {
         return;
       }
       setStep(5);
-      scrollTop();
+      scrollToFormTop();
       return;
     }
   };
@@ -648,7 +664,7 @@ export default function WhatsAppTestRegistrationPage() {
     setStepError('');
     setErrorMessage('');
     setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3 | 4 | 5) : s));
-    scrollTop();
+    scrollToFormTop();
   };
 
   const submitForm = async (e: React.FormEvent) => {
@@ -659,7 +675,7 @@ export default function WhatsAppTestRegistrationPage() {
     if (error) {
       setStepError(error);
       setErrorMessage(error);
-      scrollTop();
+      scrollToFormTop();
       return;
     }
 
@@ -670,7 +686,7 @@ export default function WhatsAppTestRegistrationPage() {
 
     setErrorMessage('');
     setSubmitting(true);
-    scrollTop();
+    scrollToFormTop();
 
     try {
       const cleanMobile = common.mobile.trim();
@@ -704,7 +720,7 @@ export default function WhatsAppTestRegistrationPage() {
       scrollTop();
     } catch (err: any) {
       setErrorMessage(err.message || 'Validation failed. Please check the entered details.');
-      scrollTop();
+      scrollToFormTop();
     } finally {
       setSubmitting(false);
     }
@@ -784,6 +800,34 @@ export default function WhatsAppTestRegistrationPage() {
           <p className="text-stone-600 text-xs sm:text-sm mt-1 max-w-lg mx-auto">
             This is a test registration. Your test pass and WhatsApp message are isolated from production employee records.
           </p>
+        </div>
+
+        {/* PERSISTENT SPONSOR BRANDING BANNER (VISIBLE ACROSS ALL STEPS & RESULTS) */}
+        <div className="mb-6 p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/20 to-amber-500/10 border-2 border-gold/60 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gold/20 border border-gold/40 flex items-center justify-center shrink-0 text-maroon">
+              <Sparkles className="w-5 h-5 text-amber-700" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 justify-center sm:justify-start">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-900 bg-gold/30 px-2 py-0.5 rounded-full border border-gold/50">
+                  Official Festival Sponsor
+                </span>
+              </div>
+              <h3 className="font-cinzel font-black text-base sm:text-lg text-maroon uppercase tracking-wider mt-0.5">
+                MAHAVIR JEWELLERS
+              </h3>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:text-right">
+            <div className="px-3 py-1.5 rounded-xl bg-white/80 border border-gold/40 shadow-xs">
+              <span className="text-xs sm:text-sm font-black text-rose-700 tracking-tight">₹5,000 OFF</span>
+              <span className="text-[10px] font-bold text-stone-700 block uppercase tracking-wider">On Making Charges</span>
+            </div>
+            <div className="hidden md:block text-[10px] font-semibold text-stone-500">
+              Lifetime | No Expiry
+            </div>
+          </div>
         </div>
 
         {submitting ? (
@@ -962,76 +1006,82 @@ export default function WhatsAppTestRegistrationPage() {
                 )}
 
                 {/* High-Fidelity WhatsApp Chat Bubble Container */}
-                <div className="bg-[#EFEAE2] p-4 sm:p-5 rounded-2xl border border-stone-300 shadow-inner relative">
-                  <div className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2 text-center">
-                    Simulated WhatsApp Message Preview
+                <div className="bg-[#EFEAE2] p-3 sm:p-5 rounded-2xl border border-stone-300 shadow-inner relative">
+                  <div className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2.5 text-center">
+                    WhatsApp Chat Preview (Simulated)
                   </div>
-                  {/* WhatsApp Message Bubble */}
-                  <div className="bg-white rounded-2xl rounded-tl-sm p-4 sm:p-5 shadow space-y-3.5 text-stone-900 text-xs sm:text-[13px] leading-relaxed relative">
-                    <div className="text-center font-black text-stone-900 text-sm tracking-wide">
+
+                  {/* Single Authentic WhatsApp Message Bubble — No nested cards or colored boxes */}
+                  <div className="bg-white rounded-2xl rounded-tl-xs p-3.5 sm:p-4 shadow-sm border border-stone-200/60 text-stone-900 text-xs sm:text-[13px] leading-relaxed max-w-[95%] sm:max-w-[480px] space-y-2.5 mx-auto">
+                    <div className="font-black text-stone-900 text-sm tracking-wide text-center">
                       🎉 *ONGC NAVRATRI 2026* 🎉
                     </div>
 
                     <div>
-                      Hello <strong>*{common.name}*</strong> 👋
+                      Hello <strong>*{common.name || 'Siddharth'}*</strong> 👋
                     </div>
 
                     <div>
                       Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨
                     </div>
 
-                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 font-mono font-bold text-amber-950 text-center">
-                      🎟️ *Reference No.: {testResult.referenceNumber}*
+                    <div>
+                      🎟️ <strong>*Reference No.:*</strong> {testResult.referenceNumber}
                     </div>
 
-                    <div className="text-stone-700 text-xs">
-                      Your permanent QR pass is your entry credential for the event.
-                      <br />
-                      Please keep your QR safe and do not share it.
+                    <div className="text-stone-700">
+                      Your permanent QR pass is your entry credential for the event. Please keep your QR safe and do not share it.
                     </div>
 
                     {testResult.sponsorVoucher && (
-                      <div className="border-t border-b border-dashed border-stone-300 py-3 space-y-2 text-stone-800 bg-stone-50/60 p-3 rounded-xl">
-                        <div className="text-center font-black tracking-wide text-xs text-amber-900">
+                      <div className="pt-1 space-y-0.5 text-stone-800">
+                        <div className="font-black text-amber-900 text-xs">
                           💎 *A SPECIAL GIFT FOR YOU* 💎
                         </div>
-                        <div className="font-extrabold text-stone-900 text-center text-sm">
+                        <div className="font-extrabold text-stone-900">
                           *{testResult.sponsorVoucher.sponsorName || 'MAHAVIR JEWELLERS'}*
                         </div>
-                        <div className="text-center">
-                          <span className="font-black text-base text-rose-700">
-                            ✨ *{testResult.sponsorVoucher.offerHeadline || '₹5,000 OFF'}*
-                          </span>
-                          <br />
-                          <span className="font-bold text-xs uppercase tracking-wider text-stone-800">
-                            *{testResult.sponsorVoucher.offerSubtext || 'ON MAKING CHARGES'}*
-                          </span>
+                        <div>
+                          ✨ <strong>*{testResult.sponsorVoucher.offerHeadline || '₹5,000 OFF'}*</strong> <strong>*{testResult.sponsorVoucher.offerSubtext || 'ON MAKING CHARGES'}*</strong>
                         </div>
-                        <div className="text-[11px] text-center text-stone-600 font-medium">
-                          {testResult.sponsorVoucher.validityNote || 'Valid: Lifetime | No expiry'}
+                        <div className="text-[11px] text-stone-600">
+                          {testResult.sponsorVoucher.validityNote || 'Lifetime | No expiry'}
                         </div>
-                        <div className="text-[10px] text-stone-600 pt-1 space-y-0.5 border-t border-stone-200">
-                          <div>📍 {testResult.sponsorVoucher.address || '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda'}</div>
-                          <div>📞 {testResult.sponsorVoucher.phone || '90330 56098'}</div>
+                        <div className="text-[11px] text-stone-600">
+                          📍 {testResult.sponsorVoucher.address || '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda'}
+                        </div>
+                        <div className="text-[11px] text-stone-600">
+                          📞 {testResult.sponsorVoucher.phone || '90330 56098'}
                         </div>
                       </div>
                     )}
 
-                    <div className="space-y-1">
+                    <div className="pt-1 space-y-0.5">
                       <div className="font-bold text-stone-900 text-xs">
-                        🎟️ *VIEW YOUR E-PASS*
+                        🎟️ *VIEW YOUR E-PASS:*
                       </div>
-                      <div className="text-blue-700 underline font-mono text-[11px] break-all">
+                      <a
+                        href={testResult.passUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#027EB5] underline font-mono text-[11px] sm:text-xs break-all block"
+                      >
                         {testResult.passUrl}
-                      </div>
+                      </a>
                     </div>
 
-                    <div className="p-2 rounded-lg bg-amber-100/70 text-amber-900 text-[11px] font-semibold">
-                      ⚠️ This is a test registration. The generated pass is isolated from production employee records.
+                    <div className="text-[11px] text-stone-600 italic pt-1">
+                      ⚠️ *Notice:* This is a test registration. The generated pass is isolated from production employee records.
                     </div>
 
-                    <div className="text-center font-extrabold text-xs text-stone-800 pt-1">
+                    <div className="font-extrabold text-xs text-stone-800 pt-1 text-center">
                       ✨ See you at ONGC Navratri 2026! ✨
+                    </div>
+
+                    {/* WhatsApp Timestamp and Blue Double Checkmarks */}
+                    <div className="flex justify-end items-center gap-1 text-[10px] text-stone-400 select-none pt-1">
+                      <span>10:42 PM</span>
+                      <span className="text-[#53BDEB] font-bold">✓✓</span>
                     </div>
                   </div>
                 </div>
@@ -1126,11 +1176,15 @@ export default function WhatsAppTestRegistrationPage() {
             </div>
 
             {/* AESTHETIC 3-CARD SCRATCH & REVEAL SECTION */}
-            <ScratchCardsSection referenceNumber={testResult.referenceNumber} />
+            <ScratchCardsSection
+              referenceNumber={testResult.referenceNumber}
+              persistState={false}
+              compact={true}
+            />
           </div>
         ) : (
           /* STEPPED WIZARD CARD */
-          <div className="bg-white rounded-3xl p-6 sm:p-10 border border-gold/40 shadow-xl space-y-6">
+          <div ref={registrationFormRef} className="bg-white rounded-3xl p-6 sm:p-10 border border-gold/40 shadow-xl space-y-6">
             {/* Quick Preset helper for testing team */}
             <div className="flex items-center justify-between pb-2 border-b border-stone-100">
               <span className="text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">

@@ -132,12 +132,14 @@ export function filterVisibleScratchCards(cards: ScratchCardItem[]): ScratchCard
 export function drawFestiveScratchSurface(
   canvas: HTMLCanvasElement,
   cardBadge: string = 'NAVRATRI 2026',
+  cssWidth?: number,
+  cssHeight?: number,
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  const width = canvas.width;
-  const height = canvas.height;
+  const width = cssWidth ?? canvas.width;
+  const height = cssHeight ?? canvas.height;
 
   // 1. Base metallic gold gradient
   const grad = ctx.createLinearGradient(0, 0, width, height);
@@ -184,8 +186,8 @@ export function drawFestiveScratchSurface(
 
   // 4. Subtle center mandala / rangoli circle
   const centerX = width / 2;
-  const centerY = height / 2 - 15;
-  const radius = Math.min(width, height) * 0.32;
+  const centerY = height / 2 - (height > 360 ? 15 : 6);
+  const radius = Math.min(width, height) * (height > 360 ? 0.32 : 0.28);
 
   ctx.save();
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
@@ -212,11 +214,12 @@ export function drawFestiveScratchSurface(
   }
   ctx.restore();
 
-  // 5. Center Badge Card
-  const badgeW = Math.min(width - 50, 220);
-  const badgeH = 110;
+  // 5. Center Badge Card (Adaptive height for compact card)
+  const isCompact = height <= 360;
+  const badgeW = Math.min(width - 40, isCompact ? 190 : 220);
+  const badgeH = isCompact ? 86 : 110;
   const badgeX = (width - badgeW) / 2;
-  const badgeY = centerY - badgeH / 2 + 5;
+  const badgeY = centerY - badgeH / 2 + (isCompact ? 0 : 5);
 
   ctx.save();
   ctx.fillStyle = '#FFFDF7'; // Warm ivory pill
@@ -225,7 +228,7 @@ export function drawFestiveScratchSurface(
   ctx.shadowOffsetY = 4;
 
   // Draw rounded rect
-  const r = 16;
+  const r = 14;
   ctx.beginPath();
   ctx.moveTo(badgeX + r, badgeY);
   ctx.lineTo(badgeX + badgeW - r, badgeY);
@@ -249,36 +252,38 @@ export function drawFestiveScratchSurface(
   ctx.textBaseline = 'middle';
 
   // Festive Tag
-  ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+  ctx.font = 'bold 9px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#800020'; // Deep Maroon
   ctx.letterSpacing = '1px';
-  ctx.fillText(cardBadge.toUpperCase(), centerX, badgeY + 22);
+  ctx.fillText(cardBadge.toUpperCase(), centerX, badgeY + (isCompact ? 16 : 22));
 
   // Main Callout: "SCRATCH TO REVEAL"
-  ctx.font = '900 15px Georgia, serif';
+  ctx.font = isCompact ? '900 13px Georgia, serif' : '900 15px Georgia, serif';
   ctx.fillStyle = '#5B0612';
-  ctx.fillText('SCRATCH TO REVEAL', centerX, badgeY + 48);
+  ctx.fillText('SCRATCH TO REVEAL', centerX, badgeY + (isCompact ? 38 : 48));
 
   // Decorative divider in badge
   ctx.strokeStyle = '#E5C158';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(centerX - 35, badgeY + 63);
-  ctx.lineTo(centerX + 35, badgeY + 63);
+  ctx.moveTo(centerX - 30, badgeY + (isCompact ? 50 : 63));
+  ctx.lineTo(centerX + 30, badgeY + (isCompact ? 50 : 63));
   ctx.stroke();
 
   // Subtitle / gesture prompt
-  ctx.font = '500 10px system-ui, -apple-system, sans-serif';
+  ctx.font = '500 9px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#785A28';
-  ctx.fillText('Rub with finger or mouse', centerX, badgeY + 80);
-  ctx.fillText('✨', centerX, badgeY + 95);
+  ctx.fillText('Rub with finger or mouse', centerX, badgeY + (isCompact ? 64 : 80));
+  if (!isCompact) {
+    ctx.fillText('✨', centerX, badgeY + 95);
+  }
   ctx.restore();
 
   // 6. Bottom subtle indicator
   ctx.save();
   ctx.textAlign = 'center';
-  ctx.font = '600 11px system-ui, -apple-system, sans-serif';
+  ctx.font = '600 10px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#614810';
-  ctx.fillText('TOUCH & SCRATCH', centerX, height - 26);
+  ctx.fillText('TOUCH & SCRATCH', centerX, height - (isCompact ? 18 : 26));
   ctx.restore();
 }

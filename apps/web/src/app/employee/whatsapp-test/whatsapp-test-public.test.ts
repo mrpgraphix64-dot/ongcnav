@@ -218,5 +218,42 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
       expect(pageSrc).not.toContain("Chintan Patel");
       expect(pageSrc).not.toContain("chintan@ongc.co.in");
     });
+
+    it('renders the persistent Mahavir Jewellers sponsor banner above registration form', () => {
+      expect(pageSrc).toContain('MAHAVIR JEWELLERS');
+      expect(pageSrc).toContain('Official Festival Sponsor');
+      expect(pageSrc).toContain('₹5,000 OFF');
+      expect(pageSrc).toContain('On Making Charges');
+      expect(pageSrc).toContain('Lifetime | No Expiry');
+    });
+
+    it('implements responsive mobile step indicator with centered numbers and compact labels', () => {
+      expect(pageSrc).toContain('grid grid-cols-5');
+      expect(pageSrc).toContain('Verify');
+      expect(pageSrc).toContain('Rules');
+      expect(pageSrc).toContain('Details');
+      expect(pageSrc).toContain('Family');
+      expect(pageSrc).toContain('Review');
+      expect(pageSrc).toContain('rounded-full');
+    });
+
+    it('binds registrationFormRef and scrolls only to form top with sticky header offset', () => {
+      expect(pageSrc).toContain('ref={registrationFormRef}');
+      expect(pageSrc).toContain('const scrollToFormTop = () =>');
+      expect(pageSrc).toContain('yOffset = -96');
+    });
+
+    it('configures ScratchCardsSection with persistState={false} and compact={true} in test mode', () => {
+      expect(pageSrc).toContain('persistState={false}');
+      expect(pageSrc).toContain('compact={true}');
+    });
+
+    it('renders simulated WhatsApp message as a single realistic chat bubble without nested card containers', () => {
+      expect(pageSrc).toContain('WhatsApp Chat Preview (Simulated)');
+      expect(pageSrc).toContain('Single Authentic WhatsApp Message Bubble');
+      expect(pageSrc).toContain('text-[#53BDEB] font-bold'); // WhatsApp blue ticks
+      expect(pageSrc).toContain('✓✓');
+      expect(pageSrc).toContain('text-[#027EB5]'); // WhatsApp link color
+    });
   });
 });

@@ -27,6 +27,8 @@ interface ScratchCardsSectionProps {
   sponsorConfig?: SponsorVoucherConfig | null;
   customCards?: ScratchCardItem[];
   passLookupUrl?: string;
+  persistState?: boolean;
+  compact?: boolean;
 }
 
 export default function ScratchCardsSection({
@@ -34,6 +36,8 @@ export default function ScratchCardsSection({
   sponsorConfig,
   customCards,
   passLookupUrl = '/employee/my-tickets',
+  persistState = true,
+  compact = false,
 }: ScratchCardsSectionProps) {
   // Get cards list (handles sponsor-disabled state automatically)
   const initialCards = customCards ?? getDefaultScratchCards(sponsorConfig);
@@ -45,13 +49,21 @@ export default function ScratchCardsSection({
   // Load revealed state on mount for this specific reference number
   useEffect(() => {
     setMounted(true);
-    const saved = loadRevealedCardIds(referenceNumber);
-    setRevealedIds(saved);
-  }, [referenceNumber]);
+    if (persistState) {
+      const saved = loadRevealedCardIds(referenceNumber);
+      setRevealedIds(saved);
+    } else {
+      setRevealedIds([]);
+    }
+  }, [referenceNumber, persistState]);
 
   const handleRevealCard = (cardId: string) => {
-    const updated = saveRevealedCardId(referenceNumber, cardId);
-    setRevealedIds([...updated]);
+    if (persistState) {
+      const updated = saveRevealedCardId(referenceNumber, cardId);
+      setRevealedIds([...updated]);
+    } else {
+      setRevealedIds((prev) => (prev.includes(cardId) ? prev : [...prev, cardId]));
+    }
   };
 
   const allRevealed =
@@ -63,7 +75,7 @@ export default function ScratchCardsSection({
   return (
     <section
       aria-label="Festive Scratch and Reveal Surprises"
-      className="w-full mt-10 space-y-8"
+      className={`w-full ${compact ? 'mt-6 space-y-5' : 'mt-10 space-y-8'}`}
     >
       {/* ------------------------------------------------------------- */}
       {/* FESTIVE HEADER SECTION                                        */}
@@ -130,7 +142,7 @@ export default function ScratchCardsSection({
       {/* ------------------------------------------------------------- */}
       {/* 3 CARDS RESPONSIVE GRID                                       */}
       {/* ------------------------------------------------------------- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-6 items-stretch">
+      <div className={`grid grid-cols-1 md:grid-cols-3 ${compact ? 'gap-4 sm:gap-5' : 'gap-6 sm:gap-6'} items-stretch`}>
         {activeCards.map((card, idx) => (
           <ScratchCard
             key={card.id}
@@ -138,6 +150,7 @@ export default function ScratchCardsSection({
             cardIndex={idx}
             isRevealed={mounted && revealedIds.includes(card.id)}
             onReveal={handleRevealCard}
+            compact={compact}
           />
         ))}
       </div>
