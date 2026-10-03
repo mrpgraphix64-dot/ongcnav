@@ -119,12 +119,15 @@ export default function WhatsAppTestLabPage() {
     isConfigured: boolean;
     templateName?: string;
     templateLanguage?: string;
+    passTemplateName?: string;
+    passTemplateConfigured?: boolean;
   } | null>(null);
 
   const [sendResultNotice, setSendResultNotice] = useState<{
     success: boolean;
     status: string;
     message: string;
+    safeRecipient?: string | null;
     providerMessageId?: string | null;
     metaErrorCode?: number | null;
     httpStatus?: number | null;
@@ -355,11 +358,23 @@ export default function WhatsAppTestLabPage() {
           message:
             'PREVIEW ONLY — WHATSAPP PROVIDER NOT CONFIGURED. To deliver real WhatsApp messages, configure WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID in environment.',
         });
+      } else if (res.status === 'TEMPLATE_NOT_CONFIGURED') {
+        setSendResultNotice({
+          success: false,
+          status: 'CUSTOM TEMPLATE NOT CONFIGURED',
+          message:
+            res.error ||
+            'Dedicated WhatsApp template for dynamic employee pass messages is not configured. Meta Cloud API requires an approved custom template with parameters ({{1}}=employeeName, {{2}}=referenceNumber, {{3}}=ePassUrl). The generic "hello_world" template cannot deliver pass text. Message preview is ready below.',
+          safeRecipient: res.safeRecipient,
+          templateName: res.templateName,
+          templateLanguage: res.templateLanguage,
+        });
       } else if (res.success) {
         setSendResultNotice({
           success: true,
           status: 'MESSAGE SENT',
           message: `Test WhatsApp template message successfully dispatched via Meta Cloud API to safe recipient: ${res.safeRecipient}`,
+          safeRecipient: res.safeRecipient,
           providerMessageId: res.providerMessageId,
           templateName: res.templateName,
           templateLanguage: res.templateLanguage,
@@ -369,6 +384,7 @@ export default function WhatsAppTestLabPage() {
           success: false,
           status: 'MESSAGE FAILED',
           message: res.error || 'Failed to send WhatsApp message via provider.',
+          safeRecipient: res.safeRecipient,
           httpStatus: res.httpStatus,
           metaErrorCode: res.metaErrorCode,
           templateName: res.templateName,
@@ -380,6 +396,70 @@ export default function WhatsAppTestLabPage() {
         success: false,
         status: 'ERROR',
         message: err.message || 'An unexpected error occurred.',
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Dispatch basic hello_world ping to safe recipient for Meta connectivity verification
+  const handlePingHelloWorld = async () => {
+    if (!testResult) return;
+    const targetPhone = testResult.safeRecipient || safeRecipient;
+    if (!targetPhone) {
+      setSendResultNotice({
+        success: false,
+        status: 'TEST RECIPIENT NOT CONFIGURED',
+        message: 'Configure WHATSAPP_TEST_RECIPIENT in environment to test ping.',
+      });
+      return;
+    }
+
+    if (!window.confirm(`Send a basic 'hello_world' Meta ping to safe test recipient (${targetPhone})?`)) {
+      return;
+    }
+
+    setSending(true);
+    setSendResultNotice(null);
+
+    try {
+      const res = await fetchApi('/admin/employees/whatsapp-test/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          referenceNumber: testResult.referenceNumber,
+          templateOverride: 'hello_world',
+          includeVoucherImage: false,
+        }),
+      });
+
+      if (res.success) {
+        setSendResultNotice({
+          success: true,
+          status: 'PING SENT (hello_world)',
+          message: `Meta Cloud API connectivity verified! 'hello_world' template delivered to safe recipient: ${res.safeRecipient}`,
+          safeRecipient: res.safeRecipient,
+          providerMessageId: res.providerMessageId,
+          templateName: 'hello_world',
+          templateLanguage: res.templateLanguage || 'en_US',
+        });
+      } else {
+        setSendResultNotice({
+          success: false,
+          status: 'PING FAILED',
+          message: res.error || 'Failed to ping Meta API.',
+          safeRecipient: res.safeRecipient,
+          httpStatus: res.httpStatus,
+          metaErrorCode: res.metaErrorCode,
+          templateName: 'hello_world',
+          templateLanguage: res.templateLanguage || 'en_US',
+        });
+      }
+    } catch (err: any) {
+      setSendResultNotice({
+        success: false,
+        status: 'ERROR',
+        message: err.message || 'An unexpected error occurred during ping.',
       });
     } finally {
       setSending(false);
@@ -1183,32 +1263,37 @@ export default function WhatsAppTestLabPage() {
         {testResult && (
           <div
             id="whatsapp-preview-section"
-            className="bg-white rounded-2xl border-2 border-emerald-500 shadow-lg p-5 sm:p-6 space-y-6"
+            className="bg-white rounded-2xl border-2 border-emerald-500 shadow-xl p-5 sm:p-7 space-y-6"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-stone-200 gap-3">
-              <div>
-                <span className="text-[11px] font-black text-emerald-700 uppercase tracking-widest block mb-0.5">
-                  WHATSAPP MESSAGE PREVIEW
-                </span>
-                <h2 className="text-lg sm:text-xl font-black text-stone-900 font-outfit">
-                  Test Pass Generated &amp; Message Ready
+            {/* Header: TEST PASS GENERATED */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-stone-200 gap-3">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-black tracking-widest uppercase">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                  TEST PASS GENERATED
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-stone-900 font-outfit">
+                  Employee Pass Generated &amp; WhatsApp Message Ready
                 </h2>
+                <p className="text-xs text-stone-500">
+                  Isolated test record created with permanent QR architecture and test markers.
+                </p>
               </div>
 
               {/* Status Badge */}
               <div>
                 {!testResult.safeRecipient ? (
-                  <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-900 font-bold text-xs flex items-center gap-1.5 border border-red-300">
+                  <span className="px-3.5 py-1.5 rounded-full bg-red-100 text-red-900 font-bold text-xs flex items-center gap-1.5 border border-red-300 shadow-xs">
                     <AlertTriangle className="w-3.5 h-3.5 text-red-700" />
                     TEST RECIPIENT NOT CONFIGURED
                   </span>
                 ) : testResult.isConfigured ? (
-                  <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-1.5 border border-emerald-300">
+                  <span className="px-3.5 py-1.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-1.5 border border-emerald-300 shadow-xs">
                     <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
                     TEST MESSAGE READY
                   </span>
                 ) : (
-                  <span className="px-3 py-1.5 rounded-full bg-amber-100 text-amber-900 font-bold text-xs flex items-center gap-1.5 border border-amber-300">
+                  <span className="px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 font-bold text-xs flex items-center gap-1.5 border border-amber-300 shadow-xs">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
                     PREVIEW ONLY — WHATSAPP PROVIDER NOT CONFIGURED
                   </span>
@@ -1216,31 +1301,67 @@ export default function WhatsAppTestLabPage() {
               </div>
             </div>
 
-            {/* Safe Test Recipient Banner */}
-            <div
-              className={`p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs border ${
-                testResult.safeRecipient
-                  ? 'bg-stone-100 border-stone-300'
-                  : 'bg-amber-50 border-amber-300'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-stone-600">TO (SAFE TEST RECIPIENT):</span>
-                {testResult.safeRecipient ? (
-                  <span className="font-mono font-extrabold text-stone-900 bg-white px-2.5 py-1 rounded border border-stone-300">
-                    {testResult.safeRecipient}
-                  </span>
-                ) : (
-                  <span className="font-semibold text-amber-800 bg-amber-100 px-2.5 py-1 rounded border border-amber-300">
-                    Test recipient is not configured.
-                  </span>
-                )}
+            {/* Generated Pass Summary Strip: Reference No, Safe Recipient, E-Pass Link */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-stone-50 rounded-xl border border-stone-200 text-xs">
+              {/* Reference No */}
+              <div className="bg-white p-3 rounded-lg border border-stone-200/80 shadow-xs space-y-1">
+                <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">
+                  Reference No.
+                </span>
+                <span className="font-mono font-black text-stone-900 text-sm block">
+                  {testResult.referenceNumber}
+                </span>
+                <span className="text-[10px] text-stone-400">
+                  Isolated test reference
+                </span>
               </div>
-              <span className="text-stone-500 italic">
-                {testResult.safeRecipient
-                  ? 'Test messages are sent only to this number.'
-                  : 'Set WHATSAPP_TEST_RECIPIENT in environment to enable sending.'}
-              </span>
+
+              {/* Safe WhatsApp Recipient */}
+              <div className="bg-white p-3 rounded-lg border border-stone-200/80 shadow-xs space-y-1">
+                <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">
+                  Safe WhatsApp Recipient
+                </span>
+                <span className="font-mono font-black text-emerald-800 text-sm block">
+                  {testResult.safeRecipient || 'Not Configured'}
+                </span>
+                <span className="text-[10px] text-stone-400">
+                  Real employee numbers are never contacted
+                </span>
+              </div>
+
+              {/* E-Pass Link */}
+              <div className="bg-white p-3 rounded-lg border border-stone-200/80 shadow-xs space-y-1 flex flex-col justify-between">
+                <div>
+                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">
+                    Permanent E-Pass Link
+                  </span>
+                  <span className="text-[11px] text-stone-600 truncate block font-mono">
+                    /employee/my-tickets?ref={testResult.referenceNumber}
+                  </span>
+                </div>
+                <a
+                  href={testResult.passUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 underline pt-0.5"
+                >
+                  <span>Open Test E-Pass</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Template Notice / Requirements Banner */}
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 leading-relaxed">
+                <div>
+                  <strong>Meta Template Architecture:</strong> To deliver dynamic pass parameters ({'{{1}}'}=employeeName, {'{{2}}'}=referenceNumber, {'{{3}}'}=ePassUrl), Meta requires an approved custom template configured via <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-[11px]">WHATSAPP_PASS_TEMPLATE_NAME</code>.
+                </div>
+                <div className="text-[11px] text-amber-800">
+                  The built-in <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">hello_world</code> template cannot deliver pass text. If custom template is unapproved, preview mode is displayed.
+                </div>
+              </div>
             </div>
 
             {/* High-Fidelity WhatsApp Chat Bubble Container */}
@@ -1257,8 +1378,8 @@ export default function WhatsAppTestLabPage() {
                   Hello *{name}* 👋
                 </div>
 
-                <div className="text-stone-700">
-                  Your ONGC Navratri E-Pass is ready! 🪔✨
+                <div className="text-stone-800">
+                  Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨
                 </div>
 
                 {/* Reference Number */}
@@ -1266,8 +1387,9 @@ export default function WhatsAppTestLabPage() {
                   🎟️ *Reference No.: {testResult.referenceNumber}*
                 </div>
 
-                <div className="text-stone-600 text-xs">
-                  Your permanent QR pass is your entry credential for the event. Please keep your QR safe and show it at the entry gate.
+                <div className="text-stone-600 text-xs space-y-1">
+                  <div>Your permanent QR pass is your entry credential for the event.</div>
+                  <div>Please keep your QR safe and do not share it.</div>
                 </div>
 
                 <div className="border-t border-stone-200 my-2" />
@@ -1286,8 +1408,8 @@ export default function WhatsAppTestLabPage() {
                       *ON MAKING CHARGES*
                     </span>
                   </div>
-                  <div className="text-center text-[11px] text-blue-200 italic">
-                    _Lifetime | No expiry_
+                  <div className="text-center text-[11px] text-blue-200">
+                    Valid: Lifetime | No expiry
                   </div>
                   <div className="text-[11px] text-blue-100 pt-1 border-t border-blue-800/80 space-y-0.5">
                     <div>📍 2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda</div>
@@ -1308,7 +1430,7 @@ export default function WhatsAppTestLabPage() {
                   </div>
                   <div className="p-2 bg-stone-50 text-[10px] text-stone-600 flex items-center justify-between border-t border-stone-200">
                     <span className="font-bold text-stone-800 flex items-center gap-1">
-                      📷 IMAGE ATTACHMENT: Mahavir Jewellers Voucher
+                      📷 SPONSOR VOUCHER: Mahavir Jewellers
                     </span>
                     <span className="text-stone-400">JPG</span>
                   </div>
@@ -1326,8 +1448,8 @@ export default function WhatsAppTestLabPage() {
                   </div>
                 </div>
 
-                <div className="text-[11px] text-stone-500 italic">
-                  Please do not share your QR/e-pass with anyone.
+                <div className="text-[11px] text-stone-600 bg-amber-50/80 p-2 rounded-lg border border-amber-200/60 font-medium">
+                  ⚠️ This is a test registration. The generated pass is isolated from production employee records.
                 </div>
 
                 <div className="text-center font-bold text-stone-800 text-xs pt-1">
@@ -1341,16 +1463,29 @@ export default function WhatsAppTestLabPage() {
               </div>
             </div>
 
-            {/* Test Action Controls */}
+            {/* Test Action Controls: SEND TEST WHATSAPP + Ping Meta + Preview Copy */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-stone-200">
-              <button
-                type="button"
-                onClick={handleCopyMessage}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-stone-300 hover:bg-stone-50 text-stone-800 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Copied Message' : 'PREVIEW WHATSAPP (Copy Text)'}
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleCopyMessage}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-stone-300 hover:bg-stone-50 text-stone-800 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  {copied ? 'Copied Message' : 'PREVIEW WHATSAPP (Copy Text)'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePingHelloWorld}
+                  disabled={sending || !testResult.safeRecipient}
+                  title="Verify Meta Cloud API connectivity to safe recipient with built-in hello_world template"
+                  className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl border border-indigo-300 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-900 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Ping Meta (hello_world)</span>
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -1371,7 +1506,7 @@ export default function WhatsAppTestLabPage() {
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    SEND WHATSAPP TEST
+                    SEND TEST WHATSAPP
                   </>
                 )}
               </button>

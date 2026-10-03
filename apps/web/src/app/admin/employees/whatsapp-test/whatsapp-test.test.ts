@@ -81,6 +81,33 @@ describe('WhatsApp Test Lab - Frontend Unit Tests', () => {
       expect(message).not.toContain('dob=');
       expect(message).not.toContain('password');
     });
+
+    it('generates the exact test-isolated copy when isTest is true', () => {
+      const message = buildEmployeeWhatsAppMessage({
+        employeeName: 'Priya Sharma',
+        referenceNumber: 'ONGC-TEST-88888',
+        passUrl: 'https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-88888',
+        sponsorVoucher: DEFAULT_SPONSOR_VOUCHER_CONFIG,
+        isTest: true,
+      });
+
+      expect(message).toContain('🎉 *ONGC NAVRATRI 2026* 🎉');
+      expect(message).toContain('Hello *Priya Sharma* 👋');
+      expect(message).toContain('Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨');
+      expect(message).toContain('🎟️ *Reference No.: ONGC-TEST-88888*');
+      expect(message).toContain('Your permanent QR pass is your entry credential for the event.');
+      expect(message).toContain('Please keep your QR safe and do not share it.');
+      expect(message).toContain('💎 *A SPECIAL GIFT FOR YOU* 💎');
+      expect(message).toContain('*MAHAVIR JEWELLERS*');
+      expect(message).toContain('✨ *₹5,000 OFF*');
+      expect(message).toContain('*ON MAKING CHARGES*');
+      expect(message).toContain('Valid: Lifetime | No expiry');
+      expect(message).toContain('🎟️ *VIEW YOUR E-PASS*');
+      expect(message).toContain('https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-88888');
+      expect(message).toContain('⚠️ This is a test registration. The generated pass is isolated from production employee records.');
+      expect(message).not.toContain('Please do not share your QR/e-pass with anyone.');
+      expect(message).toContain('✨ See you at ONGC Navratri 2026! ✨');
+    });
   });
 
   describe('Delivery Status & Safe Recipient Guarding', () => {
@@ -102,6 +129,7 @@ describe('WhatsApp Test Lab - Frontend Unit Tests', () => {
         providerStatus: 'READY',
         safeRecipient: '+918401060482',
         phoneNumberIdConfigured: true,
+        accessTokenConfigured: true,
         businessAccountConfigured: true,
         apiVersion: 'v25.0',
         testRecipientConfigured: true,

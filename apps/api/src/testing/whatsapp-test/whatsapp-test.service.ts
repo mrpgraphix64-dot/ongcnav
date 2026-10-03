@@ -7,9 +7,13 @@ import {
   SponsorVoucherConfig,
   buildEmployeeWhatsAppMessage,
   WhatsAppTestSubmissionResultDto,
+} from '@ongc/shared-types';
+import {
   EmployeeCategory,
   AttendeeStatus,
-} from '@ongc/shared-types';
+  RegistrationStatus,
+  DailyPassStatus,
+} from '@prisma/client';
 import * as crypto from 'crypto';
 import {
   SubmitWhatsAppTestPassDto,
@@ -92,6 +96,8 @@ export class WhatsAppTestService {
       templateConfigured: providerInfo.templateConfigured,
       templateName: providerInfo.templateName,
       templateLanguage: providerInfo.templateLanguage,
+      passTemplateName: providerInfo.passTemplateName,
+      passTemplateConfigured: providerInfo.passTemplateConfigured,
       sponsorVoucher,
       voucherImageUrl,
       isolationMode: 'ISOLATED_TEST_MODE',
@@ -134,6 +140,7 @@ export class WhatsAppTestService {
         designation: 'Test Participant',
         department: 'Test Lab Administration',
         employeeCategory: categoryEnum,
+        registrationStatus: RegistrationStatus.APPROVED,
         bookingDays: dto.bookingDays || [],
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
         dateOfJoining: dto.dateOfJoining ? new Date(dto.dateOfJoining) : null,
@@ -146,6 +153,7 @@ export class WhatsAppTestService {
         phone: cleanMobile,
         email: dto.email.trim().toLowerCase(),
         employeeCategory: categoryEnum,
+        registrationStatus: RegistrationStatus.APPROVED,
         bookingDays: dto.bookingDays || [],
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
         dateOfJoining: dto.dateOfJoining ? new Date(dto.dateOfJoining) : null,
@@ -169,6 +177,23 @@ export class WhatsAppTestService {
       },
     });
 
+    // 2b. Generate Daily Employee Passes with isTest: true for permanent QR test architecture
+    if (Array.isArray(dto.bookingDays) && dto.bookingDays.length > 0) {
+      for (const day of dto.bookingDays) {
+        const dayToken = `wa_test_day_${crypto.randomBytes(12).toString('hex')}`;
+        await this.prisma.dailyEmployeePass.create({
+          data: {
+            attendeeId: attendee.id,
+            eventDate: day,
+            qrToken: dayToken,
+            status: DailyPassStatus.ACTIVE,
+            isTest: true,
+            testSessionId: testRefNo,
+          },
+        });
+      }
+    }
+
     // 3. Handle family members if present
     if (Array.isArray(dto.familyMembers) && dto.familyMembers.length > 0) {
       for (const fm of dto.familyMembers) {
@@ -187,7 +212,7 @@ export class WhatsAppTestService {
           },
         });
 
-        await this.prisma.attendee.create({
+        const famAttendee = await this.prisma.attendee.create({
           data: {
             registrationType: 'EMPLOYEE',
             name: fm.name.trim(),
@@ -203,6 +228,21 @@ export class WhatsAppTestService {
             isLoadTest: true,
           },
         });
+
+        const fmDays = fm.bookingDays || dto.bookingDays || [];
+        for (const day of fmDays) {
+          const fmDayToken = `wa_test_day_fm_${crypto.randomBytes(12).toString('hex')}`;
+          await this.prisma.dailyEmployeePass.create({
+            data: {
+              attendeeId: famAttendee.id,
+              eventDate: day,
+              qrToken: fmDayToken,
+              status: DailyPassStatus.ACTIVE,
+              isTest: true,
+              testSessionId: testRefNo,
+            },
+          });
+        }
       }
     }
 
@@ -217,6 +257,7 @@ export class WhatsAppTestService {
       referenceNumber: testRefNo,
       passUrl,
       sponsorVoucher,
+      isTest: true,
     });
 
     const safeRecipient = await this.whatsAppService.getSafeRecipient();
@@ -260,6 +301,8 @@ export class WhatsAppTestService {
       isConfigured: providerInfo.isConfigured,
       templateName: providerInfo.templateName,
       templateLanguage: providerInfo.templateLanguage,
+      passTemplateName: providerInfo.passTemplateName,
+      passTemplateConfigured: providerInfo.passTemplateConfigured,
     };
   }
 
@@ -294,11 +337,13 @@ export class WhatsAppTestService {
       referenceNumber: dto.referenceNumber,
       passUrl,
       sponsorVoucher,
+      isTest: true,
     });
 
     const isConfigured = this.whatsAppService.isProviderConfigured();
     const providerName = this.whatsAppService.getProviderName();
     const tplConfig = this.whatsAppService.getTemplateConfig();
+    const passTplConfig = this.whatsAppService.getPassTemplateConfig();
 
     if (!safeRecipient) {
       return {
@@ -308,8 +353,8 @@ export class WhatsAppTestService {
         providerMessageId: null,
         safeRecipient: null,
         referenceNumber: dto.referenceNumber,
-        templateName: tplConfig.name,
-        templateLanguage: tplConfig.language,
+        templateName: passTplConfig.name,
+        templateLanguage: passTplConfig.language,
         messageText,
         voucherImageUrl,
         error:
@@ -327,8 +372,8 @@ export class WhatsAppTestService {
               referenceNumber: dto.referenceNumber,
               testRecipient: safeRecipient,
               provider: providerName,
-              templateName: tplConfig.name,
-              templateLanguage: tplConfig.language,
+              templateName: passTplConfig.name,
+              templateLanguage: passTplConfig.language,
               status: 'PROVIDER_NOT_CONFIGURED',
               error:
                 'WhatsApp Provider is not configured (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID missing). Message preview is ready.',
@@ -347,8 +392,8 @@ export class WhatsAppTestService {
         providerMessageId: null,
         safeRecipient,
         referenceNumber: dto.referenceNumber,
-        templateName: tplConfig.name,
-        templateLanguage: tplConfig.language,
+        templateName: passTplConfig.name,
+        templateLanguage: passTplConfig.language,
         messageText,
         voucherImageUrl,
         error:
@@ -356,12 +401,55 @@ export class WhatsAppTestService {
       };
     }
 
-    // Provider is configured: dispatch Meta template message (Phase 1)
-    const sendResult = await this.whatsAppService.sendTemplateMessage(
-      safeRecipient,
-      tplConfig.name,
-      tplConfig.language,
-    );
+    // Explicit hello_world ping option if requested
+    if (dto.templateOverride === 'hello_world') {
+      const sendResult = await this.whatsAppService.sendTemplateMessage(
+        safeRecipient,
+        'hello_world',
+        tplConfig.language,
+      );
+
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            action: 'WHATSAPP_TEST_MESSAGE_SENT',
+            details: {
+              referenceNumber: dto.referenceNumber,
+              testRecipient: safeRecipient,
+              provider: sendResult.provider,
+              providerMessageId: sendResult.providerMessageId || null,
+              templateName: 'hello_world',
+              templateLanguage: tplConfig.language,
+              httpStatus: sendResult.httpStatus || null,
+              metaErrorCode: sendResult.metaErrorCode || null,
+              status: sendResult.status,
+              success: sendResult.success,
+              error: sendResult.error || null,
+              adminUser: adminUserEmail || 'SUPER_ADMIN',
+              isTest: true,
+              source: 'WHATSAPP_TEST_LAB',
+            },
+          },
+        });
+      } catch {}
+
+      return {
+        ...sendResult,
+        safeRecipient,
+        referenceNumber: dto.referenceNumber,
+        messageText,
+        voucherImageUrl,
+      };
+    }
+
+    // Default: Dispatch dedicated pass template with Meta-approved parameters
+    const sendResult = await this.whatsAppService.sendPassTemplateMessage({
+      to: safeRecipient,
+      employeeName,
+      referenceNumber: dto.referenceNumber,
+      passUrl,
+      templateOverride: dto.templateOverride,
+    });
 
     // Record test audit log
     try {
@@ -373,8 +461,8 @@ export class WhatsAppTestService {
             testRecipient: safeRecipient,
             provider: sendResult.provider,
             providerMessageId: sendResult.providerMessageId || null,
-            templateName: sendResult.templateName || tplConfig.name,
-            templateLanguage: sendResult.templateLanguage || tplConfig.language,
+            templateName: sendResult.templateName || passTplConfig.name,
+            templateLanguage: sendResult.templateLanguage || passTplConfig.language,
             httpStatus: sendResult.httpStatus || null,
             metaErrorCode: sendResult.metaErrorCode || null,
             status: sendResult.status,
@@ -392,8 +480,8 @@ export class WhatsAppTestService {
       ...sendResult,
       safeRecipient,
       referenceNumber: dto.referenceNumber,
-      templateName: sendResult.templateName || tplConfig.name,
-      templateLanguage: sendResult.templateLanguage || tplConfig.language,
+      templateName: sendResult.templateName || passTplConfig.name,
+      templateLanguage: sendResult.templateLanguage || passTplConfig.language,
       messageText,
       voucherImageUrl,
     };
@@ -401,10 +489,21 @@ export class WhatsAppTestService {
 
   /**
    * Removes all isolated test records created by the WhatsApp Test Lab.
-   * STRICT GUARD: Only removes records with test prefixes and isLoadTest: true.
-   * Never touches real employees or attendees.
+   * STRICT GUARD: Only removes records with test prefixes and isLoadTest: true or isTest: true.
+   * Never touches real employees, attendees, or daily passes.
    */
   async clearTestData() {
+    // 0. Delete test daily employee passes
+    const dailyPassesResult = await this.prisma.dailyEmployeePass.deleteMany({
+      where: {
+        OR: [
+          { isTest: true },
+          { qrToken: { startsWith: 'wa_test_day_' } },
+          { testSessionId: { startsWith: 'ONGC-TEST-' } },
+        ],
+      },
+    });
+
     // 1. Delete test attendees
     const attendeesResult = await this.prisma.attendee.deleteMany({
       where: {
@@ -433,12 +532,13 @@ export class WhatsAppTestService {
     });
 
     this.logger.log(
-      `Cleaned up WhatsApp test lab records: ${attendeesResult.count} attendees, ${employeesResult.count} employees.`,
+      `Cleaned up WhatsApp test lab records: ${dailyPassesResult.count} daily passes, ${attendeesResult.count} attendees, ${employeesResult.count} employees.`,
     );
 
     return {
       success: true,
       message: 'WhatsApp Test Lab test data cleared successfully.',
+      deletedDailyPassesCount: dailyPassesResult.count,
       deletedAttendeesCount: attendeesResult.count,
       deletedEmployeesCount: employeesResult.count,
     };

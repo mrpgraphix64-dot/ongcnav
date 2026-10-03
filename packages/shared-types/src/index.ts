@@ -346,6 +346,7 @@ export interface BuildEmployeeWhatsAppMessageParams {
   referenceNumber: string;
   passUrl: string;
   sponsorVoucher?: SponsorVoucherConfig | null;
+  isTest?: boolean;
 }
 
 export function buildEmployeeWhatsAppMessage(params: BuildEmployeeWhatsAppMessageParams): string {
@@ -353,36 +354,48 @@ export function buildEmployeeWhatsAppMessage(params: BuildEmployeeWhatsAppMessag
   const refNo = params.referenceNumber?.trim() || 'N/A';
   const passUrl = params.passUrl?.trim() || '';
   const voucher = params.sponsorVoucher;
+  const isTest = params.isTest === true;
 
-  let message = `🎉 *ONGC NAVRATRI 2026* 🎉\n\n` +
-    `Hello *${name}* 👋\n\n` +
-    `Your ONGC Navratri E-Pass is ready! 🪔✨\n\n` +
-    `🎟️ *Reference No.: ${refNo}*\n\n` +
-    `Your permanent QR pass is your entry credential for the event.\n\n` +
-    `Please keep your QR safe and show it at the entry gate.\n`;
+  const headerLine = `🎉 *ONGC NAVRATRI 2026* 🎉\n\n`;
+  const greeting = `Hello *${name}* 👋\n\n`;
+  const intro = isTest
+    ? `Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨\n\n`
+    : `Your ONGC Navratri E-Pass is ready! 🪔✨\n\n`;
+
+  const refBlock = `🎟️ *Reference No.: ${refNo}*\n\n`;
+  const safety = isTest
+    ? `Your permanent QR pass is your entry credential for the event.\nPlease keep your QR safe and do not share it.\n`
+    : `Your permanent QR pass is your entry credential for the event.\n\nPlease keep your QR safe and show it at the entry gate.\n`;
+
+  let message = headerLine + greeting + intro + refBlock + safety;
 
   if (voucher && voucher.enabled !== false) {
-    const validity = (voucher.validityNote || 'Lifetime | No expiry').replace(/^Valid:\s*/i, '');
+    const rawValidity = (voucher.validityNote || 'Lifetime | No expiry').replace(/^Valid:\s*/i, '');
+    const validityLine = isTest ? `Valid: ${rawValidity}` : `_${rawValidity}_`;
 
     message += `\n━━━━━━━━━━━━━━━━\n\n` +
       `💎 *A SPECIAL GIFT FOR YOU* 💎\n\n` +
       `*${voucher.sponsorName || 'MAHAVIR JEWELLERS'}*\n\n` +
       `✨ *${voucher.offerHeadline || '₹5,000 OFF'}*\n` +
       `*${voucher.offerSubtext || 'ON MAKING CHARGES'}*\n\n` +
-      `_${validity}_\n`;
+      `${validityLine}\n`;
 
     if (voucher.address) {
       message += `\n📍 ${voucher.address}\n`;
     }
     if (voucher.phone) {
-      message += `\n📞 ${voucher.phone}\n`;
+      message += `📞 ${voucher.phone}\n`;
     }
   }
+
+  const isolationFooter = isTest
+    ? `⚠️ This is a test registration. The generated pass is isolated from production employee records.\n\n`
+    : `Please do not share your QR/e-pass with anyone.\n\n`;
 
   message += `\n━━━━━━━━━━━━━━━━\n\n` +
     `🎟️ *VIEW YOUR E-PASS*\n` +
     `${passUrl}\n\n` +
-    `Please do not share your QR/e-pass with anyone.\n\n` +
+    isolationFooter +
     `✨ See you at ONGC Navratri 2026! ✨`;
 
   return message;
@@ -413,6 +426,8 @@ export interface WhatsAppConfigDto {
   templateConfigured: boolean;
   templateName: string;
   templateLanguage: string;
+  passTemplateName?: string;
+  passTemplateConfigured?: boolean;
   sponsorVoucher: SponsorVoucherConfig;
   voucherImageUrl: string;
   isolationMode: 'ISOLATED_TEST_MODE';
@@ -453,6 +468,8 @@ export interface WhatsAppTestSubmissionResultDto {
   isConfigured: boolean;
   templateName?: string;
   templateLanguage?: string;
+  passTemplateName?: string;
+  passTemplateConfigured?: boolean;
 }
 
 export enum OrderStatus {

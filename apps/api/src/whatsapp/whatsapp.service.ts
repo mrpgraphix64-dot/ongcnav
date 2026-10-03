@@ -32,6 +32,8 @@ export interface WhatsAppProviderInfo {
   templateConfigured: boolean;
   templateName: string;
   templateLanguage: string;
+  passTemplateName?: string;
+  passTemplateConfigured?: boolean;
 }
 
 @Injectable()
@@ -124,6 +126,43 @@ export class WhatsAppService {
   }
 
   /**
+   * Resolves the configured dedicated WhatsApp template for employee pass dispatch.
+   * Priority:
+   * 1. WHATSAPP_PASS_TEMPLATE_NAME / WHATSAPP_TEST_PASS_TEMPLATE_NAME
+   * 2. WHATSAPP_TEST_TEMPLATE_NAME (only if not 'hello_world')
+   * If unset or 'hello_world', isConfigured is false to prevent sending pass parameters to hello_world.
+   */
+  getPassTemplateConfig(): { name: string; language: string; isConfigured: boolean } {
+    const rawPass =
+      this.getEnv('WHATSAPP_PASS_TEMPLATE_NAME') ||
+      this.getEnv('WHATSAPP_TEST_PASS_TEMPLATE_NAME');
+    const rawTest = this.getEnv('WHATSAPP_TEST_TEMPLATE_NAME');
+    const language = (this.getEnv('WHATSAPP_TEST_TEMPLATE_LANGUAGE') || 'en_US').trim();
+
+    if (rawPass && rawPass.trim() && rawPass.trim() !== 'hello_world') {
+      return {
+        name: rawPass.trim(),
+        language,
+        isConfigured: true,
+      };
+    }
+
+    if (rawTest && rawTest.trim() && rawTest.trim() !== 'hello_world') {
+      return {
+        name: rawTest.trim(),
+        language,
+        isConfigured: true,
+      };
+    }
+
+    return {
+      name: rawPass?.trim() || 'ongc_employee_pass_test',
+      language,
+      isConfigured: false,
+    };
+  }
+
+  /**
    * Resolves the configured Super Admin safe test recipient.
    * STRICT SAFETY RULE:
    * - Only resolves when explicitly configured in the database setting 'whatsapp.test_recipient'
@@ -160,6 +199,7 @@ export class WhatsAppService {
     const isConfigured = this.isProviderConfigured();
     const safeRecipient = await this.getSafeRecipient();
     const templateConfig = this.getTemplateConfig();
+    const passTemplateConfig = this.getPassTemplateConfig();
     const apiVersion = this.getApiVersion();
 
     let status: WhatsAppDeliveryStatus = 'READY';
@@ -183,6 +223,8 @@ export class WhatsAppService {
       templateConfigured: Boolean(templateConfig.name),
       templateName: templateConfig.name,
       templateLanguage: templateConfig.language,
+      passTemplateName: passTemplateConfig.name,
+      passTemplateConfigured: passTemplateConfig.isConfigured,
     };
   }
 
@@ -439,6 +481,101 @@ export class WhatsAppService {
         timestamp,
       };
     }
+  }
+
+  /**
+   * Dispatches dynamic pass details to safe recipient via the dedicated Meta pass template.
+   * Meta requirements:
+   * - Does NOT attempt to send pass parameters through hello_world.
+   * - Requires an approved custom template with parameters ({{1}}=name, {{2}}=ref, {{3}}=url).
+   * - If custom template is not configured or not approved, returns TEMPLATE_NOT_CONFIGURED.
+   * - Strictly routes to safe recipient.
+   */
+  async sendPassTemplateMessage(params: {
+    to: string | null | undefined;
+    employeeName: string;
+    referenceNumber: string;
+    passUrl: string;
+    templateOverride?: string;
+  }): Promise<WhatsAppSendResult> {
+    const timestamp = new Date().toISOString();
+    const provider = this.getProviderName();
+
+    if (!params.to || !params.to.trim()) {
+      return {
+        success: false,
+        status: 'TEST_RECIPIENT_NOT_CONFIGURED',
+        provider,
+        safeRecipient: null,
+        error:
+          'WhatsApp test recipient is not configured. Configure WHATSAPP_TEST_RECIPIENT in server environment or setting.',
+        timestamp,
+      };
+    }
+
+    const recipient = this.normalizePhoneNumber(params.to);
+
+    if (!this.isProviderConfigured()) {
+      return {
+        success: false,
+        status: 'PROVIDER_NOT_CONFIGURED',
+        provider,
+        safeRecipient: recipient,
+        error:
+          'WhatsApp Provider credentials (WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID) are not configured. Message was not delivered to phone network.',
+        timestamp,
+      };
+    }
+
+    const passTplConfig = this.getPassTemplateConfig();
+    const templateName = params.templateOverride || passTplConfig.name;
+    const languageCode = passTplConfig.language;
+
+    // Reject sending arbitrary pass text or parameters through hello_world
+    if (templateName === 'hello_world' || (!passTplConfig.isConfigured && !params.templateOverride)) {
+      return {
+        success: false,
+        status: 'TEMPLATE_NOT_CONFIGURED',
+        provider,
+        safeRecipient: recipient,
+        templateName,
+        templateLanguage: languageCode,
+        error:
+          "Dedicated custom WhatsApp template for employee pass dispatch is not configured. Meta Cloud API cannot deliver arbitrary pass text through 'hello_world'. Configure WHATSAPP_PASS_TEMPLATE_NAME with an approved Meta template (parameters: {{1}}=name, {{2}}=referenceNumber, {{3}}=ePassUrl). Message preview is available below.",
+        timestamp,
+      };
+    }
+
+    // Verify template existence and approval status in Meta WABA
+    const verification = await this.verifyTemplate(templateName, languageCode);
+    if (!verification.approved) {
+      return {
+        success: false,
+        status: 'TEMPLATE_NOT_CONFIGURED',
+        provider,
+        safeRecipient: recipient,
+        templateName,
+        templateLanguage: languageCode,
+        error:
+          verification.error ||
+          `WhatsApp template '${templateName}' is not approved in Meta WABA. Preview mode is available below.`,
+        timestamp,
+      };
+    }
+
+    // Meta-approved template parameters for employeeName, referenceNumber, and ePassUrl
+    const components = [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: params.employeeName },
+          { type: 'text', text: params.referenceNumber },
+          { type: 'text', text: params.passUrl },
+        ],
+      },
+    ];
+
+    return this.sendTemplateMessage(recipient, templateName, languageCode, components);
   }
 
   /**

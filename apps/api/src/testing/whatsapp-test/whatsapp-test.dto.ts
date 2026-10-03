@@ -115,4 +115,9 @@ export class SendWhatsAppTestMessageDto {
   @IsBoolean()
   @IsOptional()
   includeVoucherImage?: boolean;
+
+  @ApiPropertyOptional({ example: 'ongc_employee_pass_test' })
+  @IsString()
+  @IsOptional()
+  templateOverride?: string;
 }
