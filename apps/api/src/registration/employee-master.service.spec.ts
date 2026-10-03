@@ -3,6 +3,7 @@ import { EmployeeMasterService, normalizeCpf, normalizeMobile } from './employee
 import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException } from '@nestjs/common';
 import { MasterConflictResolution, MasterImportMode } from './dto/employee-master.dto';
+import * as XLSX from 'xlsx';
 
 describe('EmployeeMasterService', () => {
   let service: EmployeeMasterService;
@@ -53,12 +54,44 @@ describe('EmployeeMasterService', () => {
       expect(normalizeCpf('  65432  ')).toBe('65432');
     });
 
+    it('ensures CPF 12345 remains string "12345" across types', () => {
+      expect(normalizeCpf('12345')).toBe('12345');
+      expect(typeof normalizeCpf('12345')).toBe('string');
+      expect(normalizeCpf(12345)).toBe('12345');
+      expect(typeof normalizeCpf(12345)).toBe('string');
+    });
+
+    it('preserves leading zero for CPF 01234 as string "01234"', () => {
+      expect(normalizeCpf('01234')).toBe('01234');
+      expect(typeof normalizeCpf('01234')).toBe('string');
+    });
+
+    it('rejects 4-digit CPF 1234 rather than automatically padding with a zero', () => {
+      expect(normalizeCpf('1234')).toBeNull();
+      expect(normalizeCpf(1234)).toBeNull();
+    });
+
+    it('rejects CPF containing letters or special characters', () => {
+      expect(normalizeCpf('12A45')).toBeNull();
+      expect(normalizeCpf('ABCDE')).toBeNull();
+      expect(normalizeCpf('12 45')).toBeNull();
+      expect(normalizeCpf('12-45')).toBeNull();
+    });
+
+    it('handles bigint input safely as string and never passes CPF through BigInt internally', () => {
+      // BigInt value 12345n should convert safely to string "12345"
+      const bigintCpf = BigInt(12345);
+      expect(normalizeCpf(bigintCpf)).toBe('12345');
+      expect(typeof normalizeCpf(bigintCpf)).toBe('string');
+    });
+
     it('rejects invalid CPF (less than 5 digits, more than 5 digits, non-numeric)', () => {
       expect(normalizeCpf('1234')).toBeNull();
       expect(normalizeCpf('123456')).toBeNull();
       expect(normalizeCpf('12A45')).toBeNull();
       expect(normalizeCpf('')).toBeNull();
       expect(normalizeCpf(null)).toBeNull();
+      expect(normalizeCpf(undefined)).toBeNull();
     });
 
     it('normalizes valid Indian 10-digit mobile numbers with prefixes/spaces/hyphens', () => {
@@ -105,6 +138,24 @@ describe('EmployeeMasterService', () => {
       expect(result.rows[0].cpfNo).toBe('12345');
       expect(result.rows[0].mobileNo).toBe('9876543210');
       expect(result.rows[0].status).toBe('VALID');
+    });
+
+    it('parses Excel (.xlsx) file buffer and preserves leading zeros', async () => {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['CPF NO', 'Mobile No'],
+        ['01234', '9876543210'],
+        ['12345', '9876543211'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Master');
+      const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      const result = await service.validateFile(excelBuffer, 'master.xlsx');
+      expect(result.success).toBe(true);
+      expect(result.validCount).toBe(2);
+      expect(result.rows[0].cpfNo).toBe('01234');
+      expect(result.rows[0].mobileNo).toBe('9876543210');
+      expect(result.rows[1].cpfNo).toBe('12345');
     });
 
     it('flags invalid CPF and invalid Mobile rows with appropriate reasons', async () => {

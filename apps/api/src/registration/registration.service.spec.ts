@@ -568,6 +568,31 @@ describe('RegistrationService', () => {
       expect(res.verified).toBe(true);
       expect(res.name).toBe('Rajesh Kumar');
       expect(res.cpf).toBe('12345');
+      expect(typeof res.cpf).toBe('string');
+    });
+
+    it('succeeds with CPF preserving leading zero like "01234"', async () => {
+      prisma.employee.findUnique.mockResolvedValueOnce(null);
+      prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(100);
+      prisma.ongcEmployeeMaster.findUnique.mockResolvedValueOnce({
+        cpf: '01234',
+        name: 'Amit Patel',
+        mobile: '9876543210',
+      });
+
+      const res = await service.verifyEmployee('01234', '9876543210');
+      expect(res.verified).toBe(true);
+      expect(res.cpf).toBe('01234');
+      expect(typeof res.cpf).toBe('string');
+      expect(prisma.ongcEmployeeMaster.findUnique).toHaveBeenCalledWith({
+        where: { cpf: '01234' },
+      });
+    });
+
+    it('rejects CPF containing letters like "12A45"', async () => {
+      await expect(service.verifyEmployee('12A45', '9876543210')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

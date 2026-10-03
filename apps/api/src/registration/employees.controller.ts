@@ -8,6 +8,8 @@ import {
   UseGuards,
   Res,
   Req,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -126,9 +128,16 @@ export class EmployeesController {
   async sendDailyPassEmails(
     @Body() body: { eventDate: string; retryFailedOnly?: boolean; passId?: string },
   ) {
+    let passIdBigInt: bigint | undefined;
+    if (body.passId) {
+      if (!/^\d+$/.test(body.passId)) {
+        throw new BadRequestException(`Invalid passId: "${body.passId}". Must be numeric.`);
+      }
+      passIdBigInt = BigInt(body.passId);
+    }
     return this.employeesService.sendDailyPassEmails(body.eventDate, {
       retryFailedOnly: body.retryFailedOnly,
-      passId: body.passId ? BigInt(body.passId) : undefined,
+      passId: passIdBigInt,
     });
   }
 
@@ -213,6 +222,12 @@ export class EmployeesController {
   )
   @ApiOperation({ summary: 'Get full employee registration details for review' })
   async getEmployeeDetails(@Param('id') id: string) {
+    if (id === 'master') {
+      throw new NotFoundException('Employee record not found');
+    }
+    if (!/^\d+$/.test(id)) {
+      throw new BadRequestException(`Invalid employee ID: "${id}". Employee ID must be numeric.`);
+    }
     return this.employeesService.getEmployeeDetails(BigInt(id));
   }
 
@@ -224,7 +239,7 @@ export class EmployeesController {
   )
   @ApiOperation({ summary: 'Bulk approve employee registrations and activate passes' })
   async bulkApproveRegistrations(@Body() body: { ids: string[] }) {
-    const bigIntIds = (body.ids || []).map((id) => BigInt(id));
+    const bigIntIds = (body.ids || []).filter((id) => /^\d+$/.test(id)).map((id) => BigInt(id));
     return this.employeesService.bulkApproveRegistrations(bigIntIds);
   }
 
@@ -236,7 +251,7 @@ export class EmployeesController {
   )
   @ApiOperation({ summary: 'Bulk reject employee registrations and revoke passes' })
   async bulkRejectRegistrations(@Body() body: { ids: string[]; reason?: string }) {
-    const bigIntIds = (body.ids || []).map((id) => BigInt(id));
+    const bigIntIds = (body.ids || []).filter((id) => /^\d+$/.test(id)).map((id) => BigInt(id));
     return this.employeesService.bulkRejectRegistrations(bigIntIds, body.reason);
   }
 
@@ -248,6 +263,9 @@ export class EmployeesController {
   )
   @ApiOperation({ summary: 'Approve employee registration and activate passes' })
   async approveRegistration(@Param('id') id: string) {
+    if (!/^\d+$/.test(id)) {
+      throw new BadRequestException(`Invalid employee ID: "${id}". Employee ID must be numeric.`);
+    }
     return this.employeesService.approveRegistration(BigInt(id));
   }
 
@@ -259,6 +277,9 @@ export class EmployeesController {
   )
   @ApiOperation({ summary: 'Reject employee registration and revoke passes' })
   async rejectRegistration(@Param('id') id: string) {
+    if (!/^\d+$/.test(id)) {
+      throw new BadRequestException(`Invalid employee ID: "${id}". Employee ID must be numeric.`);
+    }
     return this.employeesService.rejectRegistration(BigInt(id));
   }
 
@@ -271,6 +292,9 @@ export class EmployeesController {
   )
   @ApiOperation({ summary: 'Get employee pass details and printable QR pass' })
   async getEmployeePass(@Param('id') id: string) {
+    if (!/^\d+$/.test(id)) {
+      throw new BadRequestException(`Invalid employee ID: "${id}". Employee ID must be numeric.`);
+    }
     return this.employeesService.getEmployeePass(BigInt(id));
   }
 }

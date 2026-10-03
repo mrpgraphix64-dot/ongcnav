@@ -270,6 +270,9 @@ export class AttendeesController {
   @Get('employees/:id/photo')
   @ApiOperation({ summary: 'Securely stream employee photo' })
   async employeePhoto(@Param('id') id: string, @Res() res: Response) {
+    if (!/^\d+$/.test(id)) {
+      throw new BadRequestException(`Invalid employee ID: "${id}". Employee ID must be numeric.`);
+    }
     const relativePath = await this.attendeesService.getPhotoPath(BigInt(id));
     const fullPath = path.resolve(process.cwd(), relativePath);
 

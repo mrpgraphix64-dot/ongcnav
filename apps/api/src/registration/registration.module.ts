@@ -24,11 +24,11 @@ import { MailModule } from '../mail/mail.module';
     EmployeeMasterService,
   ],
   controllers: [
+    EmployeeMasterController,
     RegistrationController,
     AttendeesController,
     BulkUploadController,
     EmployeesController,
-    EmployeeMasterController,
   ],
   exports: [
     RegistrationService,

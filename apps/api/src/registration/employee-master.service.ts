@@ -29,9 +29,19 @@ export interface MasterValidationResponse {
   rows: MasterRowValidationPreview[];
 }
 
-export function normalizeCpf(raw: any): string | null {
+export function formatCpfString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return '';
+    return value.toLocaleString('fullwide', { useGrouping: false });
+  }
+  return String(value).trim();
+}
+
+export function normalizeCpf(raw: unknown): string | null {
   if (raw === undefined || raw === null) return null;
-  const clean = String(raw).trim();
+  const clean = formatCpfString(raw);
   if (/^[0-9]{5}$/.test(clean)) {
     return clean;
   }
@@ -308,7 +318,7 @@ export class EmployeeMasterService {
           await tx.ongcEmployeeMaster.createMany({
             data: chunk.map((c) => ({
               cpf: c.cpfNo,
-              mobile: cMobileOrRaw(c.mobileNo),
+              mobile: c.mobileNo,
               name: '',
             })),
           });
@@ -458,13 +468,13 @@ export class EmployeeMasterService {
     try {
       const workbook =
         typeof fileBufferOrText === 'string'
-          ? XLSX.read(fileBufferOrText, { type: 'string' })
-          : XLSX.read(fileBufferOrText, { type: 'buffer' });
+          ? XLSX.read(fileBufferOrText, { type: 'string', raw: false, cellText: true })
+          : XLSX.read(fileBufferOrText, { type: 'buffer', raw: false, cellText: true });
 
       const firstSheetName = workbook.SheetNames[0];
       if (!firstSheetName) return [];
       const sheet = workbook.Sheets[firstSheetName];
-      return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
+      return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false }) as any[][];
     } catch {
       // Fallback simple CSV parsing if XLSX parser fails
       const text =
@@ -489,8 +499,4 @@ export class EmployeeMasterService {
       );
     });
   }
-}
-
-function cMobileOrRaw(m: string): string {
-  return m;
 }
