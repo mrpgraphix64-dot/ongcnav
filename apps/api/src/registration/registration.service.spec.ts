@@ -253,6 +253,27 @@ describe('RegistrationService', () => {
       );
     });
 
+    it('succeeds and stores null dateOfBirth when family member has no dateOfBirth', async () => {
+      const familyWithoutDob = [
+        {
+          name: 'Sunita Sharma',
+          relation: 'Spouse',
+          phone: '9876543211',
+          email: 'sunita@example.com',
+          bookingDays: ['2026-10-13'],
+        },
+      ];
+      await service.register({ ...baseDto, familyMembers: familyWithoutDob } as any);
+      expect(prisma.familyMember.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: 'Sunita Sharma',
+            dateOfBirth: null,
+          }),
+        }),
+      );
+    });
+
     it('rejects employee registration if family member dateOfBirth is in the future', async () => {
       const futureFamily = [
         {

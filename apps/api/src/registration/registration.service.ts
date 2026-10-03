@@ -199,21 +199,18 @@ export class RegistrationService {
             `Please provide a valid email address for family member ${fam.name || 'unnamed'}.`,
           );
         }
-        if (!fam.dateOfBirth || !fam.dateOfBirth.trim()) {
-          throw new BadRequestException(
-            `Date of Birth is required for family member ${fam.name || 'unnamed'}.`,
-          );
-        }
-        const famDob = new Date(fam.dateOfBirth.trim());
-        if (isNaN(famDob.getTime())) {
-          throw new BadRequestException(
-            `Invalid Date of Birth for family member ${fam.name || 'unnamed'}. Format must be YYYY-MM-DD.`,
-          );
-        }
-        if (famDob > now) {
-          throw new BadRequestException(
-            `Family member Date of Birth cannot be in the future (${fam.name || 'unnamed'}).`,
-          );
+        if (fam.dateOfBirth && fam.dateOfBirth.trim()) {
+          const famDob = new Date(fam.dateOfBirth.trim());
+          if (isNaN(famDob.getTime())) {
+            throw new BadRequestException(
+              `Invalid Date of Birth for family member ${fam.name || 'unnamed'}. Format must be YYYY-MM-DD.`,
+            );
+          }
+          if (famDob > now) {
+            throw new BadRequestException(
+              `Family member Date of Birth cannot be in the future (${fam.name || 'unnamed'}).`,
+            );
+          }
         }
         if (!Array.isArray(fam.bookingDays) || fam.bookingDays.length === 0) {
           throw new BadRequestException(
@@ -356,7 +353,9 @@ export class RegistrationService {
               gender: famDto.gender || null,
               phone: famDto.phone.trim(),
               email: famDto.email.trim().toLowerCase(),
-              dateOfBirth: new Date(famDto.dateOfBirth.trim()),
+              dateOfBirth: famDto.dateOfBirth?.trim()
+                ? new Date(famDto.dateOfBirth.trim())
+                : null,
               photoPath: famPhotoPath || null,
             },
           });

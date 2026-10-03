@@ -65,11 +65,11 @@ export class FamilyMemberInputDto {
   @IsNotEmpty({ message: 'Family member email is required.' })
   email: string;
 
-  @ApiProperty({ example: '1995-05-20', description: 'Family member Date of Birth (YYYY-MM-DD)' })
+  @ApiPropertyOptional({ example: '1995-05-20', description: 'Family member Date of Birth (YYYY-MM-DD)' })
   @IsString()
-  @IsNotEmpty({ message: 'Family member Date of Birth is required.' })
+  @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Family member Date of Birth must be in YYYY-MM-DD format.' })
-  dateOfBirth: string;
+  dateOfBirth?: string;
 
   @ApiPropertyOptional({ example: 38 })
   @IsOptional()

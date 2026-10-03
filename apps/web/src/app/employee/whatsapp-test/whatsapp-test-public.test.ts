@@ -64,10 +64,10 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
 
     it('ensures test registration payload maps correctly without exposing production endpoints', () => {
       const testPayload = {
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         mobile: '9876543210',
         cpf: '99999',
-        email: 'chintan@ongc.co.in',
+        email: 'siddharth@ongc.co.in',
         category: 'REGULAR' as const,
         bookingDays: ['2026-10-11', '2026-10-12'],
       };
@@ -138,7 +138,7 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
   describe('WhatsApp Dynamic Message & Sponsor Integration', () => {
     it('renders the complete message copy with Mahavir Jewellers voucher and test isolation disclaimer', () => {
       const message = buildEmployeeWhatsAppMessage({
-        employeeName: 'Chintan Patel',
+        employeeName: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
         passUrl: 'https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-99999',
         sponsorVoucher: DEFAULT_SPONSOR_VOUCHER_CONFIG,
@@ -146,7 +146,7 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
       });
 
       expect(message).toContain('🎉 *ONGC NAVRATRI 2026* 🎉');
-      expect(message).toContain('Hello *Chintan Patel* 👋');
+      expect(message).toContain('Hello *Siddharth* 👋');
       expect(message).toContain('Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨');
       expect(message).toContain('🎟️ *Reference No.: ONGC-TEST-99999*');
       expect(message).toContain('Your permanent QR pass is your entry credential for the event.');
@@ -183,6 +183,40 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
 
       expect(mockPendingResult.passTemplateConfigured).toBe(false);
       expect(mockPendingResult.passTemplateName).toBe('ongc_navratri_test_pass');
+    });
+  });
+
+  describe('Page Guidelines & Family DOB Alignment', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const pageSrc = fs.readFileSync(path.join(__dirname, 'page.tsx'), 'utf8');
+
+    it('contains the 6 concise guidelines and standardized acknowledgement', () => {
+      expect(pageSrc).toContain('ONE PERMANENT E-PASS PER PERSON');
+      expect(pageSrc).toContain('STRICTLY PERSONAL & NON-TRANSFERABLE');
+      expect(pageSrc).toContain('DATE-SPECIFIC AUTHORIZATION');
+      expect(pageSrc).toContain('ONE ENTRY PER DAY');
+      expect(pageSrc).toContain('GATE & PHYSICAL ID VERIFICATION');
+      expect(pageSrc).toContain('ACCURATE INFORMATION');
+      expect(pageSrc).toContain('I confirm that the information provided is correct and I agree to the entry and E-Pass rules above.');
+    });
+
+    it('retains employee DOB while removing family member DOB', () => {
+      // Employee DOB retained
+      expect(pageSrc).toContain('id="emp-dob"');
+      expect(pageSrc).toContain('Date of Birth');
+
+      // Family DOB removed
+      expect(pageSrc).not.toContain('id={`fam-dob-${idx}`}');
+      expect(pageSrc).not.toContain('Date of Birth is required for Family Member');
+      expect(pageSrc).not.toContain('Enter the correct Date of Birth.');
+    });
+
+    it('uses Siddharth demo name in quick fill helper', () => {
+      expect(pageSrc).toContain("name: 'Siddharth'");
+      expect(pageSrc).toContain("email: 'siddharth@ongc.co.in'");
+      expect(pageSrc).not.toContain("Chintan Patel");
+      expect(pageSrc).not.toContain("chintan@ongc.co.in");
     });
   });
 });

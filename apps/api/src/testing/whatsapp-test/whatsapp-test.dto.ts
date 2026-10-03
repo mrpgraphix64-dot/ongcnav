@@ -42,7 +42,7 @@ export class WhatsAppTestFamilyMemberDto {
 }
 
 export class SubmitWhatsAppTestPassDto {
-  @ApiProperty({ example: 'Chintan Patel' })
+  @ApiProperty({ example: 'Siddharth' })
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -63,7 +63,7 @@ export class SubmitWhatsAppTestPassDto {
   })
   cpf: string;
 
-  @ApiProperty({ example: 'chintan@ongc.co.in' })
+  @ApiProperty({ example: 'siddharth@ongc.co.in' })
   @IsEmail()
   @IsNotEmpty()
   email: string;

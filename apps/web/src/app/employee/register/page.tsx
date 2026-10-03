@@ -74,88 +74,33 @@ const CPF_REGEX = /^[0-9]{5,6}$/;
 const REGISTRATION_GUIDELINES = [
   {
     number: 1,
-    title: 'PERSONAL QR CODE',
-    text: 'Your QR/e-pass is strictly personal and is issued only to the registered attendee. Do not share, forward, screenshot-share, publish, or allow anyone else to use your QR code.',
+    title: 'ONE PERMANENT E-PASS PER PERSON',
+    text: 'Each approved employee and family member receives one unique permanent QR/E-Pass valid for all selected event dates throughout Navratri.',
   },
   {
     number: 2,
-    title: 'ONE QR FOR THE EVENT',
-    text: 'One unique QR/e-pass will be issued to each approved employee and family member. The same QR will be used throughout the event for all dates selected by that person.',
+    title: 'STRICTLY PERSONAL & NON-TRANSFERABLE',
+    text: 'Your QR/E-Pass is strictly personal. Do not share, forward, screenshot, or transfer your QR code to anyone else.',
   },
   {
     number: 3,
-    title: 'ONE ENTRY PER DAY',
-    text: 'Each registered person is permitted one successful entry per event day. The same QR can be used again on another eligible event day, but only one successful entry is permitted on each day.',
+    title: 'DATE-SPECIFIC AUTHORIZATION',
+    text: 'Entry is permitted only on the specific event dates selected for that individual during registration. Family members select their dates independently.',
   },
   {
     number: 4,
-    title: 'DATE-SPECIFIC ELIGIBILITY',
-    text: 'Although the QR remains the same throughout the event, entry is allowed only on the event dates selected for that individual during registration.\n\nIf a person has not selected a particular date, their QR will not be valid for entry on that date.',
+    title: 'ONE ENTRY PER DAY',
+    text: 'Each pass permits exactly one entry scan per person per selected event date. Re-entry or duplicate scans on the same date are not allowed.',
   },
   {
     number: 5,
-    title: 'DO NOT SHARE YOUR QR',
-    text: 'Do not share your QR code with colleagues, friends, relatives, WhatsApp groups, social media, or any other person.',
+    title: 'GATE & PHYSICAL ID VERIFICATION',
+    text: 'Keep your QR safe and ready to present at entry. Physical ONGC ID / photo identity verification may be requested at the entry gate.',
   },
   {
     number: 6,
-    title: 'QR MISUSE',
-    text: "If an employee's QR is found to have been shared, transferred, or used by another person, the matter may be reported to the event management/organizing team for verification and appropriate action.",
-  },
-  {
-    number: 7,
-    title: 'UNAUTHORIZED USE',
-    text: 'If QR sharing, unauthorized use, duplicate entry attempts, impersonation, or any other misuse of an e-pass is identified, the event management team may restrict or cancel the concerned pass/entry privileges and refer the matter to the concerned committee/authorities for further action.',
-  },
-  {
-    number: 8,
-    title: 'ENTER CORRECT INFORMATION',
-    text: 'All information must be entered accurately. Incorrect, incomplete, or misleading information may result in registration being placed under review or rejected.',
-  },
-  {
-    number: 9,
-    title: 'FAMILY DETAILS',
-    text: "Please enter each family member's details carefully. Family information will be reviewed and verified by the event team.",
-  },
-  {
-    number: 10,
-    title: 'FAMILY MEMBERS HAVE INDEPENDENT DATES',
-    text: 'Each family member must select their own event dates independently. Selecting a date for the employee does not automatically select that date for family members.',
-  },
-  {
-    number: 11,
-    title: 'EMAIL FOR E-PASS',
-    text: 'Please provide a valid email address for every family member. Their e-pass/QR information will be sent to the email address registered for that individual.',
-  },
-  {
-    number: 12,
-    title: 'REGISTRATION REVIEW',
-    text: 'Submitting the form does not automatically guarantee approval. Registrations may be reviewed and verified by the event management team before access is activated.',
-  },
-  {
-    number: 13,
-    title: 'NON-TRANSFERABLE PASS',
-    text: 'An e-pass issued to one registered person cannot be transferred to another person.',
-  },
-  {
-    number: 14,
-    title: 'KEEP YOUR QR SECURE',
-    text: 'Do not post your QR/e-pass publicly or store/share it in a manner that allows another person to use it.',
-  },
-  {
-    number: 15,
-    title: 'SECURITY & ENTRY',
-    text: 'All attendees must cooperate with security personnel and event staff and follow venue entry, verification, safety, and security instructions.',
-  },
-  {
-    number: 16,
-    title: 'DUPLICATE REGISTRATION',
-    text: 'Do not submit duplicate registrations for the same employee using different information. Duplicate or suspicious registrations may be flagged for verification.',
-  },
-  {
-    number: 17,
-    title: 'ENTRY VERIFICATION',
-    text: 'If a QR is invalid, already used for the current day, not authorized for the current date, revoked, or otherwise found to be misused, entry may be denied.',
+    title: 'ACCURATE INFORMATION',
+    text: 'Ensure all registered details are complete and truthful. Incomplete, duplicate, or misleading entries may lead to pass cancellation.',
   },
 ];
 
@@ -174,7 +119,6 @@ interface FamilyMemberForm {
   relation: AllowedFamilyRelation;
   mobileNo: string;
   email: string;
-  dateOfBirth: string;
   selectedDates: string[];
 }
 
@@ -185,7 +129,6 @@ function createFamilyMember(): FamilyMemberForm {
     relation: 'Spouse',
     mobileNo: '',
     email: '',
-    dateOfBirth: '',
     selectedDates: [],
   };
 }
@@ -460,13 +403,6 @@ export default function EmployeeRegisterPage() {
     });
   };
 
-  const updateFamilyMemberDob = (index: number, dateOfBirth: string) => {
-    setFamilyMembers((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], dateOfBirth };
-      return next;
-    });
-  };
 
   const toggleEmployeeDate = (date: string) => {
     setEmployeeDates((prev) =>
@@ -573,12 +509,6 @@ export default function EmployeeRegisterPage() {
       if (!EMAIL_REGEX.test(email)) {
         return `Please provide a valid email address for Family Member #${i + 1}.`;
       }
-      if (!m.dateOfBirth) {
-        return `Date of Birth is required for Family Member #${i + 1} (${m.name.trim() || 'unnamed'}).`;
-      }
-      const famDob = new Date(m.dateOfBirth);
-      if (isNaN(famDob.getTime())) return `Please enter a valid Date of Birth for Family Member #${i + 1}.`;
-      if (famDob > today) return `Date of Birth for Family Member #${i + 1} cannot be in the future.`;
 
       if (!m.selectedDates || m.selectedDates.length === 0) {
         return `Please select at least one attendance date for Family Member #${i + 1} (${m.name.trim()}). Each family member must have their own independent date selection.`;
@@ -712,7 +642,6 @@ export default function EmployeeRegisterPage() {
           relation: m.relation.trim() || 'Family Member',
           phone: m.mobileNo.trim(),
           email: m.email.trim().toLowerCase(),
-          dateOfBirth: m.dateOfBirth,
           bookingDays: m.selectedDates,
         })),
       };
@@ -1057,7 +986,7 @@ export default function EmployeeRegisterPage() {
                       <span>Final Acknowledgement</span>
                     </div>
                     <p className="leading-relaxed italic">
-                      &ldquo;I have read and understood the above guidelines. I confirm that the information provided by me is correct and that I will not share or misuse my QR/e-pass. I understand that my registration and family details may be verified by the event team, and that one entry is permitted per person per eligible event day.&rdquo;
+                      &ldquo;I confirm that the information provided is correct and I agree to the entry and E-Pass rules above.&rdquo;
                     </p>
                   </div>
 
@@ -1074,7 +1003,7 @@ export default function EmployeeRegisterPage() {
                         className="w-5 h-5 rounded text-maroon accent-maroon border-stone-300 focus:ring-maroon mt-0.5 cursor-pointer shrink-0"
                       />
                       <span className="text-xs font-bold text-ink leading-snug">
-                        I have read and understood the above guidelines and agree to follow them. <span className="text-rose-600">*</span>
+                        I confirm that the information provided is correct and I agree to the entry and E-Pass rules above. <span className="text-rose-600">*</span>
                       </span>
                     </label>
                   </div>
@@ -1244,7 +1173,6 @@ export default function EmployeeRegisterPage() {
                       <p>&bull; Enter the full name correctly.</p>
                       <p>&bull; Enter the correct mobile number.</p>
                       <p>&bull; Enter a valid email address because the family member&apos;s digital QR pass will be sent to their registered email address.</p>
-                      <p>&bull; Enter the correct Date of Birth.</p>
                       <p>&bull; Select event dates separately for each family member.</p>
                       <p>&bull; A family member will only be authorized to enter on the dates selected for that individual.</p>
                     </div>
@@ -1321,7 +1249,7 @@ export default function EmployeeRegisterPage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label htmlFor={`fam-mobile-${idx}`} className="block text-[11px] font-bold text-ink mb-1">
                                 Mobile No. (10 Digits) <span className="text-rose-600">*</span>
@@ -1353,21 +1281,6 @@ export default function EmployeeRegisterPage() {
                                 required
                                 inputMode="email"
                                 placeholder="e.g. meena@example.com"
-                                className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor={`fam-dob-${idx}`} className="block text-[11px] font-bold text-ink mb-1">
-                                Date of Birth <span className="text-rose-600">*</span>
-                              </label>
-                              <input
-                                id={`fam-dob-${idx}`}
-                                type="date"
-                                max={todayStr}
-                                min="1920-01-01"
-                                value={fam.dateOfBirth}
-                                onChange={(e) => updateFamilyMemberDob(idx, e.target.value)}
-                                required
                                 className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-stone-300 text-ink text-sm focus:outline-none focus:border-maroon"
                               />
                             </div>
@@ -1491,10 +1404,9 @@ export default function EmployeeRegisterPage() {
                               <span className="text-sm">{fam.name} ({fam.relation})</span>
                               <span className="text-[11px] text-maroon font-semibold">Member #{idx + 1}</span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-stone-600">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-stone-600">
                               <div>Mobile: <strong className="text-ink">{fam.mobileNo}</strong></div>
                               <div>Email: <strong className="text-ink">{fam.email}</strong></div>
-                              <div>DOB: <strong className="text-ink">{fam.dateOfBirth}</strong></div>
                             </div>
                             <div className="pt-1 border-t border-stone-200/60">
                               <span className="text-stone-500 font-semibold block mb-1">

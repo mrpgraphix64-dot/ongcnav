@@ -38,39 +38,27 @@ describe('Employee Registration Flow (Web)', () => {
     expect(html).toContain('Guidelines');
   });
 
-  it('contains the 17 mandatory registration guidelines with the exact required copy in page module', () => {
+  it('contains the 6 concise registration guidelines with the exact required copy in page module', () => {
     const pageSrc = fs.readFileSync(path.join(__dirname, 'page.tsx'), 'utf8');
 
     // Guidelines Title & Intro
     expect(pageSrc).toContain('ONGC NAVRATRI 2026 REGISTRATION GUIDELINES');
     expect(pageSrc).toContain('Please read the following guidelines carefully before proceeding with your registration.');
 
-    // Rules 1 to 17
-    expect(pageSrc).toContain('PERSONAL QR CODE');
-    expect(pageSrc).toContain('ONE QR FOR THE EVENT');
+    // 6 Concise Rules
+    expect(pageSrc).toContain('ONE PERMANENT E-PASS PER PERSON');
+    expect(pageSrc).toContain('STRICTLY PERSONAL & NON-TRANSFERABLE');
+    expect(pageSrc).toContain('DATE-SPECIFIC AUTHORIZATION');
     expect(pageSrc).toContain('ONE ENTRY PER DAY');
-    expect(pageSrc).toContain('DATE-SPECIFIC ELIGIBILITY');
-    expect(pageSrc).toContain('DO NOT SHARE YOUR QR');
-    expect(pageSrc).toContain('QR MISUSE');
-    expect(pageSrc).toContain('UNAUTHORIZED USE');
-    expect(pageSrc).toContain('ENTER CORRECT INFORMATION');
-    expect(pageSrc).toContain('FAMILY DETAILS');
-    expect(pageSrc).toContain('FAMILY MEMBERS HAVE INDEPENDENT DATES');
-    expect(pageSrc).toContain('EMAIL FOR E-PASS');
-    expect(pageSrc).toContain('REGISTRATION REVIEW');
-    expect(pageSrc).toContain('NON-TRANSFERABLE PASS');
-    expect(pageSrc).toContain('KEEP YOUR QR SECURE');
-    expect(pageSrc).toContain('SECURITY & ENTRY');
-    expect(pageSrc).toContain('DUPLICATE REGISTRATION');
-    expect(pageSrc).toContain('ENTRY VERIFICATION');
+    expect(pageSrc).toContain('GATE & PHYSICAL ID VERIFICATION');
+    expect(pageSrc).toContain('ACCURATE INFORMATION');
 
     // Final Acknowledgement and Mandatory Checkbox
-    expect(pageSrc).toContain('I have read and understood the above guidelines. I confirm that the information provided by me is correct and that I will not share or misuse my QR/e-pass. I understand that my registration and family details may be verified by the event team, and that one entry is permitted per person per eligible event day.');
-    expect(pageSrc).toContain('I have read and understood the above guidelines and agree to follow them.');
+    expect(pageSrc).toContain('I confirm that the information provided is correct and I agree to the entry and E-Pass rules above.');
     expect(pageSrc).toContain('I AGREE &amp; CONTINUE');
   });
 
-  it('enforces Employee DOB, Employee Date of Joining, and Family DOB', () => {
+  it('enforces Employee DOB, Employee Date of Joining, while Family DOB is omitted', () => {
     const pageSrc = fs.readFileSync(path.join(__dirname, 'page.tsx'), 'utf8');
 
     // Employee DOB and Joining Date
@@ -81,9 +69,9 @@ describe('Employee Registration Flow (Web)', () => {
     expect(pageSrc).toContain('Employee Date of Joining cannot be in the future');
     expect(pageSrc).toContain('Employee Date of Joining must be after Date of Birth');
 
-    // Family Member DOB
-    expect(pageSrc).toContain('id={`fam-dob-${idx}`}');
-    expect(pageSrc).toContain('Date of Birth is required for Family Member');
+    // Family Member DOB should not be present
+    expect(pageSrc).not.toContain('id={`fam-dob-${idx}`}');
+    expect(pageSrc).not.toContain('Date of Birth is required for Family Member');
   });
 
   it('includes improved Family Details Guidance and Permanent QR clarification', () => {
@@ -94,7 +82,7 @@ describe('Employee Registration Flow (Web)', () => {
     expect(pageSrc).toContain('Enter the full name correctly.');
     expect(pageSrc).toContain('Enter the correct mobile number.');
     expect(pageSrc).toContain('Enter a valid email address because the family member');
-    expect(pageSrc).toContain('Enter the correct Date of Birth.');
+    expect(pageSrc).not.toContain('Enter the correct Date of Birth.');
     expect(pageSrc).toContain('Select event dates separately for each family member.');
     expect(pageSrc).toContain('A family member will only be authorized to enter on the dates selected for that individual.');
 

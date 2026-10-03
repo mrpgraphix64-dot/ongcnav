@@ -244,10 +244,12 @@ describe('RegisterEmployeeDto validation', () => {
       expect(dobErrors).toHaveLength(0);
     });
 
-    it('fails when family dateOfBirth is missing or malformed', async () => {
-      const missingDobErrors = await familyMemberErrors({ dateOfBirth: '' }, 'dateOfBirth');
-      expect(missingDobErrors.length).toBeGreaterThan(0);
+    it('passes when family dateOfBirth is omitted (optional)', async () => {
+      const omittedDobErrors = await familyMemberErrors({}, 'dateOfBirth');
+      expect(omittedDobErrors).toHaveLength(0);
+    });
 
+    it('fails when family dateOfBirth is provided but malformed', async () => {
       const malformedDobErrors = await familyMemberErrors({ dateOfBirth: '25-12-1995' }, 'dateOfBirth');
       expect(malformedDobErrors.length).toBeGreaterThan(0);
     });

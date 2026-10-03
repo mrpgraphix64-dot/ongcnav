@@ -89,9 +89,9 @@ export default function WhatsAppTestLabPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [category, setCategory] = useState<EmployeeCategory>('REGULAR');
   const [cpf, setCpf] = useState('99999');
-  const [name, setName] = useState('Chintan Patel');
+  const [name, setName] = useState('Siddharth');
   const [mobile, setMobile] = useState('9876543210');
-  const [email, setEmail] = useState('chintan@ongc.co.in');
+  const [email, setEmail] = useState('siddharth@ongc.co.in');
   const [dateOfBirth, setDateOfBirth] = useState('1988-06-15');
   const [dateOfJoining, setDateOfJoining] = useState('2014-08-01');
   const [guidelinesAgreed, setGuidelinesAgreed] = useState(true);
@@ -162,9 +162,9 @@ export default function WhatsAppTestLabPage() {
   // Quick preset test data
   const handleQuickFill = () => {
     setCpf('99999');
-    setName('Chintan Patel');
+    setName('Siddharth');
     setMobile('9876543210');
-    setEmail('chintan@ongc.co.in');
+    setEmail('siddharth@ongc.co.in');
     setCategory('REGULAR');
     setDateOfBirth('1988-06-15');
     setDateOfJoining('2014-08-01');
@@ -785,7 +785,7 @@ export default function WhatsAppTestLabPage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stone-900"
-                      placeholder="e.g. Chintan Patel"
+                      placeholder="e.g. Siddharth"
                     />
                   </div>
 
@@ -815,7 +815,7 @@ export default function WhatsAppTestLabPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-stone-900"
-                      placeholder="e.g. chintan@ongc.co.in"
+                      placeholder="e.g. siddharth@ongc.co.in"
                     />
                   </div>
 

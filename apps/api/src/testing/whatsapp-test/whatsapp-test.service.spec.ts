@@ -142,14 +142,14 @@ describe('WhatsAppTestService', () => {
   describe('WhatsApp message renderer & Mahavir Jewellers sponsor voucher', () => {
     it('renders greeting, reference number, permanent pass info, pass URL, and Mahavir Jewellers offer when enabled', () => {
       const message = buildEmployeeWhatsAppMessage({
-        employeeName: 'Chintan Patel',
+        employeeName: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
         passUrl: 'https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-99999',
         sponsorVoucher: DEFAULT_SPONSOR_VOUCHER_CONFIG,
       });
 
       expect(message).toContain('🎉 *ONGC NAVRATRI 2026* 🎉');
-      expect(message).toContain('Hello *Chintan Patel* 👋');
+      expect(message).toContain('Hello *Siddharth* 👋');
       expect(message).toContain('🎟️ *Reference No.: ONGC-TEST-99999*');
       expect(message).toContain('Your permanent QR pass is your entry credential');
       expect(message).toContain('💎 *A SPECIAL GIFT FOR YOU* 💎');
@@ -183,7 +183,7 @@ describe('WhatsAppTestService', () => {
     it('pass URL does not expose internal database IDs, QR token values, CPF, or DOB', () => {
       const passUrl = 'https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-99999';
       const message = buildEmployeeWhatsAppMessage({
-        employeeName: 'Chintan Patel',
+        employeeName: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
         passUrl,
         sponsorVoucher: DEFAULT_SPONSOR_VOUCHER_CONFIG,
@@ -212,7 +212,7 @@ describe('WhatsAppTestService', () => {
         id: BigInt(9999),
         cpf: 'TEST-WA-99999',
         referenceNumber: 'ONGC-TEST-99999',
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         phone: '9876543210',
       });
 
@@ -224,10 +224,10 @@ describe('WhatsAppTestService', () => {
       });
 
       const result = await service.submitTestPass({
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         mobile: '9876543210',
         cpf: '99999',
-        email: 'chintan@ongc.co.in',
+        email: 'siddharth@ongc.co.in',
         bookingDays: ['2026-10-11', '2026-10-12'],
       });
 
@@ -283,7 +283,7 @@ describe('WhatsAppTestService', () => {
 
       mockPrisma.employee.findFirst.mockResolvedValue({
         id: BigInt(9999),
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         phone: '9876543210',
         referenceNumber: 'ONGC-TEST-99999',
       });
@@ -306,7 +306,7 @@ describe('WhatsAppTestService', () => {
 
       mockPrisma.employee.findFirst.mockResolvedValue({
         id: BigInt(9999),
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         phone: '9876543210', // entered in form
         referenceNumber: 'ONGC-TEST-99999',
       });
@@ -341,7 +341,7 @@ describe('WhatsAppTestService', () => {
 
       mockPrisma.employee.findFirst.mockResolvedValue({
         id: BigInt(9999),
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
       });
 
@@ -351,7 +351,7 @@ describe('WhatsAppTestService', () => {
 
       expect(mockWhatsAppService.sendPassTemplateMessage).toHaveBeenCalledWith({
         to: '+919876543210',
-        employeeName: 'Chintan Patel',
+        employeeName: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
         passUrl: 'https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-99999',
         templateOverride: undefined,
@@ -379,7 +379,7 @@ describe('WhatsAppTestService', () => {
 
       mockPrisma.employee.findFirst.mockResolvedValue({
         id: BigInt(9999),
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
       });
 
@@ -410,7 +410,7 @@ describe('WhatsAppTestService', () => {
 
       mockPrisma.employee.findFirst.mockResolvedValue({
         id: BigInt(9999),
-        name: 'Chintan Patel',
+        name: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
       });
 

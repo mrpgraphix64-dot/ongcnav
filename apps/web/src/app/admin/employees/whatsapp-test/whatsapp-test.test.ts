@@ -27,14 +27,14 @@ describe('WhatsApp Test Lab - Frontend Unit Tests', () => {
   describe('WhatsApp Message Renderer & Sponsor Integration', () => {
     it('generates the exact WhatsApp copy with Mahavir Jewellers voucher offer', () => {
       const message = buildEmployeeWhatsAppMessage({
-        employeeName: 'Chintan Patel',
+        employeeName: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
         passUrl: 'https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-99999',
         sponsorVoucher: DEFAULT_SPONSOR_VOUCHER_CONFIG,
       });
 
       expect(message).toContain('🎉 *ONGC NAVRATRI 2026* 🎉');
-      expect(message).toContain('Hello *Chintan Patel* 👋');
+      expect(message).toContain('Hello *Siddharth* 👋');
       expect(message).toContain('🎟️ *Reference No.: ONGC-TEST-99999*');
       expect(message).toContain('Your permanent QR pass is your entry credential for the event.');
       expect(message).toContain('💎 *A SPECIAL GIFT FOR YOU* 💎');
@@ -70,7 +70,7 @@ describe('WhatsApp Test Lab - Frontend Unit Tests', () => {
 
     it('does not expose internal tokens or sensitive credentials in passUrl', () => {
       const message = buildEmployeeWhatsAppMessage({
-        employeeName: 'Chintan Patel',
+        employeeName: 'Siddharth',
         referenceNumber: 'ONGC-TEST-99999',
         passUrl: 'https://ongcnavratri.reworkzone.in/employee/my-tickets?ref=ONGC-TEST-99999',
         sponsorVoucher: DEFAULT_SPONSOR_VOUCHER_CONFIG,
