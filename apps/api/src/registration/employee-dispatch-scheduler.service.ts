@@ -5,9 +5,11 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmployeesService } from './employees.service';
+import { EmployeeQrDeliveryService } from './employee-qr-delivery.service';
 import {
   OFFICIAL_EVENT_DATES,
   isOfficialEventDate,
@@ -64,15 +66,30 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
   constructor(
     private readonly prisma: PrismaService,
     private readonly employeesService: EmployeesService,
+    @Optional() private readonly employeeQrDeliveryService?: EmployeeQrDeliveryService,
   ) {}
 
   onModuleInit() {
+    // Reconcile interrupted releases on startup
+    if (this.employeeQrDeliveryService) {
+      this.employeeQrDeliveryService.reconcileInterruptedReleases().catch((err) => {
+        this.logger.error(`Error reconciling interrupted releases on startup: ${err.message}`);
+      });
+    }
+
     // Only start interval if not explicitly disabled
     if (process.env.DISABLE_DISPATCH_SCHEDULER !== 'true') {
       this.timerRef = setInterval(() => {
         this.checkAndExecuteScheduledDispatches().catch((err) => {
           this.logger.error(`Error in scheduled dispatch tick: ${err.message}`, err.stack);
         });
+
+        // Background reconciliation of ACCEPTED deliveries against Hostinger Outbound Logs
+        if (this.employeeQrDeliveryService) {
+          this.employeeQrDeliveryService.reconcileDeliveryStatusesWithHostinger().catch((err) => {
+            this.logger.debug(`Background Hostinger log reconciliation: ${err.message}`);
+          });
+        }
       }, 30000);
 
       // Unref timer so it does not block application teardown or testing
@@ -80,7 +97,7 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
         this.timerRef.unref();
       }
 
-      this.logger.log('Employee daily QR pass dispatch scheduler initialized (polling every 30s in Asia/Kolkata IST).');
+      this.logger.log('Employee daily QR pass dispatch scheduler initialized (polling every 30s in Asia/Kolkata IST with Hostinger log reconciliation).');
     }
   }
 

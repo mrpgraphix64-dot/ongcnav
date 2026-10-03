@@ -122,20 +122,118 @@ export interface EmployeeTypeSettings {
   contract: boolean;
 }
 
+export enum EmailDeliveryStatus {
+  QUEUED = 'QUEUED',
+  SENDING = 'SENDING',
+  ACCEPTED = 'ACCEPTED',
+  DELIVERED = 'DELIVERED',
+  FAILED = 'FAILED',
+  BOUNCED = 'BOUNCED',
+  REJECTED = 'REJECTED',
+  DEFERRED = 'DEFERRED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum EmailReleaseStatus {
+  QUEUED = 'QUEUED',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  PARTIAL_FAILURE = 'PARTIAL_FAILURE',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum EmailDeliveryErrorType {
+  INVALID_EMAIL = 'INVALID_EMAIL',
+  SMTP_AUTH_ERROR = 'SMTP_AUTH_ERROR',
+  SMTP_CONNECTION_ERROR = 'SMTP_CONNECTION_ERROR',
+  SMTP_TIMEOUT = 'SMTP_TIMEOUT',
+  PROVIDER_RATE_LIMIT = 'PROVIDER_RATE_LIMIT',
+  PROVIDER_REJECTED = 'PROVIDER_REJECTED',
+  MAILBOX_FULL = 'MAILBOX_FULL',
+  RECIPIENT_NOT_FOUND = 'RECIPIENT_NOT_FOUND',
+  DOMAIN_ERROR = 'DOMAIN_ERROR',
+  BOUNCED = 'BOUNCED',
+  TEMPORARY_PROVIDER_ERROR = 'TEMPORARY_PROVIDER_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+}
+
 export interface EmployeeQrReleaseSchedule {
   enabled: boolean;
   releaseDate: string;
   releaseTime: string;
   timezone: string;
-  status: 'IDLE' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED';
+  status: 'IDLE' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED' | 'RUNNING';
   lastRunAt: string | null;
   lastRunMessage: string | null;
+  currentReleaseId?: string | null;
   stats: {
     eligibleCount: number;
     qrGeneratedCount: number;
-    sentCount: number;
+    queuedCount?: number;
+    sendingCount?: number;
+    acceptedCount?: number;
+    deliveredCount?: number;
     failedCount: number;
+    bouncedCount?: number;
+    sentCount: number; // For backward compatibility
   };
+}
+
+export interface EmployeeQrEmailDeliveryItem {
+  id: string;
+  releaseId?: string | null;
+  attendeeId: string;
+  referenceNumber: string;
+  recipientEmail: string;
+  attendeeName: string;
+  employeeName: string;
+  relation: string;
+  isFamily: boolean;
+  cpf: string;
+  ticketNumber: string;
+  qrCodeToken: string;
+  bookingDays: string[];
+  status: EmailDeliveryStatus;
+  provider: string;
+  providerMessageId?: string | null;
+  providerEventId?: string | null;
+  queuedAt?: string | null;
+  startedAt?: string | null;
+  acceptedAt?: string | null;
+  deliveredAt?: string | null;
+  failedAt?: string | null;
+  bouncedAt?: string | null;
+  rejectedAt?: string | null;
+  retryCount: number;
+  maxRetries: number;
+  errorType?: EmailDeliveryErrorType | null;
+  lastError?: string | null;
+  lastProviderError?: string | null;
+  lastProviderResponse?: string | null;
+  isTest: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeQrEmailReleaseSummary {
+  id: string;
+  releaseType: string;
+  status: EmailReleaseStatus;
+  startedAt: string;
+  completedAt?: string | null;
+  totalRecipients: number;
+  queuedCount: number;
+  sendingCount: number;
+  acceptedCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  bouncedCount: number;
+  rejectedCount: number;
+  deliveryConfirmationAvailable: boolean;
+  isTest: boolean;
+  createdBy?: string | null;
+  createdAt: string;
 }
 
 export enum OrderStatus {

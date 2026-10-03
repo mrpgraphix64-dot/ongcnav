@@ -465,7 +465,7 @@ describe('MailService (Hostinger Mail API)', () => {
         expect(attachmentCids).not.toContain('digant-art-logo');
 
         // 2. HTML references publicly accessible HTTPS URLs
-        expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/logo-web.png"');
+        expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/ongc-navratri-2026-logo.png"');
         expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/zaira-diamond-logo.png"');
         expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/om-sanctuary-palace-logo.png"');
         expect(body.html).toContain('src="https://ongcnavratri.reworkzone.in/images/sponsors/lalkaar-news-logo.png"');
@@ -529,8 +529,8 @@ describe('MailService (Hostinger Mail API)', () => {
         expect(body.html).not.toContain('ONGC Organising Committee');
         expect(body.html).not.toContain('Organised by ONGC');
 
-        // 12. Sizing & Branding Design: ONGC logo is modestly enlarged to 120px width, Digant Art is 65px
-        expect(body.html).toContain('alt="ONGC Logo" width="120"');
+        // 12. Sizing & Branding Design: ONGC festival logo is prominently 220px width, Digant Art is 65px
+        expect(body.html).toContain('alt="ONGC Navratri 2026" width="220"');
         expect(body.html).toContain('alt="Digant Art" width="65" height="65"');
         expect(body.html).not.toContain('◆'); // No gold diamond divider exists
 
@@ -540,9 +540,9 @@ describe('MailService (Hostinger Mail API)', () => {
         expect(body.html).toContain('Reworkzone.com');
         expect(body.html).toContain('white-space: nowrap;');
 
-        // Hierarchy check: ONGC logo header -> NAVRATRI 2026 -> Digital Pass -> Sponsors -> Organiser -> Support -> Reworkzone
-        const ongcLogoIdx = body.html.indexOf('src="https://ongcnavratri.reworkzone.in/images/logo-web.png"');
-        const headerTitleIdx = body.html.indexOf('NAVRATRI 2026');
+        // Hierarchy check: ONGC festival logo header -> Digital Pass subtitle -> Pass cards -> Sponsors -> Organiser -> Support -> Reworkzone
+        const ongcLogoIdx = body.html.indexOf('src="https://ongcnavratri.reworkzone.in/images/ongc-navratri-2026-logo.png"');
+        const subtitleIdx = body.html.indexOf('Official Digital E-Pass');
         const passCardIdx = body.html.indexOf('src="cid:qr-TKBRAND1-1"');
         const sponsorsIdx = body.html.indexOf('OUR PARTNERS');
         const organiserIdx = body.html.indexOf('EVENT ORGANISER');
@@ -550,8 +550,8 @@ describe('MailService (Hostinger Mail API)', () => {
         const reworkzoneIdx = body.html.indexOf('Reworkzone.com');
 
         expect(ongcLogoIdx).toBeGreaterThan(-1);
-        expect(headerTitleIdx).toBeGreaterThan(ongcLogoIdx);
-        expect(passCardIdx).toBeGreaterThan(headerTitleIdx);
+        expect(subtitleIdx).toBeGreaterThan(ongcLogoIdx);
+        expect(passCardIdx).toBeGreaterThan(subtitleIdx);
         expect(sponsorsIdx).toBeGreaterThan(passCardIdx);
         expect(organiserIdx).toBeGreaterThan(sponsorsIdx);
         expect(supportIdx).toBeGreaterThan(organiserIdx);

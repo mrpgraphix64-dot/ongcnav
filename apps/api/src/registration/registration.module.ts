@@ -13,12 +13,16 @@ import { EmployeeMasterController } from './employee-master.controller';
 
 import { MailModule } from '../mail/mail.module';
 
+import { EmployeeQrDeliveryService } from './employee-qr-delivery.service';
+import { EmailWebhookController } from '../mail/email-webhook.controller';
+
 @Module({
   imports: [MailModule],
   providers: [
     RegistrationService,
     AttendeesService,
     EmployeesService,
+    EmployeeQrDeliveryService,
     DailyPassPdfService,
     EmployeeDispatchSchedulerService,
     EmployeeMasterService,
@@ -29,11 +33,13 @@ import { MailModule } from '../mail/mail.module';
     AttendeesController,
     BulkUploadController,
     EmployeesController,
+    EmailWebhookController,
   ],
   exports: [
     RegistrationService,
     AttendeesService,
     EmployeesService,
+    EmployeeQrDeliveryService,
     DailyPassPdfService,
     EmployeeDispatchSchedulerService,
     EmployeeMasterService,

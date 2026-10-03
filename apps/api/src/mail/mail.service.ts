@@ -26,6 +26,7 @@ export class MailService {
   private readonly webUrl: string;
   private readonly apiUrl: string;
   private cachedResourceId: string | null = null;
+  private cachedOrderResourceId: string | null = null;
   private isConfigured: boolean;
 
   constructor(private readonly configService: ConfigService) {
@@ -80,6 +81,22 @@ export class MailService {
   }
 
   /**
+   * Resolve Hostinger mail order resource ID (e.g. OR...)
+   * Queries /api/v1/me and caches result in memory
+   */
+  async getOrderResourceId(): Promise<string | null> {
+    if (this.cachedOrderResourceId) {
+      return this.cachedOrderResourceId;
+    }
+    try {
+      await this.getMailboxResourceId();
+      return this.cachedOrderResourceId;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Resolve Hostinger mailbox resource ID (e.g. AC...)
    * Queries /api/v1/me and caches result in memory
    */
@@ -93,6 +110,7 @@ export class MailService {
     }
 
     if (!this.apiKey) {
+      this.cachedOrderResourceId = 'OR_MOCK_ORDER_ID';
       return 'AC_MOCK_MAILBOX_RESOURCE_ID';
     }
 
@@ -111,6 +129,9 @@ export class MailService {
       }
 
       const body = (await response.json()) as any;
+      if (body?.data?.orderResourceId) {
+        this.cachedOrderResourceId = body.data.orderResourceId;
+      }
       const mailboxes = body?.data?.mailboxes || [];
 
       if (!Array.isArray(mailboxes) || mailboxes.length === 0) {
@@ -139,6 +160,95 @@ export class MailService {
         `Failed to resolve Hostinger mailbox resource ID: ${err?.message || 'Unknown network error'}.`,
       );
       throw err;
+    }
+  }
+
+  /**
+   * Query Hostinger outbound delivery logs for a given recipient / time range.
+   * Calls GET /api/mail/v1/orders/{orderId}/logs/outbound
+   */
+  async fetchOutboundDeliveryLogs(params?: {
+    recipient?: string;
+    date?: string;
+    fromDate?: string;
+    toDate?: string;
+    status?: 'Successful' | 'Failed';
+    page?: number;
+    perPage?: number;
+  }): Promise<{
+    success: boolean;
+    data: Array<{
+      time?: number | string;
+      sender?: string;
+      to?: string;
+      status?: string;
+      relayEvents?: Array<{
+        relay?: string;
+        dsn?: string;
+        status?: string;
+        response?: string;
+      }>;
+      relay_events?: Array<{
+        relay?: string;
+        dsn?: string;
+        status?: string;
+        response?: string;
+      }>;
+    }>;
+    error?: string;
+  }> {
+    if (!this.apiKey) {
+      return { success: true, data: [] };
+    }
+
+    try {
+      const orderId = await this.getOrderResourceId();
+      if (!orderId) {
+        return {
+          success: false,
+          data: [],
+          error: 'Hostinger orderResourceId could not be resolved from /api/v1/me',
+        };
+      }
+
+      const searchParams = new URLSearchParams();
+      if (params?.recipient) searchParams.set('recipient', params.recipient.trim());
+      if (params?.date) searchParams.set('date', params.date);
+      if (params?.fromDate) searchParams.set('from_date', params.fromDate);
+      if (params?.toDate) searchParams.set('to_date', params.toDate);
+      if (params?.status) searchParams.set('status', params.status);
+      if (params?.page) searchParams.set('page', String(params.page));
+      if (params?.perPage) searchParams.set('per_page', String(params.perPage));
+
+      const queryStr = searchParams.toString();
+      const endpoint = `${this.baseUrl}/api/mail/v1/orders/${encodeURIComponent(orderId)}/logs/outbound${queryStr ? `?${queryStr}` : ''}`;
+
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          data: [],
+          error: `Hostinger outbound logs API returned HTTP ${response.status}`,
+        };
+      }
+
+      const resJson = (await response.json()) as any;
+      const logs = Array.isArray(resJson?.data) ? resJson.data : [];
+      return { success: true, data: logs };
+    } catch (err: any) {
+      return {
+        success: false,
+        data: [],
+        error: `Failed to fetch Hostinger outbound delivery logs: ${err?.message || 'Network error'}`,
+      };
     }
   }
 
@@ -195,8 +305,13 @@ export class MailService {
       // Hostinger Mail API returns 204 No Content on successful message dispatch
       if (response.status === 204 || response.ok) {
         const masked = this.maskEmail(recipients[0]);
+        const messageId =
+          response.headers?.get?.('x-message-id') ||
+          response.headers?.get?.('message-id') ||
+          response.headers?.get?.('x-request-id') ||
+          undefined;
         this.logger.log(`Transactional email successfully dispatched to ${masked}.`);
-        return { success: true };
+        return { success: true, messageId, statusCode: response.status };
       }
 
       // Safe error parsing: do NOT leak customer data or API keys
@@ -405,21 +520,13 @@ export class MailService {
           <tr>
             <td style="background-color: #3B0813; background: linear-gradient(180deg, #4A0C1A 0%, #150207 100%); padding: 32px 20px 24px 20px; text-align: center; color: #FFFFFF; border-bottom: 3px solid #D4AF37;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
-                <!-- A) ONGC LOGO (CENTERED, MODESTLY SIZED, BREATHING ROOM, TRANSPARENT) -->
+                <!-- A) ONGC NAVRATRI 2026 LOGO (COMBINED ONGC EMBLEM & TITLE BRANDING) -->
                 <tr>
-                  <td align="center" style="padding-bottom: 14px;">
-                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="120" style="display: block; width: 120px; max-width: 120px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
+                  <td align="center" style="padding-bottom: 12px;">
+                    <img src="${brandingUrls.festivalLogoUrl}" alt="ONGC Navratri 2026" width="220" style="display: block; width: 220px; max-width: 250px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
                   </td>
                 </tr>
-                <!-- B) NAVRATRI 2026 (PREMIUM SERIF / DISPLAY-STYLE IN GOLD) -->
-                <tr>
-                  <td align="center" style="padding-bottom: 8px;">
-                    <div style="font-family: 'Cinzel', 'Georgia', 'Times New Roman', serif; font-size: 24px; font-weight: 800; color: #D4AF37; letter-spacing: 4px; text-transform: uppercase; line-height: 1.2; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
-                      NAVRATRI 2026
-                    </div>
-                  </td>
-                </tr>
-                <!-- C) AHMEDABAD • OFFICIAL DIGITAL E-PASS (SMALLER UPPERCASE SUBTITLE) -->
+                <!-- B) AHMEDABAD • OFFICIAL DIGITAL E-PASS (SUBTITLE) -->
                 <tr>
                   <td align="center">
                     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; color: #F5E6B3; letter-spacing: 2px; text-transform: uppercase;">

@@ -20,6 +20,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole, DEFAULT_DISPATCH_SCHEDULE } from '@ongc/shared-types';
+import { EmployeeQrDeliveryService } from './employee-qr-delivery.service';
+import { Optional } from '@nestjs/common';
 
 @ApiTags('Admin Employees & Pass Registry')
 @ApiBearerAuth()
@@ -29,6 +31,7 @@ export class EmployeesController {
   constructor(
     private readonly employeesService: EmployeesService,
     private readonly dispatchSchedulerService: EmployeeDispatchSchedulerService,
+    @Optional() private readonly employeeQrDeliveryService?: EmployeeQrDeliveryService,
   ) {}
 
   @Get('employees/daily-passes/dispatch-schedule')
@@ -186,6 +189,88 @@ export class EmployeesController {
       emailStatus,
       qrStatus,
     });
+  }
+
+  @Get('employees/qr-release/deliveries')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'List detailed employee QR email deliveries with delivery lifecycle states' })
+  async listDeliveries(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('personType') personType?: string,
+    @Query('retryable') retryable?: string,
+    @Query('releaseId') releaseId?: string,
+    @Query('isTest') isTest?: string,
+  ) {
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.listDeliveries({
+        page: page ? parseInt(page, 10) : 1,
+        limit: limit ? parseInt(limit, 10) : 20,
+        search,
+        status,
+        personType,
+        retryable,
+        releaseId,
+        isTest: isTest === 'true',
+      });
+    }
+    return { deliveries: [], total: 0, page: 1, limit: 20, totalPages: 1 };
+  }
+
+  @Post('employees/qr-release/deliveries/:id/retry')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Retry a specific failed employee QR email delivery' })
+  async retrySingleDelivery(@Param('id') id: string, @Req() req: Request) {
+    if (!id || !/^\d+$/.test(id)) {
+      throw new BadRequestException('Invalid delivery ID provided.');
+    }
+    const user = (req as any).user;
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.retrySingleDelivery(id, user?.email || user?.name);
+    }
+    return { success: false, message: 'Delivery service unavailable.' };
+  }
+
+  @Post('employees/qr-release/send-test-email')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Send a safe test permanent QR pass email to an administrator email' })
+  async sendTestEmail(@Body() body: { testEmail: string }, @Req() req: Request) {
+    if (!body?.testEmail || !body.testEmail.includes('@')) {
+      throw new BadRequestException('Valid test email address is required.');
+    }
+    const user = (req as any).user;
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.sendTestPermanentQrEmail(body.testEmail, user?.email || user?.name);
+    }
+    return { success: false, message: 'Delivery service unavailable.' };
+  }
+
+  @Post('employees/qr-release/reconcile-hostinger')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Reconcile outbound deliveries against Hostinger delivery logs' })
+  async reconcileHostingerDeliveryLogs() {
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.reconcileDeliveryStatusesWithHostinger();
+    }
+    return { checked: 0, deliveredCount: 0, failedCount: 0, unchangedCount: 0 };
   }
 
   @Post('employees/qr-release/send-email')

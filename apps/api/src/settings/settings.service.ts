@@ -815,7 +815,7 @@ export class SettingsService {
   }
 
   async executeEmployeeQrRelease(
-    options?: { retryFailedOnly?: boolean },
+    options?: { action?: 'SEND_NOW' | 'RETRY_FAILED'; retryFailedOnly?: boolean },
     user?: { id?: bigint | string; role?: string; email?: string; name?: string },
   ) {
     const role = (user?.role || '').toUpperCase().trim();
@@ -824,7 +824,10 @@ export class SettingsService {
     }
 
     if (this.employeesService) {
-      return this.employeesService.releaseEmployeeQrPasses(options);
+      const isRetryOnly = options?.action === 'RETRY_FAILED' || !!options?.retryFailedOnly;
+      return this.employeesService.releaseEmployeeQrPasses({
+        retryFailedOnly: isRetryOnly,
+      });
     }
 
     throw new BadRequestException('Employee service is not available to trigger QR release.');

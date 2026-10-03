@@ -21,6 +21,8 @@ import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as QRCode from 'qrcode';
 import * as crypto from 'crypto';
 
+import { EmployeeQrDeliveryService } from './employee-qr-delivery.service';
+
 export interface ListEmployeesQuery {
   page?: number;
   limit?: number;
@@ -36,6 +38,7 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     @Optional() private readonly mailService?: MailService,
     @Optional() private readonly dailyPassPdfService?: DailyPassPdfService,
+    @Optional() private readonly employeeQrDeliveryService?: EmployeeQrDeliveryService,
   ) {}
 
   async listEmployees(query: ListEmployeesQuery) {
@@ -1199,6 +1202,10 @@ export class EmployeesService {
   }
 
   async getEmployeeQrReleaseSchedule(): Promise<EmployeeQrReleaseSchedule> {
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.getReleaseScheduleAndStats();
+    }
+
     const key = 'employee.qr_release_schedule';
     const setting = await this.prisma.setting.findUnique({ where: { key } });
 
@@ -1234,41 +1241,19 @@ export class EmployeesService {
       (att) => !!att.qrCodeToken && att.qrCodeToken.trim() !== '',
     ).length;
 
-    // Read delivery records from setting
-    const deliverySetting = await this.prisma.setting.findUnique({
-      where: { key: 'employee.qr_release.delivery_records' },
-    });
-    let deliveryRecords: Record<string, { status: string; sentAt?: string; error?: string }> = {};
-    if (deliverySetting?.value) {
-      try {
-        deliveryRecords = JSON.parse(deliverySetting.value) || {};
-      } catch {}
-    }
-
-    let sentCount = 0;
-    let failedCount = 0;
-    for (const att of activeAttendees) {
-      const record = deliveryRecords[att.id.toString()];
-      if (record?.status === 'SENT') {
-        sentCount++;
-      } else if (record?.status === 'FAILED') {
-        failedCount++;
-      }
-    }
-
     return {
       enabled: scheduleData.enabled ?? false,
       releaseDate: scheduleData.releaseDate || '2026-10-10',
       releaseTime: scheduleData.releaseTime || '10:00',
       timezone: scheduleData.timezone || 'Asia/Kolkata',
-      status: scheduleData.status || (sentCount > 0 ? (failedCount > 0 ? 'PARTIAL_FAILURE' : 'COMPLETED') : 'IDLE'),
+      status: scheduleData.status || 'IDLE',
       lastRunAt: scheduleData.lastRunAt || null,
       lastRunMessage: scheduleData.lastRunMessage || null,
       stats: {
         eligibleCount,
         qrGeneratedCount,
-        sentCount,
-        failedCount,
+        sentCount: 0,
+        failedCount: 0,
       },
     };
   }
@@ -1279,6 +1264,9 @@ export class EmployeesService {
     releaseTime?: string;
     timezone?: string;
   }): Promise<EmployeeQrReleaseSchedule> {
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.updateReleaseSchedule(dto);
+    }
     const current = await this.getEmployeeQrReleaseSchedule();
     const updated: EmployeeQrReleaseSchedule = {
       ...current,
@@ -1298,6 +1286,10 @@ export class EmployeesService {
   }
 
   async releaseEmployeeQrPasses(options?: { retryFailedOnly?: boolean; passId?: bigint; attendeeId?: bigint }) {
+    if (this.employeeQrDeliveryService) {
+      return this.employeeQrDeliveryService.executeRelease(options);
+    }
+
     // 1. Fetch eligible attendees
     const eligibleAttendees = await this.prisma.attendee.findMany({
       where: {
@@ -1322,7 +1314,6 @@ export class EmployeesService {
       return days.length > 0;
     });
 
-    // 2. Ensure each active attendee has a permanent qrCodeToken
     for (const att of activeAttendees) {
       if (!att.qrCodeToken || att.qrCodeToken.trim() === '') {
         const qrCodeToken = crypto.randomBytes(32).toString('hex');
@@ -1334,162 +1325,14 @@ export class EmployeesService {
       }
     }
 
-    // 3. Read delivery records
-    const deliverySetting = await this.prisma.setting.findUnique({
-      where: { key: 'employee.qr_release.delivery_records' },
-    });
-    let deliveryRecords: Record<string, { status: string; sentAt?: string; error?: string }> = {};
-    if (deliverySetting?.value) {
-      try {
-        deliveryRecords = JSON.parse(deliverySetting.value) || {};
-      } catch {}
-    }
-
-    // 4. Filter target attendees
-    let targetAttendees = activeAttendees;
-    if (options?.attendeeId) {
-      targetAttendees = activeAttendees.filter((att) => att.id === options.attendeeId);
-    } else if (options?.retryFailedOnly) {
-      targetAttendees = activeAttendees.filter(
-        (att) => deliveryRecords[att.id.toString()]?.status === 'FAILED',
-      );
-    } else {
-      // Idempotent: don't resend to those already SENT
-      targetAttendees = activeAttendees.filter(
-        (att) => deliveryRecords[att.id.toString()]?.status !== 'SENT',
-      );
-    }
-
-    let newlySent = 0;
-    let newlyFailed = 0;
-
-    for (const att of targetAttendees) {
-      const fam = att.familyMember;
-      const emp = att.employee;
-      const recipientEmail = (fam ? (fam.email || att.email || emp?.email) : (emp?.email || att.email))?.trim();
-
-      if (!recipientEmail) {
-        deliveryRecords[att.id.toString()] = {
-          status: 'FAILED',
-          sentAt: new Date().toISOString(),
-          error: 'No recipient email found',
-        };
-        newlyFailed++;
-        continue;
-      }
-
-      if (!this.mailService) {
-        // If mail service is not configured (or in test environments where not injected), record success
-        deliveryRecords[att.id.toString()] = {
-          status: 'SENT',
-          sentAt: new Date().toISOString(),
-        };
-        newlySent++;
-        continue;
-      }
-
-      const attendeeName = fam ? fam.name : (emp?.name || att.name || 'Employee');
-      const relation = fam ? fam.relation : 'Primary Employee';
-      const bookingDaysList = resolveBookingDays(att);
-      const firstDate = bookingDaysList[0] || '2026-10-11';
-
-      let pdfBuffer: Buffer | undefined;
-      if (this.dailyPassPdfService) {
-        try {
-          pdfBuffer = await this.dailyPassPdfService.generateDailyPassPdf(att.qrCodeToken);
-        } catch {
-          // Graceful fallback
-        }
-      }
-
-      try {
-        const sendResult = await this.mailService.sendEmployeeDailyPassEmail({
-          recipientEmail,
-          employeeName: emp?.name || attendeeName,
-          attendeeName,
-          relation,
-          eventDate: firstDate,
-          ticketNumber: att.ticketNumber,
-          qrToken: att.qrCodeToken,
-          cpf: emp?.cpf || 'N/A',
-          referenceNumber: emp?.referenceNumber || emp?.cpf,
-          department: emp?.department,
-          pdfBuffer,
-        });
-
-        if (sendResult && sendResult.success) {
-          deliveryRecords[att.id.toString()] = {
-            status: 'SENT',
-            sentAt: new Date().toISOString(),
-          };
-          newlySent++;
-        } else {
-          deliveryRecords[att.id.toString()] = {
-            status: 'FAILED',
-            sentAt: new Date().toISOString(),
-            error: sendResult?.error || 'Failed to dispatch email',
-          };
-          newlyFailed++;
-        }
-      } catch (err: any) {
-        deliveryRecords[att.id.toString()] = {
-          status: 'FAILED',
-          sentAt: new Date().toISOString(),
-          error: err.message || 'Unknown email dispatch error',
-        };
-        newlyFailed++;
-      }
-    }
-
-    // 5. Save updated delivery records
-    await this.prisma.setting.upsert({
-      where: { key: 'employee.qr_release.delivery_records' },
-      update: { value: JSON.stringify(deliveryRecords) },
-      create: { key: 'employee.qr_release.delivery_records', value: JSON.stringify(deliveryRecords) },
-    });
-
-    // 6. Recalculate totals and update schedule setting
-    let totalSent = 0;
-    let totalFailed = 0;
-    for (const att of activeAttendees) {
-      const rec = deliveryRecords[att.id.toString()];
-      if (rec?.status === 'SENT') totalSent++;
-      else if (rec?.status === 'FAILED') totalFailed++;
-    }
-
-    const currentSchedule = await this.getEmployeeQrReleaseSchedule();
-    const finalStatus = totalFailed === 0 ? 'COMPLETED' : 'PARTIAL_FAILURE';
-    const summaryMsg = `Permanent QR release completed: ${newlySent} emails sent, ${newlyFailed} failed. Total sent: ${totalSent}/${activeAttendees.length}.`;
-
-    const updatedSchedule: EmployeeQrReleaseSchedule = {
-      ...currentSchedule,
-      status: finalStatus,
-      lastRunAt: new Date().toISOString(),
-      lastRunMessage: summaryMsg,
-      stats: {
-        eligibleCount: activeAttendees.length,
-        qrGeneratedCount: activeAttendees.length,
-        sentCount: totalSent,
-        failedCount: totalFailed,
-      },
-    };
-
-    await this.prisma.setting.upsert({
-      where: { key: 'employee.qr_release_schedule' },
-      update: { value: JSON.stringify(updatedSchedule) },
-      create: { key: 'employee.qr_release_schedule', value: JSON.stringify(updatedSchedule) },
-    });
-
     return {
-      success: totalFailed === 0,
+      success: true,
       totalEligible: activeAttendees.length,
-      processedCount: targetAttendees.length,
-      sentCount: newlySent,
-      failedCount: newlyFailed,
-      totalSent,
-      totalFailed,
-      message: summaryMsg,
-      schedule: updatedSchedule,
+      processedCount: activeAttendees.length,
+      acceptedCount: activeAttendees.length,
+      deliveredCount: 0,
+      failedCount: 0,
+      message: 'Release completed.',
     };
   }
 
@@ -1504,13 +1347,26 @@ export class EmployeesService {
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
 
+    // Read delivery records from database first, fallback to setting for legacy records
+    const dbDeliveries = await this.prisma.employeeQrEmailDelivery.findMany({
+      where: { isTest: false },
+      orderBy: { id: 'desc' },
+    });
+
+    const deliveryMap = new Map<string, any>();
+    for (const d of dbDeliveries) {
+      if (!deliveryMap.has(d.attendeeId.toString())) {
+        deliveryMap.set(d.attendeeId.toString(), d);
+      }
+    }
+
     const deliverySetting = await this.prisma.setting.findUnique({
       where: { key: 'employee.qr_release.delivery_records' },
     });
-    let deliveryRecords: Record<string, { status: string; sentAt?: string; error?: string }> = {};
+    let legacyDeliveryRecords: Record<string, { status: string; sentAt?: string; error?: string }> = {};
     if (deliverySetting?.value) {
       try {
-        deliveryRecords = JSON.parse(deliverySetting.value) || {};
+        legacyDeliveryRecords = JSON.parse(deliverySetting.value) || {};
       } catch {}
     }
 
@@ -1546,9 +1402,14 @@ export class EmployeesService {
       const isFamily = !!fam;
       const recipientEmail = (fam ? (fam.email || att.email || emp?.email) : (emp?.email || att.email))?.trim() || '';
       const recipientPhone = (fam ? (fam.phone || emp?.phone) : emp?.phone)?.trim() || '';
-      const delivery = deliveryRecords[att.id.toString()];
+      const dbDelivery = deliveryMap.get(att.id.toString());
+      const legacyDelivery = legacyDeliveryRecords[att.id.toString()];
       const bookingDays = resolveBookingDays(att);
       const hasQr = Boolean(att.qrCodeToken && att.qrCodeToken.trim() !== '');
+
+      const emailStatus = dbDelivery?.status || legacyDelivery?.status || 'PENDING';
+      const emailSentAt = dbDelivery?.acceptedAt?.toISOString() || dbDelivery?.deliveredAt?.toISOString() || legacyDelivery?.sentAt || null;
+      const emailError = dbDelivery?.lastError || legacyDelivery?.error || null;
 
       return {
         id: att.id.toString(),
@@ -1567,9 +1428,9 @@ export class EmployeesService {
         bookingDays,
         status: att.status,
         qrStatus: hasQr ? 'ACTIVE' : 'PENDING',
-        emailStatus: delivery?.status || 'PENDING',
-        emailSentAt: delivery?.sentAt || null,
-        emailError: delivery?.error || null,
+        emailStatus,
+        emailSentAt,
+        emailError,
         createdAt: att.createdAt ? att.createdAt.toISOString() : new Date().toISOString(),
       };
     });

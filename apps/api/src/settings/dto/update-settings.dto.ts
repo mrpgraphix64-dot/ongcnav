@@ -115,6 +115,11 @@ export class UpdateEmployeeQrReleaseScheduleDto {
 }
 
 export class ExecuteEmployeeQrReleaseDto {
+  @ApiProperty({ description: 'Release execution action: SEND_NOW or RETRY_FAILED', example: 'SEND_NOW', required: false })
+  @IsString()
+  @IsOptional()
+  action?: 'SEND_NOW' | 'RETRY_FAILED';
+
   @ApiProperty({ description: 'Retry sending only failed emails', example: false, required: false })
   @IsBoolean()
   @IsOptional()
