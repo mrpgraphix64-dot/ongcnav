@@ -156,7 +156,7 @@ export class WhatsAppService {
     }
 
     return {
-      name: rawPass?.trim() || 'ongc_employee_pass_test',
+      name: rawPass?.trim() || 'ongc_navratri_test_pass',
       language,
       isConfigured: false,
     };

@@ -38,6 +38,10 @@ describe('WhatsAppTestService', () => {
     setting: {
       findUnique: jest.fn(),
     },
+    ongcEmployeeMaster: {
+      count: jest.fn(),
+      findUnique: jest.fn(),
+    },
   };
 
   const mockWhatsAppService = {
@@ -60,7 +64,7 @@ describe('WhatsAppTestService', () => {
       language: 'en_US',
     });
     mockWhatsAppService.getPassTemplateConfig.mockReturnValue({
-      name: 'ongc_employee_pass_test',
+      name: 'ongc_navratri_test_pass',
       language: 'en_US',
       isConfigured: true,
     });
@@ -78,7 +82,7 @@ describe('WhatsAppTestService', () => {
       templateConfigured: true,
       templateName: 'hello_world',
       templateLanguage: 'en_US',
-      passTemplateName: 'ongc_employee_pass_test',
+      passTemplateName: 'ongc_navratri_test_pass',
       passTemplateConfigured: true,
     });
 
@@ -200,7 +204,7 @@ describe('WhatsAppTestService', () => {
         providerName: 'TEST_ADAPTER (Unconfigured)',
         status: 'PROVIDER_NOT_CONFIGURED',
         safeRecipient: '+919876543210',
-        passTemplateName: 'ongc_employee_pass_test',
+        passTemplateName: 'ongc_navratri_test_pass',
         passTemplateConfigured: true,
       });
 
@@ -267,7 +271,7 @@ describe('WhatsAppTestService', () => {
       expect(result.safeRecipient).toBe('+919876543210');
       expect(result.messageText).toContain('Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨');
       expect(result.messageText).toContain('⚠️ This is a test registration. The generated pass is isolated from production employee records.');
-      expect(result.passTemplateName).toBe('ongc_employee_pass_test');
+      expect(result.passTemplateName).toBe('ongc_navratri_test_pass');
       expect(result.passTemplateConfigured).toBe(true);
     });
   });
@@ -330,7 +334,7 @@ describe('WhatsAppTestService', () => {
         provider: 'Meta WhatsApp Cloud API',
         providerMessageId: 'wamid.12345',
         safeRecipient: '+919876543210',
-        templateName: 'ongc_employee_pass_test',
+        templateName: 'ongc_navratri_test_pass',
         templateLanguage: 'en_US',
         timestamp: new Date().toISOString(),
       });
@@ -366,7 +370,7 @@ describe('WhatsAppTestService', () => {
         status: 'TEMPLATE_NOT_CONFIGURED',
         provider: 'Meta WhatsApp Cloud API',
         safeRecipient: '+919876543210',
-        templateName: 'ongc_employee_pass_test',
+        templateName: 'ongc_navratri_test_pass',
         templateLanguage: 'en_US',
         error:
           "Dedicated custom WhatsApp template for employee pass dispatch is not configured. Meta Cloud API cannot deliver arbitrary pass text through 'hello_world'. Preview mode is available below.",
@@ -464,6 +468,54 @@ describe('WhatsAppTestService', () => {
       expect(res.deletedDailyPassesCount).toBe(2);
       expect(res.deletedAttendeesCount).toBe(2);
       expect(res.deletedEmployeesCount).toBe(1);
+    });
+  });
+
+  describe('verifyEmployee (Public WhatsApp Test Flow)', () => {
+    it('successfully verifies standard test CPF 99999 without requiring master record', async () => {
+      const res = await service.verifyEmployee('99999', '9876543210');
+      expect(res.verified).toBe(true);
+      expect(res.cpf).toBe('99999');
+      expect(res.name).toBe('Test Participant');
+    });
+
+    it('rejects invalid CPF format', async () => {
+      await expect(service.verifyEmployee('123', '9876543210')).rejects.toThrow(
+        'CPF number must be 5 or 6 numeric digits.',
+      );
+    });
+
+    it('rejects invalid mobile number format', async () => {
+      await expect(service.verifyEmployee('99999', '12345')).rejects.toThrow(
+        'Employee mobile number must be exactly 10 digits starting with 6, 7, 8, or 9.',
+      );
+    });
+
+    it('verifies official CPF when master matches mobile number', async () => {
+      mockPrisma.ongcEmployeeMaster.count.mockResolvedValue(10);
+      mockPrisma.ongcEmployeeMaster.findUnique.mockResolvedValue({
+        cpf: '12345',
+        name: 'Ramesh Patel',
+        mobile: '+919876543210',
+      });
+
+      const res = await service.verifyEmployee('12345', '9876543210');
+      expect(res.verified).toBe(true);
+      expect(res.cpf).toBe('12345');
+      expect(res.name).toBe('Ramesh Patel');
+    });
+
+    it('rejects official CPF when master mobile does not match', async () => {
+      mockPrisma.ongcEmployeeMaster.count.mockResolvedValue(10);
+      mockPrisma.ongcEmployeeMaster.findUnique.mockResolvedValue({
+        cpf: '12345',
+        name: 'Ramesh Patel',
+        mobile: '+919111111111',
+      });
+
+      await expect(service.verifyEmployee('12345', '9876543210')).rejects.toThrow(
+        'The CPF No. and Mobile No. do not match the official ONGC employee records. Please check the details and try again.',
+      );
     });
   });
 });

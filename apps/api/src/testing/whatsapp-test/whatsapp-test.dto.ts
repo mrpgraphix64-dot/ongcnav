@@ -116,8 +116,26 @@ export class SendWhatsAppTestMessageDto {
   @IsOptional()
   includeVoucherImage?: boolean;
 
-  @ApiPropertyOptional({ example: 'ongc_employee_pass_test' })
+  @ApiPropertyOptional({ example: 'ongc_navratri_test_pass' })
   @IsString()
   @IsOptional()
   templateOverride?: string;
+}
+
+export class VerifyWhatsAppTestDto {
+  @ApiProperty({ example: '99999' })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^[0-9]{5,6}$/, {
+    message: 'CPF number must be 5 or 6 digits.',
+  })
+  cpf: string;
+
+  @ApiProperty({ example: '9876543210' })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^[6-9][0-9]{9}$/, {
+    message: 'Mobile number must be a valid 10-digit Indian number.',
+  })
+  mobile: string;
 }

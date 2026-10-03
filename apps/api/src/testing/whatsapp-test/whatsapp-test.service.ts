@@ -107,6 +107,72 @@ export class WhatsAppTestService {
   }
 
   /**
+   * Verifies employee credentials for the public WhatsApp test flow.
+   * - Enforces format validation.
+   * - Allows standard test CPFs (e.g. 99999 or starting with 99).
+   * - For standard CPFs, verifies mobile matches master if master records exist.
+   * - Does NOT reject if employee is already registered in production, enabling real employees to safely test.
+   */
+  async verifyEmployee(
+    cpf: string,
+    mobile: string,
+  ): Promise<{ verified: boolean; cpf: string; name?: string }> {
+    const cleanCpf = (cpf || '').trim();
+    const cleanMobile = (mobile || '').trim();
+
+    if (!/^[0-9]{5,6}$/.test(cleanCpf)) {
+      throw new BadRequestException('CPF number must be 5 or 6 numeric digits.');
+    }
+    if (!/^[6-9][0-9]{9}$/.test(cleanMobile)) {
+      throw new BadRequestException(
+        'Employee mobile number must be exactly 10 digits starting with 6, 7, 8, or 9.',
+      );
+    }
+
+    // Allow known test CPF prefix or presets
+    if (cleanCpf === '99999' || cleanCpf.startsWith('99')) {
+      return {
+        verified: true,
+        cpf: cleanCpf,
+        name: 'Test Participant',
+      };
+    }
+
+    const masterCount = await this.prisma.ongcEmployeeMaster.count();
+    if (masterCount > 0) {
+      const master = await this.prisma.ongcEmployeeMaster.findUnique({
+        where: { cpf: cleanCpf },
+      });
+      if (master) {
+        if (!master.mobile || master.mobile.trim() === '') {
+          throw new BadRequestException(
+            'Your CPF is present in the official ONGC records, but no mobile number is available for this CPF. Please contact the event team for verification.',
+          );
+        }
+        const masterMobile = (master.mobile || '').replace(/\D/g, '');
+        if (!masterMobile.endsWith(cleanMobile)) {
+          throw new BadRequestException(
+            'The CPF No. and Mobile No. do not match the official ONGC employee records. Please check the details and try again.',
+          );
+        }
+        return {
+          verified: true,
+          cpf: cleanCpf,
+          name: master.name || undefined,
+        };
+      }
+      throw new BadRequestException(
+        'The CPF No. and Mobile No. do not match the official ONGC employee records. Please check the details and try again.',
+      );
+    }
+
+    return {
+      verified: true,
+      cpf: cleanCpf,
+    };
+  }
+
+  /**
    * Submits the duplicate test registration form and creates an isolated test pass.
    * STRICT TEST ISOLATION:
    * - Never touches OngcEmployeeMaster
