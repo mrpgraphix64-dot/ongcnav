@@ -219,14 +219,14 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
       expect(pageSrc).not.toContain("chintan@ongc.co.in");
     });
 
-    it('renders the persistent Mahavir Jewellers sponsor banner with real logo asset and TITLE SPONSOR badge', () => {
+    it('renders the persistent Mahavir Jewellers sponsor section with real logo asset and TITLE SPONSOR badge without offer text', () => {
       expect(pageSrc).toContain('MAHAVIR JEWELLERS');
       expect(pageSrc).toContain('TITLE SPONSOR');
       expect(pageSrc).not.toContain('Official Festival Sponsor');
       expect(pageSrc).toContain('/images/sponsors/mahavir-jewellers-logo.png');
-      expect(pageSrc).toContain('₹5,000 OFF');
-      expect(pageSrc).toContain('ON MAKING CHARGES');
-      expect(pageSrc).toContain('Lifetime | No Expiry');
+
+      // Offer text is intentionally removed from the top sponsor section and shown in WhatsApp preview
+      expect(pageSrc).not.toContain('DEFAULT_SPONSOR_VOUCHER_CONFIG.offerHeadline');
     });
 
     it('implements responsive mobile step indicator with centered numbers and compact labels', () => {
@@ -263,13 +263,16 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
       expect(pageSrc).not.toContain('Meta Template Pending');
     });
 
-    it('renders simulated WhatsApp message as a realistic green-header chat bubble without literal markdown asterisks', () => {
+    it('renders simulated WhatsApp message with real voucher image and without E-Pass link in chat bubble', () => {
       expect(pageSrc).toContain('WhatsApp Message Preview');
       expect(pageSrc).toContain('bg-[#008069]'); // WhatsApp green bar
       expect(pageSrc).toContain('bg-[#EFEAE2]'); // WhatsApp wallpaper
       expect(pageSrc).toContain('text-[#53BDEB] font-bold'); // WhatsApp blue ticks
       expect(pageSrc).toContain('✓✓');
-      expect(pageSrc).toContain('text-[#027EB5]'); // WhatsApp link color
+      expect(pageSrc).toContain('/images/sponsors/mahavir-jewellers-voucher.jpg'); // Real voucher image
+
+      // E-Pass URL removed from message bubble per specification
+      expect(pageSrc).not.toContain('VIEW YOUR E-PASS:');
 
       // No literal markdown asterisks rendered in visual WhatsApp text
       expect(pageSrc).not.toContain('*{common.name');

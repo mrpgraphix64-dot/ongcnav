@@ -794,41 +794,26 @@ export default function WhatsAppTestRegistrationPage() {
           </p>
         </div>
 
-        {/* PERSISTENT SPONSOR BRANDING BANNER (TITLE SPONSOR WITH REAL LOGO) */}
-        <div className="mb-6 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/20 to-amber-500/10 border-2 border-gold/60 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-start">
-            <div className="w-13 h-13 sm:w-16 sm:h-16 relative rounded-xl overflow-hidden shrink-0 shadow-sm border border-gold/40 bg-[#001036] flex items-center justify-center">
-              <Image
-                src="/images/sponsors/mahavir-jewellers-logo.png"
-                alt="Mahavir Jewellers Logo"
-                width={64}
-                height={64}
-                className="w-full h-full object-cover"
-                priority
-              />
-            </div>
-            <div className="text-left flex-1 min-w-0">
-              <span className="inline-block text-[10px] sm:text-[11px] font-extrabold uppercase tracking-widest text-amber-900 bg-gold/30 px-2 py-0.5 rounded-full border border-gold/50 mb-0.5">
-                TITLE SPONSOR
-              </span>
-              <h3 className="font-cinzel font-black text-sm sm:text-lg text-maroon uppercase tracking-wider truncate">
-                {DEFAULT_SPONSOR_VOUCHER_CONFIG.sponsorName || 'MAHAVIR JEWELLERS'}
-              </h3>
-            </div>
+        {/* CENTERED TITLE SPONSOR PRESENTATION (NO OFFER TEXT IN TOP BANNER) */}
+        <div className="mb-6 flex flex-col items-center justify-center text-center py-2 px-4">
+          <span className="text-[11px] sm:text-xs font-extrabold uppercase tracking-widest text-amber-900 bg-gold/25 px-3 py-1 rounded-full border border-gold/40 shadow-xs mb-3">
+            TITLE SPONSOR
+          </span>
+
+          <div className="w-32 sm:w-36 md:w-40 aspect-square relative rounded-2xl overflow-hidden shadow-sm border border-gold/40 bg-[#001036] flex items-center justify-center mb-2.5">
+            <Image
+              src="/images/sponsors/mahavir-jewellers-logo.png"
+              alt="Mahavir Jewellers Logo"
+              width={160}
+              height={160}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
-          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gold/25 w-full sm:w-auto">
-            <div className="text-left sm:text-right">
-              <span className="text-base sm:text-lg font-black text-rose-700 tracking-tight leading-none block">
-                {DEFAULT_SPONSOR_VOUCHER_CONFIG.offerHeadline || '₹5,000 OFF'}
-              </span>
-              <span className="text-[10px] sm:text-[11px] font-bold text-stone-700 uppercase tracking-wider block mt-0.5">
-                {DEFAULT_SPONSOR_VOUCHER_CONFIG.offerSubtext || 'ON MAKING CHARGES'}
-              </span>
-            </div>
-            <div className="text-[10px] font-semibold text-stone-600 bg-white/80 px-2 py-0.5 rounded-md border border-stone-200">
-              Lifetime | No Expiry
-            </div>
-          </div>
+
+          <h3 className="font-cinzel font-black text-base sm:text-lg text-maroon uppercase tracking-widest">
+            {DEFAULT_SPONSOR_VOUCHER_CONFIG.sponsorName || 'MAHAVIR JEWELLERS'}
+          </h3>
         </div>
 
         {submitting ? (
@@ -941,7 +926,7 @@ export default function WhatsAppTestRegistrationPage() {
                 {/* Subtle WhatsApp Chat Wallpaper Background */}
                 <div className="bg-[#EFEAE2] p-4 sm:p-6">
                   {/* Single Authentic WhatsApp Message Bubble */}
-                  <div className="bg-white rounded-2xl rounded-tl-none p-4 sm:p-5 shadow-sm border border-stone-200/50 text-[#111B21] text-[15px] sm:text-base leading-relaxed max-w-[94%] sm:max-w-[460px] space-y-3.5 relative">
+                  <div className="bg-white rounded-2xl rounded-tl-none p-3.5 sm:p-4 shadow-sm border border-stone-200/50 text-[#111B21] text-[15px] sm:text-base leading-relaxed max-w-[94%] sm:max-w-[460px] space-y-3 relative mx-auto sm:mx-0">
                     {/* Small message tail on top-left */}
                     <div className="absolute top-0 -left-2 w-0 h-0 border-t-[8px] border-t-white border-l-[8px] border-l-transparent" />
 
@@ -954,60 +939,39 @@ export default function WhatsAppTestRegistrationPage() {
                     </div>
 
                     <div>
-                      Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨
-                    </div>
-
-                    <div>
-                      🎟️ <strong>Reference No.:</strong>
-                      <div className="font-bold text-base sm:text-lg font-mono text-ink mt-0.5">
-                        {testResult.referenceNumber}
-                      </div>
+                      Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🎟️✨
                     </div>
 
                     <div className="text-[#3b4a54]">
-                      Your permanent QR pass is your entry credential for the event. Please keep your QR safe and do not share it.
+                      Your permanent QR pass is your entry credential for the event.
+                      <br />
+                      Please keep your QR safe and do not share it.
                     </div>
 
-                    {testResult.sponsorVoucher && (
-                      <div className="space-y-1 pt-1 text-[#111B21]">
-                        <div className="font-bold">
-                          💎 A SPECIAL GIFT FOR YOU 💎
-                        </div>
-                        <div className="font-bold">
-                          {testResult.sponsorVoucher.sponsorName || 'MAHAVIR JEWELLERS'}
-                        </div>
-                        <div>
-                          ✨ <strong>{testResult.sponsorVoucher.offerHeadline || '₹5,000 OFF'}</strong>
-                          <br />
-                          <strong>{testResult.sponsorVoucher.offerSubtext || 'ON MAKING CHARGES'}</strong>
-                        </div>
-                        <div className="text-stone-600 text-sm">
-                          {testResult.sponsorVoucher.validityNote || 'Lifetime | No expiry'}
-                        </div>
-                        <div className="text-stone-600 text-sm">
-                          📍 {testResult.sponsorVoucher.address || '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda'}
-                        </div>
-                        <div className="text-stone-600 text-sm">
-                          📞 {testResult.sponsorVoucher.phone || '90330 56098'}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-1 pt-1">
-                      <div className="font-bold text-[#111B21]">
-                        🎟️ VIEW YOUR E-PASS:
-                      </div>
-                      <a
-                        href={testResult.passUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#027EB5] hover:underline font-mono text-sm break-all block"
-                      >
-                        {testResult.passUrl}
-                      </a>
+                    {/* ACTUAL MAHAVIR JEWELLERS VOUCHER IMAGE — WHATSAPP PHOTO ATTACHMENT */}
+                    <div className="w-full rounded-xl overflow-hidden my-2.5">
+                      <Image
+                        src={testResult.sponsorVoucher?.voucherImagePath || '/images/sponsors/mahavir-jewellers-voucher.jpg'}
+                        alt="Mahavir Jewellers Voucher"
+                        width={600}
+                        height={360}
+                        className="w-full h-auto object-cover rounded-xl"
+                        priority
+                      />
                     </div>
 
-                    <div className="text-stone-600 text-xs sm:text-sm italic pt-1">
+                    {/* Sponsor Address & Phone */}
+                    <div className="text-stone-700 text-xs sm:text-[13px] space-y-0.5 pt-0.5">
+                      <div>
+                        📍 {testResult.sponsorVoucher?.address || '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda'}
+                      </div>
+                      <div>
+                        📞 {testResult.sponsorVoucher?.phone || '90330 56098'}
+                      </div>
+                    </div>
+
+                    {/* Test Notice */}
+                    <div className="text-stone-600 text-xs sm:text-[13px] italic pt-1">
                       ⚠️ <strong>Notice:</strong> This is a test registration. Your test pass and WhatsApp message are isolated from production employee records.
                     </div>
 
