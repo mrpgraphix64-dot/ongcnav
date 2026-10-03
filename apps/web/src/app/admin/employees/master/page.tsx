@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import AdminModal from '@/components/admin/AdminModal';
+import { normalizeCpf } from '@ongc/shared-types';
 
 interface MasterRecord {
   id: string;
@@ -477,7 +478,7 @@ export default function OngcEmployeeMasterPage() {
                         {(page - 1) * limit + idx + 1}
                       </td>
                       <td className="py-2.5 px-4 font-mono font-bold text-maroon text-sm">
-                        {r.cpfNo}
+                        {normalizeCpf(r.cpfNo) || r.cpfNo}
                       </td>
                       <td className="py-2.5 px-4 font-mono font-semibold text-ink text-sm">
                         {hasMobile ? (
@@ -791,7 +792,7 @@ export default function OngcEmployeeMasterPage() {
                     {validationPreview.rows.slice(0, 100).map((r, i) => (
                       <tr key={i} className="hover:bg-stone-50">
                         <td className="py-1.5 px-3 text-stone-400 font-mono">{r.row}</td>
-                        <td className="py-1.5 px-3 font-mono font-bold text-ink">{r.cpfNo}</td>
+                        <td className="py-1.5 px-3 font-mono font-bold text-ink">{normalizeCpf(r.cpfNo) || r.cpfNo}</td>
                         <td className="py-1.5 px-3 font-mono text-stone-700">
                           {r.mobileNo ? (
                             r.mobileNo

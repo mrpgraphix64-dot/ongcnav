@@ -218,3 +218,23 @@ body {
     animation: none !important;
   }
 }
+
+/* Subtle custom scrollbar for scratch card content if needed */
+.scratch-card-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.scratch-card-scrollbar::-webkit-scrollbar-track {
+  background: rgba(212, 175, 55, 0.08);
+  border-radius: 9999px;
+}
+.scratch-card-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(122, 25, 48, 0.25);
+  border-radius: 9999px;
+}
+.scratch-card-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(122, 25, 48, 0.45);
+}
+.scratch-card-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(122, 25, 48, 0.25) rgba(212, 175, 55, 0.08);
+}

@@ -684,21 +684,51 @@ describe('RegistrationService', () => {
       expect(typeof res.cpf).toBe('string');
     });
 
-    it('succeeds with CPF preserving leading zero like "01234"', async () => {
+    it('succeeds with genuine 5-digit CPF like "29344"', async () => {
       prisma.employee.findUnique.mockResolvedValueOnce(null);
       prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(100);
       prisma.ongcEmployeeMaster.findUnique.mockResolvedValueOnce({
-        cpf: '01234',
+        cpf: '29344',
+        name: 'Suresh Patel',
+        mobile: '9428519184',
+      });
+
+      const res = await service.verifyEmployee('29344', '9428519184');
+      expect(res.verified).toBe(true);
+      expect(res.cpf).toBe('29344');
+      expect(typeof res.cpf).toBe('string');
+    });
+
+    it('succeeds with genuine 6-digit CPF like "103506"', async () => {
+      prisma.employee.findUnique.mockResolvedValueOnce(null);
+      prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(100);
+      prisma.ongcEmployeeMaster.findUnique.mockResolvedValueOnce({
+        cpf: '103506',
+        name: 'Meena Sharma',
+        mobile: '9876543210',
+      });
+
+      const res = await service.verifyEmployee('103506', '9876543210');
+      expect(res.verified).toBe(true);
+      expect(res.cpf).toBe('103506');
+      expect(typeof res.cpf).toBe('string');
+    });
+
+    it('succeeds with CPF preserving leading zero like "012345"', async () => {
+      prisma.employee.findUnique.mockResolvedValueOnce(null);
+      prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(100);
+      prisma.ongcEmployeeMaster.findUnique.mockResolvedValueOnce({
+        cpf: '012345',
         name: 'Amit Patel',
         mobile: '9876543210',
       });
 
-      const res = await service.verifyEmployee('01234', '9876543210');
+      const res = await service.verifyEmployee('012345', '9876543210');
       expect(res.verified).toBe(true);
-      expect(res.cpf).toBe('01234');
+      expect(res.cpf).toBe('012345');
       expect(typeof res.cpf).toBe('string');
       expect(prisma.ongcEmployeeMaster.findUnique).toHaveBeenCalledWith({
-        where: { cpf: '01234' },
+        where: { cpf: '012345' },
       });
     });
 

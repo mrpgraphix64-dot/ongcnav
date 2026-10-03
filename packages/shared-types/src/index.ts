@@ -1165,3 +1165,37 @@ export function isBookPassOpen(isSettingEnabled?: boolean | string | null): bool
 }
 
 export * from './admin-page-access';
+
+/**
+ * Authoritative string formatter for ONGC CPF numbers.
+ * Guarantees CPF is always treated as a string and never parsed as a JS Number.
+ * Leading zeros are strictly preserved.
+ */
+export function formatCpfString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return '';
+    return value.toLocaleString('fullwide', { useGrouping: false });
+  }
+  return String(value).trim();
+}
+
+/**
+ * Authoritative ONGC CPF normalization rule.
+ * ONGC master records contain both 5-digit and 6-digit numeric CPFs.
+ * - Genuine 5-digit CPFs (e.g. "29344") remain valid 5-digit strings.
+ * - Genuine 6-digit CPFs (e.g. "103506") remain valid 6-digit strings.
+ * - Leading-zero CPFs (e.g. "012345") strictly preserve leading zeros as strings.
+ * - Never converts to Number, never pads automatically with leading zeros.
+ * - Rejects invalid formats (empty, letters, symbols, <5 or >6 digits).
+ */
+export function normalizeCpf(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const clean = formatCpfString(raw);
+  // Matches 5 or 6 numeric digits (covers all ONGC employee master records)
+  if (/^[0-9]{5,6}$/.test(clean)) {
+    return clean;
+  }
+  return null;
+}

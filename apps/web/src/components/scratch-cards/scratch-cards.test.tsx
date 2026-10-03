@@ -253,8 +253,8 @@ describe('3-Card Scratch & Reveal Experience (ONGC Navratri 2026)', () => {
         />,
       );
 
-      // Compact layout renders with reduced min-height (320px) and compact styling
-      expect(htmlCompact).toContain('min-height:320px');
+      // Compact layout renders with reduced min-height (275px) and compact styling
+      expect(htmlCompact).toContain('min-height:275px');
       expect(htmlCompact).toContain('touch-action:none');
       expect(htmlCompact).toContain('MAHAVIR JEWELLERS');
     });

@@ -53,6 +53,30 @@ describe('EmployeeMasterService', () => {
       expect(normalizeCpf('12345')).toBe('12345');
       expect(normalizeCpf('  65432  ')).toBe('65432');
       expect(normalizeCpf('103506')).toBe('103506');
+      expect(normalizeCpf('29344')).toBe('29344');
+      expect(normalizeCpf('39706')).toBe('39706');
+    });
+
+    it('ensures genuine 5-digit and 6-digit CPFs remain valid without blind padding or truncation', () => {
+      // 1. Genuine 5-digit CPF remains valid
+      expect(normalizeCpf('12345')).toBe('12345');
+      expect(normalizeCpf('29344')).toBe('29344');
+
+      // 2. Genuine 6-digit CPF remains valid
+      expect(normalizeCpf('103506')).toBe('103506');
+      expect(normalizeCpf('123456')).toBe('123456');
+
+      // 3. Leading-zero CPF remains a string
+      expect(normalizeCpf('012345')).toBe('012345');
+      expect(typeof normalizeCpf('012345')).toBe('string');
+
+      // 4. "012345" does NOT become "12345"
+      expect(normalizeCpf('012345')).toBe('012345');
+      expect(normalizeCpf('012345')).not.toBe('12345');
+
+      // 5. "12345" does NOT automatically become "012345"
+      expect(normalizeCpf('12345')).toBe('12345');
+      expect(normalizeCpf('12345')).not.toBe('012345');
     });
 
     it('ensures CPF 12345 remains string "12345" across types', () => {
@@ -67,6 +91,7 @@ describe('EmployeeMasterService', () => {
     it('preserves leading zero for CPF 01234 as string "01234"', () => {
       expect(normalizeCpf('01234')).toBe('01234');
       expect(typeof normalizeCpf('01234')).toBe('string');
+      expect(normalizeCpf('01234')).not.toBe('1234');
     });
 
     it('rejects 4-digit CPF 1234 rather than automatically padding with a zero', () => {
@@ -376,6 +401,35 @@ describe('EmployeeMasterService', () => {
       expect(res.lastUpdated).toBe('2026-10-02T12:00:00.000Z');
     });
 
+    it('preserves leading zeros in search query without numeric conversion', async () => {
+      prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(1);
+      prisma.ongcEmployeeMaster.findMany.mockResolvedValueOnce([
+        {
+          cpf: '012345',
+          mobile: '9876543210',
+          createdAt: new Date('2026-10-01T10:00:00Z'),
+          updatedAt: new Date('2026-10-02T12:00:00Z'),
+        },
+      ]);
+      prisma.ongcEmployeeMaster.findFirst.mockResolvedValueOnce({
+        updatedAt: new Date('2026-10-02T12:00:00Z'),
+      });
+
+      const res = await service.listMasterRecords({ search: '012345', page: 1, limit: 10 });
+      expect(res.total).toBe(1);
+      expect(res.records[0].cpfNo).toBe('012345');
+      expect(prisma.ongcEmployeeMaster.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [
+              { cpf: { contains: '012345', mode: 'insensitive' } },
+              { mobile: { contains: '012345', mode: 'insensitive' } },
+            ],
+          },
+        }),
+      );
+    });
+
     it('returns empty records array when no master records exist', async () => {
       prisma.ongcEmployeeMaster.count.mockResolvedValueOnce(0);
       prisma.ongcEmployeeMaster.findMany.mockResolvedValueOnce([]);
@@ -389,16 +443,18 @@ describe('EmployeeMasterService', () => {
   });
 
   describe('exportMasterToCsv', () => {
-    it('generates clean CSV containing CPF NO and Mobile No columns only', async () => {
+    it('generates clean CSV containing CPF NO and Mobile No columns only and preserves leading zeros', async () => {
       prisma.ongcEmployeeMaster.findMany.mockResolvedValueOnce([
-        { cpf: '12345', mobile: '9876543210' },
-        { cpf: '12346', mobile: '9898989898' },
+        { cpf: '012345', mobile: '9876543210' },
+        { cpf: '12345', mobile: '9876543211' },
+        { cpf: '103506', mobile: '9898989898' },
       ]);
 
       const csv = await service.exportMasterToCsv();
       expect(csv).toContain('CPF NO,Mobile No');
-      expect(csv).toContain('12345,9876543210');
-      expect(csv).toContain('12346,9898989898');
+      expect(csv).toContain('012345,9876543210');
+      expect(csv).toContain('12345,9876543211');
+      expect(csv).toContain('103506,9898989898');
       expect(csv).not.toContain('dob');
       expect(csv).not.toContain('doj');
       expect(csv).not.toContain('email');

@@ -69,7 +69,7 @@ export default function ScratchCard({
 
     const rect = container.getBoundingClientRect();
     const width = rect.width || container.clientWidth || 280;
-    const height = rect.height || container.clientHeight || (compact ? 320 : 430);
+    const height = rect.height || container.clientHeight || (compact ? 275 : 430);
 
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
     canvas.width = Math.floor(width * dpr);
@@ -151,7 +151,7 @@ export default function ScratchCard({
 
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = compact ? 32 : 38; // Comfortable brush width
+    ctx.lineWidth = compact ? 28 : 38; // Proportional brush width
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -160,7 +160,7 @@ export default function ScratchCard({
       ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
       ctx.lineTo(x, y);
     } else {
-      ctx.arc(x, y, (compact ? 32 : 38) / 2, 0, Math.PI * 2);
+      ctx.arc(x, y, (compact ? 28 : 38) / 2, 0, Math.PI * 2);
     }
     ctx.stroke();
     ctx.restore();
@@ -216,47 +216,53 @@ export default function ScratchCard({
           ? 'bg-gradient-to-b from-[#FFFDF9] via-[#FAF5EB] to-[#F7EFE1] border-[#D4AF37] shadow-xl scale-[1.01]'
           : 'bg-[#FFFDF9] border-[#D4AF37]/50 shadow-md hover:shadow-lg'
       }`}
-      style={{ minHeight: compact ? '320px' : '430px' }}
+      style={{ minHeight: compact ? '275px' : '430px' }}
     >
       {/* ------------------------------------------------------------- */}
       {/* CARD UNDERNEATH / REVEALED CONTENT                            */}
       {/* ------------------------------------------------------------- */}
-      <div className={`relative ${compact ? 'p-3.5 sm:p-4' : 'p-5 sm:p-6'} flex flex-col h-full justify-between z-0`}>
+      <div
+        className={`relative ${
+          compact
+            ? 'p-2.5 sm:p-3 overflow-y-auto max-h-[275px] sm:max-h-[285px] scratch-card-scrollbar'
+            : 'p-5 sm:p-6'
+        } flex flex-col h-full justify-between z-0`}
+      >
         <div>
           {/* Top festive header & badge */}
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-[10px] sm:text-xs font-bold font-mono tracking-widest uppercase text-maroon bg-maroon-soft px-2.5 py-0.5 sm:py-1 rounded-full border border-maroon/20">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-[9.5px] sm:text-xs font-bold font-mono tracking-widest uppercase text-maroon bg-maroon-soft px-2 py-0.5 rounded-full border border-maroon/20">
               {card.badgeLabel || 'FESTIVE SURPRISE'}
             </span>
 
             {revealedLocal ? (
-              <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full shadow-2xs animate-fade-in">
+              <span className="inline-flex items-center gap-1 text-[9.5px] sm:text-[11px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full shadow-2xs animate-fade-in">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                 <span>REVEALED</span>
               </span>
             ) : (
-              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+              <span className="text-[9.5px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                 CARD #{cardIndex + 1}
               </span>
             )}
           </div>
 
           {/* Card Icon & Title Header */}
-          <div className={`text-center ${compact ? 'my-1.5' : 'my-3'}`}>
-            <div className={`${compact ? 'w-9 h-9 mb-1.5' : 'w-12 h-12 mb-2'} mx-auto rounded-2xl bg-gradient-to-br from-gold/30 via-cream-light to-gold/20 border border-gold/50 flex items-center justify-center shadow-inner`}>
+          <div className={`text-center ${compact ? 'my-1' : 'my-3'}`}>
+            <div className={`${compact ? 'w-7 h-7 mb-1' : 'w-12 h-12 mb-2'} mx-auto rounded-2xl bg-gradient-to-br from-gold/30 via-cream-light to-gold/20 border border-gold/50 flex items-center justify-center shadow-inner`}>
               {card.category === 'welcome' ? (
-                <Flame className={`${compact ? 'w-4.5 h-4.5' : 'w-6 h-6'} text-maroon`} />
+                <Flame className={`${compact ? 'w-3.5 h-3.5' : 'w-6 h-6'} text-maroon`} />
               ) : card.category === 'sponsor' ? (
-                <Gift className={`${compact ? 'w-4.5 h-4.5' : 'w-6 h-6'} text-amber-600`} />
+                <Gift className={`${compact ? 'w-3.5 h-3.5' : 'w-6 h-6'} text-amber-600`} />
               ) : (
-                <Music className={`${compact ? 'w-4.5 h-4.5' : 'w-6 h-6'} text-maroon`} />
+                <Music className={`${compact ? 'w-3.5 h-3.5' : 'w-6 h-6'} text-maroon`} />
               )}
             </div>
 
-            <h3 className={`font-cinzel font-extrabold ${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'} text-ink uppercase tracking-wide leading-tight`}>
+            <h3 className={`font-cinzel font-extrabold ${compact ? 'text-xs sm:text-sm' : 'text-base sm:text-lg'} text-ink uppercase tracking-wide leading-tight`}>
               {card.title}
             </h3>
-            <p className="text-[11px] sm:text-xs text-stone-500 font-medium mt-0.5">
+            <p className="text-[10px] sm:text-[11px] text-stone-500 font-medium mt-0.5">
               {card.subtitle}
             </p>
           </div>
@@ -264,32 +270,32 @@ export default function ScratchCard({
           {/* Central Highlight / Offer Box */}
           {isSponsorCard && voucher ? (
             /* MAHAVIR JEWELLERS SPONSOR VOUCHER BOX */
-            <div className={`mt-2 ${compact ? 'p-3 space-y-1.5' : 'p-4 space-y-2.5'} rounded-2xl bg-gradient-to-br from-[#0c1836] via-[#102450] to-[#071126] text-white border-2 border-gold/60 shadow-lg text-center`}>
-              <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold tracking-widest text-amber-300 uppercase">
-                <Sparkles className="w-3 h-3 text-amber-300" />
+            <div className={`mt-1.5 ${compact ? 'p-2 sm:p-2.5 space-y-1' : 'p-4 space-y-2.5'} rounded-2xl bg-gradient-to-br from-[#0c1836] via-[#102450] to-[#071126] text-white border-2 border-gold/60 shadow-lg text-center`}>
+              <div className="flex items-center justify-center gap-1.5 text-[9.5px] font-bold tracking-widest text-amber-300 uppercase">
+                <Sparkles className="w-2.5 h-2.5 text-amber-300" />
                 <span>{voucher.sponsorName}</span>
-                <Sparkles className="w-3 h-3 text-amber-300" />
+                <Sparkles className="w-2.5 h-2.5 text-amber-300" />
               </div>
 
               <div>
-                <div className={`${compact ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-black font-cinzel text-amber-300 tracking-tight leading-none drop-shadow`}>
+                <div className={`${compact ? 'text-lg sm:text-xl' : 'text-2xl sm:text-3xl'} font-black font-cinzel text-amber-300 tracking-tight leading-none drop-shadow`}>
                   {card.revealHeadline || voucher.offerHeadline}
                 </div>
-                <div className="text-[10px] sm:text-[11px] font-bold tracking-wider uppercase text-amber-100/90 mt-0.5 sm:mt-1">
+                <div className="text-[9.5px] sm:text-[10px] font-bold tracking-wider uppercase text-amber-100/90 mt-0.5">
                   {card.revealSubheadline || voucher.offerSubtext}
                 </div>
               </div>
 
-              <div className="inline-block px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/40 text-[9.5px] sm:text-[10px] font-bold text-amber-200">
+              <div className="inline-block px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/40 text-[9px] sm:text-[9.5px] font-bold text-amber-200">
                 {card.validityNote || voucher.validityNote}
               </div>
 
               {/* Voucher Image preview */}
               {voucher.voucherImagePath && (
-                <div className="pt-1.5 border-t border-white/10">
+                <div className="pt-1 border-t border-white/10">
                   <div
                     onClick={() => setShowVoucherModal(true)}
-                    className={`relative w-full ${compact ? 'h-16 sm:h-20' : 'h-24'} rounded-xl overflow-hidden border border-gold/40 cursor-pointer group shadow-sm bg-black/40`}
+                    className={`relative w-full ${compact ? 'h-13 sm:h-16' : 'h-24'} rounded-xl overflow-hidden border border-gold/40 cursor-pointer group shadow-sm bg-black/40`}
                   >
                     <Image
                       src={voucher.voucherImagePath}
@@ -298,7 +304,7 @@ export default function ScratchCard({
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors flex items-center justify-center">
-                      <span className="text-[9px] sm:text-[10px] font-bold bg-black/70 text-amber-200 px-2 py-0.5 rounded-full border border-gold/40 flex items-center gap-1">
+                      <span className="text-[8.5px] sm:text-[9.5px] font-bold bg-black/70 text-amber-200 px-2 py-0.5 rounded-full border border-gold/40 flex items-center gap-1">
                         <ExternalLink className="w-2.5 h-2.5" />
                         <span>Tap to view voucher</span>
                       </span>
@@ -308,7 +314,7 @@ export default function ScratchCard({
               )}
 
               {/* Store location & contact */}
-              <div className="text-[9.5px] sm:text-[10px] text-amber-100/80 pt-1 space-y-0.5 text-left bg-black/20 p-2 rounded-xl border border-white/5">
+              <div className="text-[9px] sm:text-[9.5px] text-amber-100/80 pt-0.5 space-y-0.5 text-left bg-black/20 p-1.5 rounded-xl border border-white/5">
                 <div className="flex items-start gap-1.5">
                   <MapPin className="w-3 h-3 text-amber-300 shrink-0 mt-0.5" />
                   <span className="line-clamp-2">{voucher.address}</span>
@@ -323,23 +329,23 @@ export default function ScratchCard({
             </div>
           ) : (
             /* FESTIVE SURPRISE / GARBA NIGHT BOX */
-            <div className={`mt-2 ${compact ? 'p-3 space-y-1.5' : 'p-4 space-y-2'} rounded-2xl bg-white border border-gold/40 shadow-sm text-center`}>
-              <span className="inline-block text-[10px] font-black uppercase tracking-wider text-maroon bg-maroon-soft px-2.5 py-0.5 rounded-full border border-maroon/20">
+            <div className={`mt-1.5 ${compact ? 'p-2 space-y-1' : 'p-4 space-y-2'} rounded-2xl bg-white border border-gold/40 shadow-sm text-center`}>
+              <span className="inline-block text-[9.5px] font-black uppercase tracking-wider text-maroon bg-maroon-soft px-2 py-0.5 rounded-full border border-maroon/20">
                 {card.revealHeadline}
               </span>
               <div className={`font-outfit font-extrabold ${compact ? 'text-xs sm:text-sm' : 'text-sm'} text-ink leading-snug`}>
                 {card.revealSubheadline}
               </div>
-              <p className="text-[11px] sm:text-xs text-stone-600 leading-relaxed">
+              <p className="text-[10px] sm:text-[11px] text-stone-600 leading-relaxed">
                 {card.revealBody}
               </p>
               {card.highlightText && (
-                <div className="pt-1.5 border-t border-stone-100 text-[10px] sm:text-[11px] font-bold text-maroon-dark">
+                <div className="pt-1 border-t border-stone-100 text-[9.5px] sm:text-[10px] font-bold text-maroon-dark">
                   ✨ {card.highlightText}
                 </div>
               )}
               {card.validityNote && (
-                <div className="text-[9.5px] sm:text-[10px] text-stone-500 font-mono">
+                <div className="text-[9px] sm:text-[9.5px] text-stone-500 font-mono">
                   {card.validityNote}
                 </div>
               )}
@@ -348,9 +354,9 @@ export default function ScratchCard({
         </div>
 
         {/* Card Footer Status / Actions */}
-        <div className={`pt-2.5 ${compact ? 'mt-2' : 'mt-3'} border-t border-gold/20 flex flex-col items-center gap-2`}>
+        <div className={`pt-2 ${compact ? 'mt-1.5' : 'mt-3'} border-t border-gold/20 flex flex-col items-center gap-1.5`}>
           {revealedLocal ? (
-            <div className="w-full text-center py-1.5 sm:py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center justify-center gap-1.5">
+            <div className="w-full text-center py-1.5 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center justify-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               <span>Surprise Unlocked!</span>
             </div>
@@ -359,7 +365,7 @@ export default function ScratchCard({
             <button
               type="button"
               onClick={completeReveal}
-              className="w-full py-2 px-3 sm:py-2.5 sm:px-4 rounded-xl bg-gradient-to-r from-gold/20 via-gold/30 to-gold/20 hover:from-gold/40 hover:to-gold/40 border border-gold/60 text-maroon-deep font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-maroon"
+              className="w-full py-1.5 px-3 sm:py-2 sm:px-4 rounded-xl bg-gradient-to-r from-gold/20 via-gold/30 to-gold/20 hover:from-gold/40 hover:to-gold/40 border border-gold/60 text-maroon-deep font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-maroon"
               aria-label={`Reveal surprise: ${card.title}`}
             >
               <Sparkles className="w-3.5 h-3.5 text-maroon" />

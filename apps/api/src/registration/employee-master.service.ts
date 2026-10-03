@@ -46,30 +46,8 @@ export interface MasterValidationResponse {
   rows: MasterRowValidationPreview[];
 }
 
-export function formatCpfString(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) return '';
-    return value.toLocaleString('fullwide', { useGrouping: false });
-  }
-  return String(value).trim();
-}
-
-/**
- * Normalizes and validates an ONGC CPF number.
- * ONGC master records contain 5-digit and 6-digit numeric CPFs.
- * Leading zeros are strictly preserved and never auto-padded or parsed as Number/BigInt.
- */
-export function normalizeCpf(raw: unknown): string | null {
-  if (raw === undefined || raw === null) return null;
-  const clean = formatCpfString(raw);
-  // Matches 5 or 6 numeric digits (covers all ONGC employee master records)
-  if (/^[0-9]{5,6}$/.test(clean)) {
-    return clean;
-  }
-  return null;
-}
+import { formatCpfString, normalizeCpf } from '@ongc/shared-types';
+export { formatCpfString, normalizeCpf };
 
 /**
  * Evaluates mobile number into 3 distinct states:
