@@ -18,6 +18,10 @@ import {
   ToggleMaintenanceModeDto,
   UpdatePaymentSettingsDto,
   UpdateBookPassSettingsDto,
+  UpdateWebsiteModeDto,
+  UpdateEmployeeTypesDto,
+  UpdateEmployeeQrReleaseScheduleDto,
+  ExecuteEmployeeQrReleaseDto,
 } from './dto/update-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -94,6 +98,59 @@ export class SettingsController {
     const user = (req as any).user;
     const target = dto.enabled !== undefined ? dto.enabled : dto.availability || 'OPEN';
     return this.settingsService.updateBookPassSettings(target, user);
+  }
+
+  @Get('website-mode')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get current Public Website Mode' })
+  async getWebsiteMode() {
+    return this.settingsService.getPublicWebsiteMode();
+  }
+
+  @Post('website-mode')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update Public Website Mode (COMING_SOON, EMPLOYEE_REGISTRATION_ONLY, FULL_WEBSITE)' })
+  async updateWebsiteMode(@Body() dto: UpdateWebsiteModeDto, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.settingsService.updatePublicWebsiteMode(dto.mode, user);
+  }
+
+  @Get('employee-types')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN)
+  @ApiOperation({ summary: 'Get Employee Type registration settings (regular, retired, contract)' })
+  async getEmployeeTypes() {
+    return this.settingsService.getEmployeeTypeSettings();
+  }
+
+  @Post('employee-types')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN)
+  @ApiOperation({ summary: 'Update Employee Type registration settings' })
+  async updateEmployeeTypes(@Body() dto: UpdateEmployeeTypesDto, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.settingsService.updateEmployeeTypeSettings(dto, user);
+  }
+
+  @Get('qr-release-schedule')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.EMPLOYEE_ADMIN)
+  @ApiOperation({ summary: 'Get Employee QR Release Schedule and statistics' })
+  async getQrReleaseSchedule() {
+    return this.settingsService.getEmployeeQrReleaseSchedule();
+  }
+
+  @Post('qr-release-schedule')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.EMPLOYEE_ADMIN)
+  @ApiOperation({ summary: 'Save Employee QR Release Schedule' })
+  async updateQrReleaseSchedule(@Body() dto: UpdateEmployeeQrReleaseScheduleDto, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.settingsService.updateEmployeeQrReleaseSchedule(dto, user);
+  }
+
+  @Post('qr-release-schedule/execute')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.EVENT_ADMIN, UserRole.EMPLOYEE_ADMIN)
+  @ApiOperation({ summary: 'Trigger Employee QR Release execution immediately or retry failed' })
+  async executeQrRelease(@Body() dto: ExecuteEmployeeQrReleaseDto, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.settingsService.executeEmployeeQrRelease(dto, user);
   }
 
   @Post('reset-data')

@@ -1,5 +1,6 @@
-import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Optional, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmployeesService } from '../registration/employees.service';
 import {
   UserRole,
   SETTING_SUPER_ADMIN_FULL_POWER,
@@ -19,8 +20,15 @@ import {
   isSuperAdminFullPowerActive,
   isMaintenanceModeActive,
   isBookPassOpen,
+  PublicWebsiteMode,
+  EmployeeTypeSettings,
+  EmployeeQrReleaseSchedule,
 } from '@ongc/shared-types';
 import { isAdminTestDataDeleteEnabled } from '../commercial/commercial-test-payment.util';
+
+export const SETTING_PUBLIC_WEBSITE_MODE = 'website.public_mode';
+export const SETTING_EMPLOYEE_REGISTRATION_TYPES = 'employee.registration.categories';
+export const SETTING_EMPLOYEE_QR_RELEASE_SCHEDULE = 'employee.qr_release_schedule';
 
 export const DEFAULT_SETTINGS: Record<string, string> = {
   // general
@@ -100,7 +108,12 @@ export const TOGGLE_FIELDS: Record<string, string[]> = {
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(forwardRef(() => EmployeesService))
+    private readonly employeesService?: EmployeesService,
+  ) {}
 
   async getAllSettings(userRole?: string | null) {
     const isSuperAdmin = (userRole || '').toUpperCase().trim() === UserRole.SUPER_ADMIN;
@@ -616,5 +629,204 @@ export class SettingsService {
         ? 'Book Pass availability updated to OPEN. Customers can book passes.'
         : 'Book Pass availability updated to COMING SOON. Customers see the Coming Soon page.',
     };
+  }
+
+  /**
+   * Public Website Mode
+   */
+  async getPublicWebsiteMode(): Promise<{ mode: PublicWebsiteMode }> {
+    const s = await this.prisma.setting.findUnique({ where: { key: SETTING_PUBLIC_WEBSITE_MODE } });
+    const raw = (s?.value || '').trim().toUpperCase();
+    if (raw === 'COMING_SOON' || raw === 'FULL_WEBSITE') {
+      return { mode: raw as PublicWebsiteMode };
+    }
+    return { mode: 'EMPLOYEE_REGISTRATION_ONLY' };
+  }
+
+  async updatePublicWebsiteMode(
+    mode: string,
+    user?: { id?: bigint | string; role?: string; email?: string; name?: string },
+  ) {
+    const role = (user?.role || '').toUpperCase().trim();
+    if (role !== UserRole.SUPER_ADMIN && role !== UserRole.EVENT_ADMIN && role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only authorized admins can modify Public Website Mode.');
+    }
+
+    const cleanMode = (mode || '').trim().toUpperCase();
+    if (!['COMING_SOON', 'EMPLOYEE_REGISTRATION_ONLY', 'FULL_WEBSITE'].includes(cleanMode)) {
+      throw new BadRequestException(
+        `Invalid website mode: "${mode}". Allowed modes: COMING_SOON, EMPLOYEE_REGISTRATION_ONLY, FULL_WEBSITE.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.setting.upsert({
+        where: { key: SETTING_PUBLIC_WEBSITE_MODE },
+        update: { value: cleanMode },
+        create: { key: SETTING_PUBLIC_WEBSITE_MODE, value: cleanMode },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: user?.id ? BigInt(user.id) : null,
+          action: 'PUBLIC_WEBSITE_MODE_UPDATED',
+          details: {
+            mode: cleanMode,
+            changedBy: user?.email || user?.name || 'admin',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      mode: cleanMode as PublicWebsiteMode,
+      message: `Website mode updated to ${cleanMode}.`,
+    };
+  }
+
+  /**
+   * Employee Types Settings
+   */
+  async getEmployeeTypeSettings(): Promise<EmployeeTypeSettings> {
+    const s = await this.prisma.setting.findUnique({
+      where: { key: SETTING_EMPLOYEE_REGISTRATION_TYPES },
+    });
+    if (s?.value) {
+      try {
+        const parsed = JSON.parse(s.value);
+        return {
+          regular: parsed.regular !== undefined ? Boolean(parsed.regular) : true,
+          retired: Boolean(parsed.retired),
+          contract: Boolean(parsed.contract),
+        };
+      } catch {}
+    }
+    return { regular: true, retired: false, contract: false };
+  }
+
+  async updateEmployeeTypeSettings(
+    types: EmployeeTypeSettings,
+    user?: { id?: bigint | string; role?: string; email?: string; name?: string },
+  ) {
+    const role = (user?.role || '').toUpperCase().trim();
+    if (role !== UserRole.SUPER_ADMIN && role !== UserRole.EVENT_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can modify Employee Registration Type settings.');
+    }
+
+    const val: EmployeeTypeSettings = {
+      regular: Boolean(types.regular),
+      retired: Boolean(types.retired),
+      contract: Boolean(types.contract),
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.setting.upsert({
+        where: { key: SETTING_EMPLOYEE_REGISTRATION_TYPES },
+        update: { value: JSON.stringify(val) },
+        create: { key: SETTING_EMPLOYEE_REGISTRATION_TYPES, value: JSON.stringify(val) },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: user?.id ? BigInt(user.id) : null,
+          action: 'EMPLOYEE_REGISTRATION_TYPES_UPDATED',
+          details: {
+            settings: val as any,
+            changedBy: user?.email || user?.name || 'admin',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      settings: val,
+      message: 'Employee registration type settings updated successfully.',
+    };
+  }
+
+  /**
+   * Employee QR Release Schedule
+   */
+  async getEmployeeQrReleaseSchedule(): Promise<EmployeeQrReleaseSchedule> {
+    if (this.employeesService) {
+      return this.employeesService.getEmployeeQrReleaseSchedule();
+    }
+
+    const s = await this.prisma.setting.findUnique({
+      where: { key: SETTING_EMPLOYEE_QR_RELEASE_SCHEDULE },
+    });
+    let scheduleData: Partial<EmployeeQrReleaseSchedule> = {};
+    if (s?.value) {
+      try {
+        scheduleData = JSON.parse(s.value);
+      } catch {}
+    }
+
+    return {
+      enabled: scheduleData.enabled ?? false,
+      releaseDate: scheduleData.releaseDate || '2026-10-10',
+      releaseTime: scheduleData.releaseTime || '10:00',
+      timezone: scheduleData.timezone || 'Asia/Kolkata',
+      status: scheduleData.status || 'IDLE',
+      lastRunAt: scheduleData.lastRunAt || null,
+      lastRunMessage: scheduleData.lastRunMessage || null,
+      stats: scheduleData.stats || {
+        eligibleCount: 0,
+        qrGeneratedCount: 0,
+        sentCount: 0,
+        failedCount: 0,
+      },
+    };
+  }
+
+  async updateEmployeeQrReleaseSchedule(
+    dto: { enabled?: boolean; releaseDate?: string; releaseTime?: string; timezone?: string },
+    user?: { id?: bigint | string; role?: string; email?: string; name?: string },
+  ): Promise<EmployeeQrReleaseSchedule> {
+    const role = (user?.role || '').toUpperCase().trim();
+    if (role !== UserRole.SUPER_ADMIN && role !== UserRole.EVENT_ADMIN && role !== UserRole.EMPLOYEE_ADMIN) {
+      throw new ForbiddenException('Only authorized admins can modify the QR Release Schedule.');
+    }
+
+    if (this.employeesService) {
+      return this.employeesService.updateEmployeeQrReleaseSchedule(dto);
+    }
+
+    const current = await this.getEmployeeQrReleaseSchedule();
+    const updated: EmployeeQrReleaseSchedule = {
+      ...current,
+      enabled: dto.enabled !== undefined ? dto.enabled : current.enabled,
+      releaseDate: dto.releaseDate || current.releaseDate,
+      releaseTime: dto.releaseTime || current.releaseTime,
+      timezone: dto.timezone || current.timezone,
+    };
+
+    await this.prisma.setting.upsert({
+      where: { key: SETTING_EMPLOYEE_QR_RELEASE_SCHEDULE },
+      update: { value: JSON.stringify(updated) },
+      create: { key: SETTING_EMPLOYEE_QR_RELEASE_SCHEDULE, value: JSON.stringify(updated) },
+    });
+
+    return updated;
+  }
+
+  async executeEmployeeQrRelease(
+    options?: { retryFailedOnly?: boolean },
+    user?: { id?: bigint | string; role?: string; email?: string; name?: string },
+  ) {
+    const role = (user?.role || '').toUpperCase().trim();
+    if (role !== UserRole.SUPER_ADMIN && role !== UserRole.EVENT_ADMIN && role !== UserRole.EMPLOYEE_ADMIN) {
+      throw new ForbiddenException('Only authorized admins can execute the QR Release.');
+    }
+
+    if (this.employeesService) {
+      return this.employeesService.releaseEmployeeQrPasses(options);
+    }
+
+    throw new BadRequestException('Employee service is not available to trigger QR release.');
   }
 }

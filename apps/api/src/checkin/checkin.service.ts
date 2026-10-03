@@ -425,55 +425,27 @@ export class CheckinService {
         attendee.category === 'ONGC STAFF' ||
         attendee.category === 'FAMILY MEMBER';
 
-      // For employee passes enrolled in daily QR delivery, turnstile scanning requires the daily pass QR credential
-      if (isEmployeeAttendee && !isLoadTest && this.prisma.dailyEmployeePass) {
-        const attendeeHasDailyPasses = await this.prisma.dailyEmployeePass.findFirst({
-          where: { attendeeId: attendee.id },
-        });
-
-        if (attendeeHasDailyPasses) {
-          if ((dto as any).isManual || isSuperAdminTest) {
-            // Manual help desk or test simulation fallback: link to today's daily pass if one exists
-            dailyEmployeePass = (await this.prisma.dailyEmployeePass.findUnique({
-              where: {
-                unique_attendee_daily_pass: {
-                  attendeeId: attendee.id,
-                  eventDate: activeDate,
-                  isTest: false,
-                },
-              },
-              include: {
-                attendee: {
-                  include: {
-                    employee: true,
-                    familyMember: true,
-                    order: true,
-                  },
-                },
-              },
-            })) as any;
-          } else {
-            // Reject raw permanent token at turnstiles
-            await this.recordScanLog({
+      // Under the permanent QR architecture, the attendee permanent QR token is accepted directly at all gates.
+      // If a daily employee pass record exists for today, link to it for legacy audit status tracking.
+      if (isEmployeeAttendee && !dailyEmployeePass && !isLoadTest && this.prisma.dailyEmployeePass) {
+        dailyEmployeePass = (await this.prisma.dailyEmployeePass.findUnique({
+          where: {
+            unique_attendee_daily_pass: {
               attendeeId: attendee.id,
-              gateId,
-              scannedById: scannedByUser ? BigInt(scannedByUser.id) : null,
-              result: CheckinResult.INVALID_QR,
-              responseTimeMs: Date.now() - startTime,
-              isLoadTest,
-              loadTestRunId,
-              ipAddress: effectiveReqMeta.ip,
-              userAgent: effectiveReqMeta.userAgent,
-            });
-
-            return {
-              success: false,
-              result: CheckinResult.INVALID_QR,
-              message: 'Daily QR pass required. Please present today’s date-specific QR pass sent to your registered email.',
-              statusCode: 400,
-            };
-          }
-        }
+              eventDate: activeDate,
+              isTest: false,
+            },
+          },
+          include: {
+            attendee: {
+              include: {
+                employee: true,
+                familyMember: true,
+                order: true,
+              },
+            },
+          },
+        })) as any;
       }
     }
 
@@ -806,6 +778,7 @@ export class CheckinService {
         data: {
           checkinId: checkinResult.newCheckin?.id.toString(),
           ticketNumber: attendee.ticketNumber,
+          referenceNumber: attendee.employee?.referenceNumber || attendee.employee?.cpf || null,
           attendeeName,
           isFamily,
           relation: attendee.familyMember?.relation || (attendee.employee ? 'Primary Employee' : 'Standalone Attendee'),
@@ -813,6 +786,7 @@ export class CheckinService {
             ? {
                 id: attendee.employee.id.toString(),
                 cpf: attendee.employee.cpf,
+                referenceNumber: attendee.employee.referenceNumber || attendee.employee.cpf,
                 name: attendee.employee.name,
                 designation: attendee.employee.designation,
                 department: attendee.employee.department,

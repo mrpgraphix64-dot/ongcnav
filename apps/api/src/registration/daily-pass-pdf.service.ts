@@ -248,8 +248,8 @@ export class DailyPassPdfService {
           doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica').text(presentation.department, col1X, detailsY + 91);
         }
 
-        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Ticket Number:', col2X, detailsY + 54);
-        doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.ticketNumber, col2X, detailsY + 65);
+        doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Pass Status:', col2X, detailsY + 54);
+        doc.fillColor('#1A1A1A').fontSize(10).font('Helvetica-Bold').text(presentation.status || 'ACTIVE', col2X, detailsY + 65);
 
         doc.fillColor('#66584F').fontSize(9).font('Helvetica').text('Event Date:', col2X, detailsY + 80);
         doc.fillColor(dayTheme.primaryColor).fontSize(10).font('Helvetica-Bold').text(presentation.eventDateFormatted, col2X, detailsY + 91);

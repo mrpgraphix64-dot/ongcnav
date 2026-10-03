@@ -976,7 +976,6 @@ Reworkzone.com (https://reworkzone.com)
                             <div><strong>Ref No.:</strong> <span style="font-family: monospace; color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.referenceNumber || presentation.employeeCpf)}</span></div>
                             <div><strong>Department:</strong> <span style="color: #1A1A1A;">${this.escapeHtml(presentation.department)}</span></div>
                           `}
-                          <div><strong>Ticket Number:</strong> <span style="font-family: monospace; font-weight: 700; color: #1A1A1A;">${this.escapeHtml(presentation.ticketNumber)}</span></div>
                           <div><strong>Authorized Date:</strong> <span style="font-weight: 800; color: ${dayTheme.primaryColor};">${presentation.eventDateFormatted}</span></div>
                           <div><strong>Venue:</strong> ${presentation.venue.name}</div>
                           <div><strong>Entry Timing:</strong> ${presentation.entryTiming}</div>
@@ -1096,8 +1095,7 @@ is ready.
 PASS DETAILS:
 Attendee: ${presentation.attendeeName}
 Pass Type: ${presentation.passTypeWithRelation}
-${presentation.isFamily ? `Primary Employee: ${presentation.primaryEmployeeName}\nRef No.: ${presentation.referenceNumber || presentation.employeeCpf}\nRelationship: ${presentation.relation}\n` : `Ref No.: ${presentation.referenceNumber || presentation.employeeCpf}\n`}Ticket No: ${presentation.ticketNumber}
-Date: ${dayTheme.fullDateLabel}
+${presentation.isFamily ? `Primary Employee: ${presentation.primaryEmployeeName}\nRef No.: ${presentation.referenceNumber || presentation.employeeCpf}\nRelationship: ${presentation.relation}\n` : `Ref No.: ${presentation.referenceNumber || presentation.employeeCpf}\n`}Date: ${dayTheme.fullDateLabel}
 Venue: Malaviya Cricket Ground ONGC, Ahmedabad
 Gates Open: From 7:00 PM
 

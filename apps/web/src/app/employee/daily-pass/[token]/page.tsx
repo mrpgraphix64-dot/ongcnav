@@ -112,7 +112,7 @@ export default function EmployeeDailyPassPage() {
     });
 
   const waShareText = encodeURIComponent(
-    `Official ONGC Navratri 2026 E-Pass\nNight ${presentation.nightNumber}: ${presentation.themeTitle} (${presentation.eventDateFormatted})\nAttendee: ${presentation.attendeeName}\nTicket No: ${presentation.ticketNumber}\nVenue: Malaviya Cricket Ground ONGC, Ahmedabad\nGates Open: 7:00 PM\n\nView Online: ${typeof window !== 'undefined' ? window.location.href : ''}`
+    `Official ONGC Navratri 2026 E-Pass\nNight ${presentation.nightNumber}: ${presentation.themeTitle} (${presentation.eventDateFormatted})\nAttendee: ${presentation.attendeeName}\nRef No: ${presentation.referenceNumber || presentation.employeeCpf}\nVenue: Malaviya Cricket Ground ONGC, Ahmedabad\nGates Open: 7:00 PM\n\nView Online: ${typeof window !== 'undefined' ? window.location.href : ''}`
   );
 
   return (
@@ -132,7 +132,7 @@ export default function EmployeeDailyPassPage() {
             href={pdfDownloadUrl}
             target="_blank"
             rel="noopener noreferrer"
-            download={`ONGC-Pass-${pass.ticketNumber}.pdf`}
+            download={`ONGC-Pass-${presentation.referenceNumber || presentation.employeeCpf}.pdf`}
             className="px-3.5 py-1.5 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all shadow-xs flex items-center gap-1.5"
           >
             <Download className="w-3.5 h-3.5" />

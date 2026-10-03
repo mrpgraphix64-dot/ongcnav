@@ -111,6 +111,33 @@ export enum EmployeeCategory {
   CONTRACT = 'CONTRACT',
 }
 
+export const ALLOWED_FAMILY_RELATIONS = ['Parents', 'Spouse', 'Child'] as const;
+export type AllowedFamilyRelation = (typeof ALLOWED_FAMILY_RELATIONS)[number];
+
+export type PublicWebsiteMode = 'COMING_SOON' | 'EMPLOYEE_REGISTRATION_ONLY' | 'FULL_WEBSITE';
+
+export interface EmployeeTypeSettings {
+  regular: boolean;
+  retired: boolean;
+  contract: boolean;
+}
+
+export interface EmployeeQrReleaseSchedule {
+  enabled: boolean;
+  releaseDate: string;
+  releaseTime: string;
+  timezone: string;
+  status: 'IDLE' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED';
+  lastRunAt: string | null;
+  lastRunMessage: string | null;
+  stats: {
+    eligibleCount: number;
+    qrGeneratedCount: number;
+    sentCount: number;
+    failedCount: number;
+  };
+}
+
 export enum OrderStatus {
   PENDING = 'PENDING',
   PAID = 'PAID',
@@ -302,12 +329,19 @@ export interface EmployeeRegistrationDto {
   designation?: string;
   department?: string;
   category?: EmployeeCategory;
+  dateOfBirth?: string;
+  dateOfJoining?: string;
+  guidelinesAccepted?: boolean;
+  guidelinesAcceptedAt?: string;
+  guidelinesVersion?: string;
   bookingDays: string[];
   photoUrl?: string;
   familyMembers?: Array<{
     name: string;
     relationship?: string;
     mobileNo?: string;
+    email?: string;
+    dateOfBirth?: string;
     photoUrl?: string;
     bookingDays: string[];
   }>;

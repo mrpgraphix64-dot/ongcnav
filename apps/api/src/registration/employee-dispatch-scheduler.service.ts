@@ -325,6 +325,34 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
     try {
       const { currentDate, currentTime, totalMinutes: currentMinutes } = getCurrentIstDateTime(overrideNow);
 
+      // Evaluate permanent QR release schedule
+      try {
+        const qrReleaseSchedule = await this.employeesService.getEmployeeQrReleaseSchedule();
+        if (qrReleaseSchedule && qrReleaseSchedule.enabled) {
+          const [relH, relM] = (qrReleaseSchedule.releaseTime || '10:00').split(':').map((v) => parseInt(v, 10) || 0);
+          const relMinutes = relH * 60 + relM;
+          if (currentDate === qrReleaseSchedule.releaseDate && currentMinutes >= relMinutes) {
+            let shouldRun = false;
+            if (!qrReleaseSchedule.lastRunAt) {
+              shouldRun = true;
+            } else {
+              const diffMs = (overrideNow || new Date()).getTime() - new Date(qrReleaseSchedule.lastRunAt).getTime();
+              const cooldownMs = 15 * 60 * 1000;
+              if (qrReleaseSchedule.status !== 'COMPLETED' && diffMs >= cooldownMs) {
+                shouldRun = true;
+              }
+            }
+            if (shouldRun) {
+              this.logger.log('[AUTOMATIC RELEASE] Triggering automatic permanent employee QR release...');
+              await this.employeesService.releaseEmployeeQrPasses();
+              executedDates.push(`PERMANENT_RELEASE:${qrReleaseSchedule.releaseDate}`);
+            }
+          }
+        }
+      } catch (err: any) {
+        this.logger.error(`Error checking permanent QR release schedule: ${err.message}`);
+      }
+
       // Only evaluate if currentDate is an official event date
       if (!isOfficialEventDate(currentDate)) {
         return { checked: true, executedDates, skippedDates };

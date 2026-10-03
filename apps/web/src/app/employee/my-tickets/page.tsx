@@ -353,18 +353,18 @@ function EmployeeTicketsContent() {
                           <div className="grid grid-cols-2 gap-3 text-xs bg-black/25 p-3.5 rounded-xl border border-gold/30 backdrop-blur-xs">
                             <div>
                               <span className="text-gold-light/70 text-[10px] block uppercase font-mono">
-                                Ticket ID
+                                Reference No.
                               </span>
                               <span className="font-mono font-bold text-gold text-sm">
-                                {pass.ticketNumber || pass.ticket_id}
+                                {pass.referenceNumber || result.employee?.referenceNumber || result.employee?.cpf}
                               </span>
                             </div>
                             <div>
                               <span className="text-gold-light/70 text-[10px] block uppercase font-mono">
-                                Ref No.
+                                Pass Status
                               </span>
-                              <span className="font-mono font-bold text-white text-sm">
-                                {pass.referenceNumber || result.employee?.referenceNumber || result.employee?.cpf}
+                              <span className="font-mono font-bold text-emerald-400 text-sm">
+                                {pass.status || 'ACTIVE'}
                               </span>
                             </div>
                             <div>
@@ -405,7 +405,7 @@ function EmployeeTicketsContent() {
                             ) : (
                               <div className="w-40 h-40 flex flex-col items-center justify-center bg-stone-100 text-stone-700 font-mono text-xs rounded-xl p-2 text-center">
                                 <Ticket className="w-8 h-8 text-maroon mb-1" />
-                                <span>{pass.ticketNumber}</span>
+                                <span>{pass.referenceNumber || result.employee?.referenceNumber || result.employee?.cpf}</span>
                               </div>
                             )}
                           </div>

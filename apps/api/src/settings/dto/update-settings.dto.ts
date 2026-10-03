@@ -67,3 +67,56 @@ export class UpdateBookPassSettingsDto {
   @IsOptional()
   enabled?: boolean;
 }
+
+export class UpdateWebsiteModeDto {
+  @ApiProperty({
+    description: 'Website public access mode: COMING_SOON, EMPLOYEE_REGISTRATION_ONLY, FULL_WEBSITE',
+    example: 'EMPLOYEE_REGISTRATION_ONLY',
+  })
+  @IsString()
+  @IsNotEmpty()
+  mode!: 'COMING_SOON' | 'EMPLOYEE_REGISTRATION_ONLY' | 'FULL_WEBSITE';
+}
+
+export class UpdateEmployeeTypesDto {
+  @ApiProperty({ description: 'Whether regular employees can register', example: true })
+  @IsBoolean()
+  regular!: boolean;
+
+  @ApiProperty({ description: 'Whether retired employees can register', example: false })
+  @IsBoolean()
+  retired!: boolean;
+
+  @ApiProperty({ description: 'Whether contract employees can register', example: false })
+  @IsBoolean()
+  contract!: boolean;
+}
+
+export class UpdateEmployeeQrReleaseScheduleDto {
+  @ApiProperty({ description: 'Automatic release switch', example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean;
+
+  @ApiProperty({ description: 'Release date (YYYY-MM-DD)', example: '2026-10-10', required: false })
+  @IsString()
+  @IsOptional()
+  releaseDate?: string;
+
+  @ApiProperty({ description: 'Release time (HH:mm)', example: '10:00', required: false })
+  @IsString()
+  @IsOptional()
+  releaseTime?: string;
+
+  @ApiProperty({ description: 'Timezone', example: 'Asia/Kolkata', required: false })
+  @IsString()
+  @IsOptional()
+  timezone?: string;
+}
+
+export class ExecuteEmployeeQrReleaseDto {
+  @ApiProperty({ description: 'Retry sending only failed emails', example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  retryFailedOnly?: boolean;
+}

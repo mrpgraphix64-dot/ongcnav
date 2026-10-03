@@ -13,6 +13,7 @@ export interface TicketPassData {
   category?: string;
   relation?: string;
   employee?: any;
+  referenceNumber?: string;
   ticketType?: string;
   passType?: string;
   bookingDays?: string[];
@@ -121,10 +122,12 @@ export default function TicketPassCard({
           <div className="grid grid-cols-2 gap-3 bg-cream-soft p-4 rounded-2xl text-left border border-stone-200/80">
             <div>
               <div className="text-[9px] font-bold uppercase tracking-widest text-ink-soft">
-                Ticket Number
+                {isCommercial ? 'Ticket Number' : 'Reference No.'}
               </div>
               <div className="font-mono font-bold text-maroon text-sm mt-0.5">
-                {ticketId}
+                {isCommercial
+                  ? ticketId
+                  : (ticket.referenceNumber || ticket.employee?.referenceNumber || ticket.employee?.cpf || ticketId)}
               </div>
             </div>
             <div>
@@ -172,7 +175,9 @@ export default function TicketPassCard({
               ) : (
                 <div className="w-44 h-44 flex flex-col items-center justify-center bg-stone-50 rounded-xl">
                   <Ticket className="w-10 h-10 text-maroon mb-2" />
-                  <span className="font-mono text-xs font-bold text-stone-700">{ticketId}</span>
+                  <span className="font-mono text-xs font-bold text-stone-700">
+                    {isCommercial ? ticketId : (ticket.referenceNumber || ticket.employee?.referenceNumber || ticket.employee?.cpf || ticketId)}
+                  </span>
                 </div>
               )}
             </div>

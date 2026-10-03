@@ -12,6 +12,11 @@ function baseInput() {
     phone: '9876543210',
     email: 'amit@ongc.co.in',
     employeeCategory: EmployeeCategory.REGULAR,
+    dateOfBirth: '1988-05-12',
+    dateOfJoining: '2015-09-01',
+    guidelinesAccepted: true,
+    guidelinesAcceptedAt: '2026-10-03T12:00:00.000Z',
+    guidelinesVersion: '2026-employee-registration-v1',
     bookingDays: ['2026-10-11'],
   };
 }
@@ -38,6 +43,65 @@ describe('RegisterEmployeeDto validation', () => {
         expect(errors.some((e) => e.property === 'cpf')).toBe(true);
       },
     );
+  });
+
+  describe('Employee Date of Birth and Date of Joining validation', () => {
+    it('accepts valid YYYY-MM-DD dateOfBirth and dateOfJoining', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, {
+        ...baseInput(),
+        dateOfBirth: '1990-08-15',
+        dateOfJoining: '2018-01-10',
+      });
+      const errors = await validate(dto);
+      expect(errors.filter((e) => ['dateOfBirth', 'dateOfJoining'].includes(e.property))).toHaveLength(0);
+    });
+
+    it('rejects missing or empty dateOfBirth', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, { ...baseInput(), dateOfBirth: '' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'dateOfBirth')).toBe(true);
+    });
+
+    it('rejects malformed dateOfBirth (e.g. 15-08-1990 or text)', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, { ...baseInput(), dateOfBirth: '15-08-1990' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'dateOfBirth')).toBe(true);
+    });
+
+    it('rejects missing or empty dateOfJoining', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, { ...baseInput(), dateOfJoining: '' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'dateOfJoining')).toBe(true);
+    });
+
+    it('rejects malformed dateOfJoining', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, { ...baseInput(), dateOfJoining: '01/01/2020' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'dateOfJoining')).toBe(true);
+    });
+  });
+
+  describe('Guidelines acknowledgement validation', () => {
+    it('accepts guidelinesAccepted = true', async () => {
+      const dto = plainToInstance(RegisterEmployeeDto, {
+        ...baseInput(),
+        guidelinesAccepted: true,
+      });
+      const errors = await validate(dto);
+      expect(errors.filter((e) => e.property === 'guidelinesAccepted')).toHaveLength(0);
+    });
+
+    it('rejects missing or false guidelinesAccepted', async () => {
+      const dto1 = plainToInstance(RegisterEmployeeDto, { ...baseInput(), guidelinesAccepted: false });
+      const errors1 = await validate(dto1);
+      expect(errors1.some((e) => e.property === 'guidelinesAccepted')).toBe(true);
+
+      const input: any = baseInput();
+      delete input.guidelinesAccepted;
+      const dto2 = plainToInstance(RegisterEmployeeDto, input);
+      const errors2 = await validate(dto2);
+      expect(errors2.some((e) => e.property === 'guidelinesAccepted')).toBe(true);
+    });
   });
 
   it.each(['REGULAR', 'RETIRED', 'CONTRACT'])('accepts %s as a valid employeeCategory', async (value) => {
@@ -73,6 +137,7 @@ describe('RegisterEmployeeDto validation', () => {
         relation: 'Spouse',
         phone: '9876543210',
         email: `member${i + 1}@example.com`,
+        dateOfBirth: '1992-04-10',
         bookingDays: ['2026-10-11'],
       }));
       const dto = plainToInstance(RegisterEmployeeDto, { ...baseInput(), familyMembers });
@@ -86,6 +151,7 @@ describe('RegisterEmployeeDto validation', () => {
         relation: 'Spouse',
         phone: '9876543210',
         email: `member${i + 1}@example.com`,
+        dateOfBirth: '1992-04-10',
         bookingDays: ['2026-10-11'],
       }));
       const dto = plainToInstance(RegisterEmployeeDto, { ...baseInput(), familyMembers });
@@ -103,6 +169,7 @@ describe('RegisterEmployeeDto validation', () => {
           relation: 'Spouse',
           phone: '9876543210',
           email: 'sunita@example.com',
+          dateOfBirth: '1990-01-01',
           bookingDays: ['2026-10-13'],
         },
       ],
@@ -111,11 +178,11 @@ describe('RegisterEmployeeDto validation', () => {
     expect(errors).toHaveLength(0);
   });
 
-  describe('family member mobile number and email (mandatory)', () => {
+  describe('family member mobile number, email, and DOB (mandatory)', () => {
     function withFamilyMember(overrides: Record<string, unknown>) {
       return plainToInstance(RegisterEmployeeDto, {
         ...baseInput(),
-        familyMembers: [{ name: 'Sunita', relation: 'Spouse', phone: '9876543210', email: 'sunita@example.com', ...overrides }],
+        familyMembers: [{ name: 'Sunita', relation: 'Spouse', phone: '9876543210', email: 'sunita@example.com', dateOfBirth: '1990-01-01', ...overrides }],
       });
     }
 
@@ -135,7 +202,7 @@ describe('RegisterEmployeeDto validation', () => {
     it('fails when the family mobile number is missing', async () => {
       const dto = plainToInstance(RegisterEmployeeDto, {
         ...baseInput(),
-        familyMembers: [{ name: 'Sunita', relation: 'Spouse', email: 'sunita@example.com' }],
+        familyMembers: [{ name: 'Sunita', relation: 'Spouse', email: 'sunita@example.com', dateOfBirth: '1990-01-01' }],
       });
       const errors = await validate(dto);
       const familyErrors = errors.find((e) => e.property === 'familyMembers');
@@ -164,13 +231,42 @@ describe('RegisterEmployeeDto validation', () => {
 
       const dto = plainToInstance(RegisterEmployeeDto, {
         ...baseInput(),
-        familyMembers: [{ name: 'Sunita', relation: 'Spouse', phone: '9876543210' }],
+        familyMembers: [{ name: 'Sunita', relation: 'Spouse', phone: '9876543210', dateOfBirth: '1990-01-01' }],
       });
       const errors = await validate(dto);
       const familyErrors = errors.find((e) => e.property === 'familyMembers');
       const nested = familyErrors?.children?.[0]?.children ?? [];
       expect(nested.some((e: any) => e.property === 'email')).toBe(true);
     });
+
+    it('passes with a valid family dateOfBirth', async () => {
+      const dobErrors = await familyMemberErrors({ dateOfBirth: '1995-12-25' }, 'dateOfBirth');
+      expect(dobErrors).toHaveLength(0);
+    });
+
+    it('fails when family dateOfBirth is missing or malformed', async () => {
+      const missingDobErrors = await familyMemberErrors({ dateOfBirth: '' }, 'dateOfBirth');
+      expect(missingDobErrors.length).toBeGreaterThan(0);
+
+      const malformedDobErrors = await familyMemberErrors({ dateOfBirth: '25-12-1995' }, 'dateOfBirth');
+      expect(malformedDobErrors.length).toBeGreaterThan(0);
+    });
+
+    it.each(['Parents', 'Spouse', 'Child'])(
+      'accepts allowed relationship: %s',
+      async (validRelation) => {
+        const relationErrors = await familyMemberErrors({ relation: validRelation }, 'relation');
+        expect(relationErrors).toHaveLength(0);
+      },
+    );
+
+    it.each(['Sibling', 'Friend', 'Brother', 'Sister', 'Cousin', 'Other', ''])(
+      'rejects unauthorized relationship: %s',
+      async (invalidRelation) => {
+        const relationErrors = await familyMemberErrors({ relation: invalidRelation }, 'relation');
+        expect(relationErrors.length).toBeGreaterThan(0);
+      },
+    );
   });
 
   describe('registrationType validation', () => {

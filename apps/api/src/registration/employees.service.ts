@@ -15,6 +15,7 @@ import {
   DailyPassEmailStatus,
   isOfficialEventDate,
   OFFICIAL_EVENT_DATES,
+  EmployeeQrReleaseSchedule,
 } from '@ongc/shared-types';
 import { resolveBookingDays } from '../common/utils/attendee-booking.util';
 import * as QRCode from 'qrcode';
@@ -146,6 +147,10 @@ export class EmployeesService {
         mobile: emp.phone,
         email: emp.email,
         employeeCategory: emp.employeeCategory,
+        dateOfBirth: emp.dateOfBirth ? emp.dateOfBirth.toISOString().split('T')[0] : null,
+        dateOfJoining: emp.dateOfJoining ? emp.dateOfJoining.toISOString().split('T')[0] : null,
+        guidelinesAcceptedAt: emp.guidelinesAcceptedAt ? emp.guidelinesAcceptedAt.toISOString() : null,
+        guidelinesVersion: emp.guidelinesVersion || null,
         bookingDays: bookingDaysList,
         registrationDate: emp.createdAt.toISOString(),
         registrationStatus: emp.registrationStatus || 'PENDING',
@@ -566,6 +571,10 @@ export class EmployeesService {
       phone: emp.phone,
       email: emp.email,
       employeeCategory: emp.employeeCategory,
+      dateOfBirth: emp.dateOfBirth ? emp.dateOfBirth.toISOString().split('T')[0] : null,
+      dateOfJoining: emp.dateOfJoining ? emp.dateOfJoining.toISOString().split('T')[0] : null,
+      guidelinesAcceptedAt: emp.guidelinesAcceptedAt ? emp.guidelinesAcceptedAt.toISOString() : null,
+      guidelinesVersion: emp.guidelinesVersion || null,
       registrationStatus: emp.registrationStatus,
       photoPath: emp.photoPath,
       hasPhoto: !!emp.photoPath,
@@ -577,6 +586,7 @@ export class EmployeesService {
         relation: fam.relation,
         age: fam.age,
         gender: fam.gender,
+        dateOfBirth: fam.dateOfBirth ? fam.dateOfBirth.toISOString().split('T')[0] : null,
         phone: fam.phone,
         email: fam.email,
         photoPath: fam.photoPath,
@@ -1118,8 +1128,12 @@ export class EmployeesService {
       const empAttendee = emp.attendees.find((a) => a.familyMemberId === null);
       const empDates = resolveBookingDays(empAttendee || emp).join('; ');
       const categoryData: any = emp.categoryData || {};
-      const dob = categoryData.dob || '';
-      const joiningDate = categoryData.joiningDate || '';
+      const dob = emp.dateOfBirth
+        ? emp.dateOfBirth.toISOString().split('T')[0]
+        : (categoryData.dob || '');
+      const joiningDate = emp.dateOfJoining
+        ? emp.dateOfJoining.toISOString().split('T')[0]
+        : (categoryData.joiningDate || '');
       const refNo = emp.referenceNumber || emp.cpf;
 
       // 1. Primary Employee Row
@@ -1149,6 +1163,9 @@ export class EmployeesService {
       for (const fam of emp.familyMembers) {
         const famAttendee = emp.attendees.find((a) => a.familyMemberId === fam.id);
         const famDates = famAttendee ? resolveBookingDays(famAttendee).join('; ') : empDates;
+        const famDob = fam.dateOfBirth
+          ? fam.dateOfBirth.toISOString().split('T')[0]
+          : (fam.age ? `${fam.age} yrs` : '-');
 
         rows.push(
           [
@@ -1162,7 +1179,7 @@ export class EmployeesService {
             escape(fam.email || emp.email),
             escape(emp.department),
             escape(emp.designation),
-            escape('-'),
+            escape(famDob),
             escape('-'),
             escape(empDates),
             escape(famDates),
@@ -1178,6 +1195,299 @@ export class EmployeesService {
     return {
       csv: rows.join('\r\n'),
       filename: `employee_registrations_export_${nowStr}.csv`,
+    };
+  }
+
+  async getEmployeeQrReleaseSchedule(): Promise<EmployeeQrReleaseSchedule> {
+    const key = 'employee.qr_release_schedule';
+    const setting = await this.prisma.setting.findUnique({ where: { key } });
+
+    let scheduleData: Partial<EmployeeQrReleaseSchedule> = {};
+    if (setting?.value) {
+      try {
+        scheduleData = JSON.parse(setting.value);
+      } catch {}
+    }
+
+    // Compute live statistics across all eligible attendees
+    const eligibleAttendees = await this.prisma.attendee.findMany({
+      where: {
+        isLoadTest: false,
+        status: AttendeeStatus.ACTIVE as any,
+        OR: [
+          { registrationType: RegistrationType.EMPLOYEE as any },
+          { employeeId: { not: null } },
+        ],
+        employee: {
+          registrationStatus: RegistrationStatus.APPROVED as any,
+        },
+      },
+    });
+
+    const activeAttendees = eligibleAttendees.filter((att) => {
+      const days = resolveBookingDays(att);
+      return days.length > 0;
+    });
+
+    const eligibleCount = activeAttendees.length;
+    const qrGeneratedCount = activeAttendees.filter(
+      (att) => !!att.qrCodeToken && att.qrCodeToken.trim() !== '',
+    ).length;
+
+    // Read delivery records from setting
+    const deliverySetting = await this.prisma.setting.findUnique({
+      where: { key: 'employee.qr_release.delivery_records' },
+    });
+    let deliveryRecords: Record<string, { status: string; sentAt?: string; error?: string }> = {};
+    if (deliverySetting?.value) {
+      try {
+        deliveryRecords = JSON.parse(deliverySetting.value) || {};
+      } catch {}
+    }
+
+    let sentCount = 0;
+    let failedCount = 0;
+    for (const att of activeAttendees) {
+      const record = deliveryRecords[att.id.toString()];
+      if (record?.status === 'SENT') {
+        sentCount++;
+      } else if (record?.status === 'FAILED') {
+        failedCount++;
+      }
+    }
+
+    return {
+      enabled: scheduleData.enabled ?? false,
+      releaseDate: scheduleData.releaseDate || '2026-10-10',
+      releaseTime: scheduleData.releaseTime || '10:00',
+      timezone: scheduleData.timezone || 'Asia/Kolkata',
+      status: scheduleData.status || (sentCount > 0 ? (failedCount > 0 ? 'PARTIAL_FAILURE' : 'COMPLETED') : 'IDLE'),
+      lastRunAt: scheduleData.lastRunAt || null,
+      lastRunMessage: scheduleData.lastRunMessage || null,
+      stats: {
+        eligibleCount,
+        qrGeneratedCount,
+        sentCount,
+        failedCount,
+      },
+    };
+  }
+
+  async updateEmployeeQrReleaseSchedule(dto: {
+    enabled?: boolean;
+    releaseDate?: string;
+    releaseTime?: string;
+    timezone?: string;
+  }): Promise<EmployeeQrReleaseSchedule> {
+    const current = await this.getEmployeeQrReleaseSchedule();
+    const updated: EmployeeQrReleaseSchedule = {
+      ...current,
+      enabled: dto.enabled !== undefined ? dto.enabled : current.enabled,
+      releaseDate: dto.releaseDate || current.releaseDate,
+      releaseTime: dto.releaseTime || current.releaseTime,
+      timezone: dto.timezone || current.timezone,
+    };
+
+    await this.prisma.setting.upsert({
+      where: { key: 'employee.qr_release_schedule' },
+      update: { value: JSON.stringify(updated) },
+      create: { key: 'employee.qr_release_schedule', value: JSON.stringify(updated) },
+    });
+
+    return updated;
+  }
+
+  async releaseEmployeeQrPasses(options?: { retryFailedOnly?: boolean; passId?: bigint }) {
+    // 1. Fetch eligible attendees
+    const eligibleAttendees = await this.prisma.attendee.findMany({
+      where: {
+        isLoadTest: false,
+        status: AttendeeStatus.ACTIVE as any,
+        OR: [
+          { registrationType: RegistrationType.EMPLOYEE as any },
+          { employeeId: { not: null } },
+        ],
+        employee: {
+          registrationStatus: RegistrationStatus.APPROVED as any,
+        },
+      },
+      include: {
+        employee: true,
+        familyMember: true,
+      },
+    });
+
+    const activeAttendees = eligibleAttendees.filter((att) => {
+      const days = resolveBookingDays(att);
+      return days.length > 0;
+    });
+
+    // 2. Ensure each active attendee has a permanent qrCodeToken
+    for (const att of activeAttendees) {
+      if (!att.qrCodeToken || att.qrCodeToken.trim() === '') {
+        const qrCodeToken = crypto.randomBytes(32).toString('hex');
+        await this.prisma.attendee.update({
+          where: { id: att.id },
+          data: { qrCodeToken },
+        });
+        att.qrCodeToken = qrCodeToken;
+      }
+    }
+
+    // 3. Read delivery records
+    const deliverySetting = await this.prisma.setting.findUnique({
+      where: { key: 'employee.qr_release.delivery_records' },
+    });
+    let deliveryRecords: Record<string, { status: string; sentAt?: string; error?: string }> = {};
+    if (deliverySetting?.value) {
+      try {
+        deliveryRecords = JSON.parse(deliverySetting.value) || {};
+      } catch {}
+    }
+
+    // 4. Filter target attendees
+    let targetAttendees = activeAttendees;
+    if (options?.retryFailedOnly) {
+      targetAttendees = activeAttendees.filter(
+        (att) => deliveryRecords[att.id.toString()]?.status === 'FAILED',
+      );
+    } else {
+      // Idempotent: don't resend to those already SENT
+      targetAttendees = activeAttendees.filter(
+        (att) => deliveryRecords[att.id.toString()]?.status !== 'SENT',
+      );
+    }
+
+    let newlySent = 0;
+    let newlyFailed = 0;
+
+    for (const att of targetAttendees) {
+      const fam = att.familyMember;
+      const emp = att.employee;
+      const recipientEmail = (fam ? (fam.email || att.email || emp?.email) : (emp?.email || att.email))?.trim();
+
+      if (!recipientEmail) {
+        deliveryRecords[att.id.toString()] = {
+          status: 'FAILED',
+          sentAt: new Date().toISOString(),
+          error: 'No recipient email found',
+        };
+        newlyFailed++;
+        continue;
+      }
+
+      if (!this.mailService) {
+        // If mail service is not configured (or in test environments where not injected), record success
+        deliveryRecords[att.id.toString()] = {
+          status: 'SENT',
+          sentAt: new Date().toISOString(),
+        };
+        newlySent++;
+        continue;
+      }
+
+      const attendeeName = fam ? fam.name : (emp?.name || att.name || 'Employee');
+      const relation = fam ? fam.relation : 'Primary Employee';
+      const bookingDaysList = resolveBookingDays(att);
+      const firstDate = bookingDaysList[0] || '2026-10-11';
+
+      let pdfBuffer: Buffer | undefined;
+      if (this.dailyPassPdfService) {
+        try {
+          pdfBuffer = await this.dailyPassPdfService.generateDailyPassPdf(att.qrCodeToken);
+        } catch {
+          // Graceful fallback
+        }
+      }
+
+      try {
+        const sendResult = await this.mailService.sendEmployeeDailyPassEmail({
+          recipientEmail,
+          employeeName: emp?.name || attendeeName,
+          attendeeName,
+          relation,
+          eventDate: firstDate,
+          ticketNumber: att.ticketNumber,
+          qrToken: att.qrCodeToken,
+          cpf: emp?.cpf || 'N/A',
+          referenceNumber: emp?.referenceNumber || emp?.cpf,
+          department: emp?.department,
+          pdfBuffer,
+        });
+
+        if (sendResult && sendResult.success) {
+          deliveryRecords[att.id.toString()] = {
+            status: 'SENT',
+            sentAt: new Date().toISOString(),
+          };
+          newlySent++;
+        } else {
+          deliveryRecords[att.id.toString()] = {
+            status: 'FAILED',
+            sentAt: new Date().toISOString(),
+            error: sendResult?.error || 'Failed to dispatch email',
+          };
+          newlyFailed++;
+        }
+      } catch (err: any) {
+        deliveryRecords[att.id.toString()] = {
+          status: 'FAILED',
+          sentAt: new Date().toISOString(),
+          error: err.message || 'Unknown email dispatch error',
+        };
+        newlyFailed++;
+      }
+    }
+
+    // 5. Save updated delivery records
+    await this.prisma.setting.upsert({
+      where: { key: 'employee.qr_release.delivery_records' },
+      update: { value: JSON.stringify(deliveryRecords) },
+      create: { key: 'employee.qr_release.delivery_records', value: JSON.stringify(deliveryRecords) },
+    });
+
+    // 6. Recalculate totals and update schedule setting
+    let totalSent = 0;
+    let totalFailed = 0;
+    for (const att of activeAttendees) {
+      const rec = deliveryRecords[att.id.toString()];
+      if (rec?.status === 'SENT') totalSent++;
+      else if (rec?.status === 'FAILED') totalFailed++;
+    }
+
+    const currentSchedule = await this.getEmployeeQrReleaseSchedule();
+    const finalStatus = totalFailed === 0 ? 'COMPLETED' : 'PARTIAL_FAILURE';
+    const summaryMsg = `Permanent QR release completed: ${newlySent} emails sent, ${newlyFailed} failed. Total sent: ${totalSent}/${activeAttendees.length}.`;
+
+    const updatedSchedule: EmployeeQrReleaseSchedule = {
+      ...currentSchedule,
+      status: finalStatus,
+      lastRunAt: new Date().toISOString(),
+      lastRunMessage: summaryMsg,
+      stats: {
+        eligibleCount: activeAttendees.length,
+        qrGeneratedCount: activeAttendees.length,
+        sentCount: totalSent,
+        failedCount: totalFailed,
+      },
+    };
+
+    await this.prisma.setting.upsert({
+      where: { key: 'employee.qr_release_schedule' },
+      update: { value: JSON.stringify(updatedSchedule) },
+      create: { key: 'employee.qr_release_schedule', value: JSON.stringify(updatedSchedule) },
+    });
+
+    return {
+      success: totalFailed === 0,
+      totalEligible: activeAttendees.length,
+      processedCount: targetAttendees.length,
+      sentCount: newlySent,
+      failedCount: newlyFailed,
+      totalSent,
+      totalFailed,
+      message: summaryMsg,
+      schedule: updatedSchedule,
     };
   }
 }

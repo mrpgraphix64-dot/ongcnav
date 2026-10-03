@@ -1,4 +1,6 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Sparkles,
@@ -15,11 +17,206 @@ import {
   Flame,
   ChevronRight,
   Search,
+  ShieldCheck,
+  IdCard,
 } from 'lucide-react';
 import PublicHeader from '@/components/PublicHeader';
 import PublicFooter from '@/components/PublicFooter';
+import { fetchApi } from '@/lib/api';
+import type { PublicWebsiteMode } from '@ongc/shared-types';
 
-export default function HomePage() {
+function EmployeeRegistrationLanding() {
+  return (
+    <div className="min-h-screen flex flex-col justify-between bg-cream text-ink selection:bg-maroon selection:text-white">
+      {/* MINIMAL BRAND HEADER */}
+      <header className="sticky top-0 z-50 bg-cream-light/95 backdrop-blur-md border-b border-gold/30 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3.5 group">
+            <img
+              src="/images/logo-web.png"
+              alt="ONGC Navratri Logo"
+              className="h-10 sm:h-12 w-auto object-contain shrink-0"
+            />
+            <div className="flex flex-col">
+              <span className="font-cinzel font-bold text-base sm:text-xl text-maroon leading-tight tracking-wide">
+                NAVRATRI
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-semibold text-gold-muted tracking-widest uppercase">
+                2026
+              </span>
+            </div>
+          </Link>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/employee/my-tickets"
+              className="px-3 sm:px-4 py-2 rounded-xl text-xs font-bold text-maroon border border-maroon/30 hover:bg-maroon-soft transition-colors"
+            >
+              Check Status
+            </Link>
+            <Link
+              href="/employee/register"
+              className="px-3.5 sm:px-5 py-2 rounded-xl text-xs font-bold bg-maroon text-white hover:bg-maroon-dark transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <IdCard className="w-3.5 h-3.5 text-gold-light" />
+              <span>Register</span>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* DEDICATED LANDING HERO */}
+      <main className="flex-grow flex items-center justify-center py-12 sm:py-20 px-4 sm:px-6">
+        <div className="max-w-3xl w-full text-center space-y-8">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-maroon-soft border border-maroon/20 text-maroon text-xs font-bold uppercase tracking-widest shadow-xs">
+            <ShieldCheck className="w-4 h-4" />
+            <span>Official Personnel Portal</span>
+          </div>
+
+          {/* Titles */}
+          <div className="space-y-2">
+            <h1 className="font-cinzel font-black text-3xl sm:text-5xl md:text-6xl text-maroon tracking-wide">
+              ONGC NAVRATRI 2026
+            </h1>
+            <h2 className="font-outfit font-extrabold text-xl sm:text-3xl text-ink tracking-tight uppercase">
+              EMPLOYEE REGISTRATION
+            </h2>
+          </div>
+
+          {/* Pulsing Status Pill */}
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs sm:text-sm font-bold shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Registration is currently open</span>
+          </div>
+
+          <p className="text-sm sm:text-base text-ink-soft max-w-xl mx-auto leading-relaxed">
+            Welcome ONGC Officers, Staff &amp; Families. Register your official attendance and passes for the 9-night celebration at EWC Ground, Chandkheda, Ahmedabad.
+          </p>
+
+          {/* Action Buttons */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 max-w-md mx-auto">
+            <Link
+              href="/employee/register"
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gold text-maroon-deep font-extrabold text-base hover:bg-gold-light transition-all shadow-lg flex items-center justify-center gap-2 border border-maroon/20"
+            >
+              <span>REGISTER AS EMPLOYEE</span>
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+            <Link
+              href="/employee/my-tickets"
+              className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-white hover:bg-stone-50 text-ink font-bold text-sm border border-stone-300 transition-all flex items-center justify-center gap-2 shadow-xs"
+            >
+              <Search className="w-4 h-4 text-stone-500" />
+              <span>Check Registration Status</span>
+            </Link>
+          </div>
+
+          {/* Feature highlights */}
+          <div className="pt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 shadow-xs space-y-1.5">
+              <div className="w-8 h-8 rounded-lg bg-maroon-soft text-maroon flex items-center justify-center">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <h3 className="font-outfit font-bold text-sm text-ink">Master Verified</h3>
+              <p className="text-xs text-ink-soft leading-relaxed">
+                Verification via official ONGC 5-digit CPF and registered mobile number.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 shadow-xs space-y-1.5">
+              <div className="w-8 h-8 rounded-lg bg-gold/20 text-maroon flex items-center justify-center">
+                <Ticket className="w-4 h-4" />
+              </div>
+              <h3 className="font-outfit font-bold text-sm text-ink">Permanent Pass</h3>
+              <p className="text-xs text-ink-soft leading-relaxed">
+                1 QR code per person for all your selected event dates. Sent directly to your email.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-stone-200/80 shadow-xs space-y-1.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </div>
+              <h3 className="font-outfit font-bold text-sm text-ink">Family Members</h3>
+              <p className="text-xs text-ink-soft leading-relaxed">
+                Add up to 3 family members (Parents, Spouse, Child) with independent dates.
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* MINIMAL FOOTER */}
+      <footer className="border-t border-gold/30 bg-cream-light py-6 text-center text-xs text-ink-soft">
+        <div className="max-w-7xl mx-auto px-4">
+          <p>&copy; 2026 ONGC Navratri &bull; Oil and Natural Gas Corporation Limited. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function ComingSoonLanding() {
+  return (
+    <div className="min-h-screen flex flex-col justify-between bg-cream text-ink selection:bg-maroon selection:text-white">
+      <header className="sticky top-0 z-50 bg-cream-light/95 backdrop-blur-md border-b border-gold/30 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3.5 group">
+            <img
+              src="/images/logo-web.png"
+              alt="ONGC Navratri Logo"
+              className="h-10 sm:h-12 w-auto object-contain shrink-0"
+            />
+            <div className="flex flex-col">
+              <span className="font-cinzel font-bold text-base sm:text-xl text-maroon leading-tight tracking-wide">
+                NAVRATRI
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-semibold text-gold-muted tracking-widest uppercase">
+                2026
+              </span>
+            </div>
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex-grow flex items-center justify-center py-16 sm:py-24 px-4 sm:px-6">
+        <div className="max-w-2xl w-full text-center space-y-6">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/20 border border-gold/40 text-maroon text-xs font-bold uppercase tracking-widest">
+            <Sparkles className="w-4 h-4 text-amber-600" />
+            <span>Stay Tuned</span>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="font-cinzel font-black text-3xl sm:text-5xl text-maroon tracking-wide">
+              ONGC NAVRATRI 2026
+            </h1>
+            <h2 className="font-outfit font-black text-2xl sm:text-4xl text-ink tracking-tight uppercase">
+              COMING SOON
+            </h2>
+          </div>
+
+          <p className="text-sm sm:text-base text-ink-soft max-w-lg mx-auto leading-relaxed">
+            The grand 9-night cultural festival is being prepared with vibrant festivities, divine celebrations, and traditional Garba at EWC Ground, Chandkheda, Ahmedabad.
+          </p>
+
+          <div className="p-4 rounded-2xl bg-white border border-gold/40 shadow-xs inline-block text-xs sm:text-sm font-semibold text-maroon">
+            <Calendar className="w-4 h-4 inline-block mr-2 text-amber-600 mb-0.5" />
+            October 11 &ndash; 19, 2026 &bull; EWC Ahmedabad
+          </div>
+        </div>
+      </main>
+
+      <footer className="border-t border-gold/30 bg-cream-light py-6 text-center text-xs text-ink-soft">
+        <div className="max-w-7xl mx-auto px-4">
+          <p>&copy; 2026 ONGC Navratri &bull; Oil and Natural Gas Corporation Limited. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function FullWebsite() {
   return (
     <div className="min-h-screen flex flex-col justify-between bg-cream text-ink selection:bg-maroon selection:text-white">
       <PublicHeader />
@@ -836,4 +1033,32 @@ export default function HomePage() {
       <PublicFooter />
     </div>
   );
+}
+
+export default function HomePage() {
+  const [websiteMode, setWebsiteMode] = useState<PublicWebsiteMode>('EMPLOYEE_REGISTRATION_ONLY');
+
+  useEffect(() => {
+    fetchApi('/public/website-mode')
+      .then((res: any) => {
+        const mode = res?.mode || (res?.data && res.data.mode);
+        if (mode && (mode === 'COMING_SOON' || mode === 'EMPLOYEE_REGISTRATION_ONLY' || mode === 'FULL_WEBSITE')) {
+          setWebsiteMode(mode);
+        }
+      })
+      .catch(() => {
+        // Fallback default
+        setWebsiteMode('EMPLOYEE_REGISTRATION_ONLY');
+      });
+  }, []);
+
+  if (websiteMode === 'COMING_SOON') {
+    return <ComingSoonLanding />;
+  }
+
+  if (websiteMode === 'FULL_WEBSITE') {
+    return <FullWebsite />;
+  }
+
+  return <EmployeeRegistrationLanding />;
 }

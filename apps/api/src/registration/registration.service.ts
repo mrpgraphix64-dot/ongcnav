@@ -137,6 +137,52 @@ export class RegistrationService {
       }
     }
 
+    // Validate Employee DOB
+    if (!dto.dateOfBirth || !dto.dateOfBirth.trim()) {
+      throw new BadRequestException('Employee Date of Birth is required.');
+    }
+    const empDob = new Date(dto.dateOfBirth.trim());
+    if (isNaN(empDob.getTime())) {
+      throw new BadRequestException('Invalid Employee Date of Birth. Format must be YYYY-MM-DD.');
+    }
+    const now = new Date();
+    if (empDob > now) {
+      throw new BadRequestException('Employee Date of Birth cannot be in the future.');
+    }
+    if (empDob.getFullYear() < 1920) {
+      throw new BadRequestException('Please provide a valid Employee Date of Birth.');
+    }
+
+    // Validate Employee Date of Joining
+    if (!dto.dateOfJoining || !dto.dateOfJoining.trim()) {
+      throw new BadRequestException('Employee Date of Joining is required.');
+    }
+    const empDoj = new Date(dto.dateOfJoining.trim());
+    if (isNaN(empDoj.getTime())) {
+      throw new BadRequestException('Invalid Employee Date of Joining. Format must be YYYY-MM-DD.');
+    }
+    if (empDoj > now) {
+      throw new BadRequestException('Employee Date of Joining cannot be in the future.');
+    }
+    if (empDoj <= empDob) {
+      throw new BadRequestException('Employee Date of Joining cannot be on or before Date of Birth.');
+    }
+
+    // Validate Guidelines Acknowledgement
+    if (!dto.guidelinesAccepted) {
+      throw new BadRequestException(
+        'You must read and agree to the ONGC Navratri 2026 Registration Guidelines to proceed.',
+      );
+    }
+    let guidelinesAcceptedAt = new Date();
+    if (dto.guidelinesAcceptedAt) {
+      const parsedAt = new Date(dto.guidelinesAcceptedAt);
+      if (!isNaN(parsedAt.getTime())) {
+        guidelinesAcceptedAt = parsedAt;
+      }
+    }
+    const guidelinesVersion = dto.guidelinesVersion?.trim() || '2026-employee-registration-v1';
+
     if (dto.familyMembers && dto.familyMembers.length > 3) {
       throw new BadRequestException('A maximum of 3 family members can be registered.');
     }
@@ -148,11 +194,30 @@ export class RegistrationService {
             `Please provide a valid email address for family member ${fam.name || 'unnamed'}.`,
           );
         }
-        if (fam.bookingDays && Array.isArray(fam.bookingDays) && fam.bookingDays.length > 0) {
-          for (const d of fam.bookingDays) {
-            if (!isOfficialEventDate(d)) {
-              throw new BadRequestException(`Invalid event date selected for family member ${fam.name}: ${d}`);
-            }
+        if (!fam.dateOfBirth || !fam.dateOfBirth.trim()) {
+          throw new BadRequestException(
+            `Date of Birth is required for family member ${fam.name || 'unnamed'}.`,
+          );
+        }
+        const famDob = new Date(fam.dateOfBirth.trim());
+        if (isNaN(famDob.getTime())) {
+          throw new BadRequestException(
+            `Invalid Date of Birth for family member ${fam.name || 'unnamed'}. Format must be YYYY-MM-DD.`,
+          );
+        }
+        if (famDob > now) {
+          throw new BadRequestException(
+            `Family member Date of Birth cannot be in the future (${fam.name || 'unnamed'}).`,
+          );
+        }
+        if (!Array.isArray(fam.bookingDays) || fam.bookingDays.length === 0) {
+          throw new BadRequestException(
+            `Please select at least one event date for family member ${fam.name || 'unnamed'}.`,
+          );
+        }
+        for (const d of fam.bookingDays) {
+          if (!isOfficialEventDate(d)) {
+            throw new BadRequestException(`Invalid event date selected for family member ${fam.name}: ${d}`);
           }
         }
       }
@@ -197,6 +262,27 @@ export class RegistrationService {
       throw new BadRequestException('Public registration is currently closed.');
     }
 
+    // Validate employee category against active category settings
+    const categorySetting = await this.prisma.setting.findUnique({
+      where: { key: 'employee.registration.categories' },
+    });
+    if (categorySetting?.value) {
+      try {
+        const catConfig = JSON.parse(categorySetting.value);
+        if (dto.employeeCategory === 'RETIRED' && catConfig.retired === false) {
+          throw new BadRequestException('Registration for Retired employees is currently closed.');
+        }
+        if (dto.employeeCategory === 'CONTRACT' && catConfig.contract === false) {
+          throw new BadRequestException('Registration for Contract employees is currently closed.');
+        }
+        if (dto.employeeCategory === 'REGULAR' && catConfig.regular === false) {
+          throw new BadRequestException('Registration for Regular employees is currently closed.');
+        }
+      } catch (err: any) {
+        if (err instanceof BadRequestException) throw err;
+      }
+    }
+
     const employeeQrToken = this.generateSecureQrToken();
     const employeeTicketNumber = this.generateTicketNumber(cleanCpf);
 
@@ -216,6 +302,10 @@ export class RegistrationService {
           photoPath: photoPath || null,
           employeeCategory: dto.employeeCategory as any,
           registrationStatus: RegistrationStatus.PENDING as any,
+          dateOfBirth: empDob,
+          dateOfJoining: empDoj,
+          guidelinesAcceptedAt,
+          guidelinesVersion,
           // Legacy/summary value — the employee's OWN dates only, kept for
           // backward-compatible reads that haven't moved to
           // resolveBookingDays() yet. Not used for check-in gating anymore.
@@ -245,10 +335,7 @@ export class RegistrationService {
           const famTicketNumber = this.generateTicketNumber(cleanCpf, i);
           const famPhotoPath = familyPhotoPaths?.[i];
 
-          const famBookingDays =
-            Array.isArray(famDto.bookingDays) && famDto.bookingDays.length > 0
-              ? famDto.bookingDays
-              : dto.bookingDays;
+          const famBookingDays = famDto.bookingDays;
 
           const familyMember = await tx.familyMember.create({
             data: {
@@ -259,6 +346,7 @@ export class RegistrationService {
               gender: famDto.gender || null,
               phone: famDto.phone.trim(),
               email: famDto.email.trim().toLowerCase(),
+              dateOfBirth: new Date(famDto.dateOfBirth.trim()),
               photoPath: famPhotoPath || null,
             },
           });
@@ -568,5 +656,33 @@ export class RegistrationService {
       eventTitle: 'ONGC NAVRATRI 2026',
       presentation,
     };
+  }
+
+  async getEmployeeTypeSettings() {
+    const s = await this.prisma.setting.findUnique({
+      where: { key: 'employee.registration.categories' },
+    });
+    if (s?.value) {
+      try {
+        const parsed = JSON.parse(s.value);
+        return {
+          regular: parsed.regular !== undefined ? Boolean(parsed.regular) : true,
+          retired: Boolean(parsed.retired),
+          contract: Boolean(parsed.contract),
+        };
+      } catch {}
+    }
+    return { regular: true, retired: false, contract: false };
+  }
+
+  async getWebsiteMode() {
+    const s = await this.prisma.setting.findUnique({
+      where: { key: 'website.public_mode' },
+    });
+    const raw = (s?.value || '').trim().toUpperCase();
+    if (raw === 'COMING_SOON' || raw === 'FULL_WEBSITE') {
+      return { mode: raw };
+    }
+    return { mode: 'EMPLOYEE_REGISTRATION_ONLY' };
   }
 }

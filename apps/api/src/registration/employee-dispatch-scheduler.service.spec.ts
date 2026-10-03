@@ -45,6 +45,21 @@ describe('EmployeeDispatchSchedulerService', () => {
         failedCount: 0,
         message: 'Emails dispatched',
       }),
+      getEmployeeQrReleaseSchedule: jest.fn().mockResolvedValue({
+        enabled: false,
+        releaseDate: '2026-10-10',
+        releaseTime: '10:00',
+        timezone: 'Asia/Kolkata',
+        status: 'IDLE',
+      }),
+      releaseEmployeeQrPasses: jest.fn().mockResolvedValue({
+        success: true,
+        eligibleCount: 0,
+        qrGeneratedCount: 0,
+        sentCount: 0,
+        failedCount: 0,
+        message: 'Released',
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({

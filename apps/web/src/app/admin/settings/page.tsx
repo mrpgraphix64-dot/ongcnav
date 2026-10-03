@@ -25,12 +25,16 @@ import {
   Wrench,
   CreditCard,
   Ticket,
+  Send,
+  RefreshCw,
+  Users,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { getStoredAuthUser, subscribeToAuthSync } from '@/lib/auth-session';
 import { subscribeToSuperAdminSync, broadcastSuperAdminSync } from '@/lib/super-admin-state';
+import type { PublicWebsiteMode } from '@ongc/shared-types';
 
-type TabType = 'general' | 'event' | 'bookpass' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger' | 'payment';
+type TabType = 'general' | 'event' | 'bookpass' | 'qr' | 'scanner' | 'notifications' | 'security' | 'gates' | 'danger' | 'payment' | 'super_admin';
 
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
@@ -40,6 +44,7 @@ export default function AdminSettingsPage() {
         const tabParam = params.get('tab');
         if (tabParam === 'payment') return 'payment';
         if (tabParam === 'bookpass') return 'bookpass';
+        if (tabParam === 'super_admin') return 'super_admin';
       } catch {}
     }
     return 'general';
@@ -102,6 +107,149 @@ export default function AdminSettingsPage() {
   } | null>(null);
   const paymentDraftRef = useRef<boolean>(false);
   const paymentInitializedRef = useRef<boolean>(false);
+
+  // Super Admin Module Controls (Employee Types, Website Mode, QR Release Schedule)
+  const [employeeTypes, setEmployeeTypes] = useState<{ regular: boolean; retired: boolean; contract: boolean }>({
+    regular: true,
+    retired: false,
+    contract: false,
+  });
+  const [savingEmployeeTypes, setSavingEmployeeTypes] = useState(false);
+
+  const [adminWebsiteMode, setAdminWebsiteMode] = useState<PublicWebsiteMode>('EMPLOYEE_REGISTRATION_ONLY');
+  const [savingWebsiteMode, setSavingWebsiteMode] = useState(false);
+
+  const [qrReleaseSchedule, setQrReleaseSchedule] = useState<{
+    autoRelease: boolean;
+    releaseDate: string;
+    releaseTime: string;
+    timezone: string;
+    status: string;
+    statistics: {
+      eligibleCount: number;
+      qrGeneratedCount: number;
+      sentCount: number;
+      failedCount: number;
+    };
+  }>({
+    autoRelease: true,
+    releaseDate: '',
+    releaseTime: '17:00',
+    timezone: 'Asia/Kolkata',
+    status: 'NOT_SCHEDULED',
+    statistics: {
+      eligibleCount: 0,
+      qrGeneratedCount: 0,
+      sentCount: 0,
+      failedCount: 0,
+    },
+  });
+  const [savingQrSchedule, setSavingQrSchedule] = useState(false);
+  const [executingQrAction, setExecutingQrAction] = useState<string | null>(null);
+
+  const loadSuperAdminModuleSettings = async () => {
+    try {
+      const [wmRes, typesRes, scheduleRes] = await Promise.all([
+        fetchApi<any>('/settings/website-mode').catch(() => null),
+        fetchApi<any>('/settings/employee-types').catch(() => null),
+        fetchApi<any>('/settings/qr-release-schedule').catch(() => null),
+      ]);
+
+      if (wmRes?.mode) {
+        setAdminWebsiteMode(wmRes.mode);
+      }
+      if (typesRes) {
+        setEmployeeTypes({
+          regular: Boolean(typesRes.regular ?? true),
+          retired: Boolean(typesRes.retired ?? false),
+          contract: Boolean(typesRes.contract ?? false),
+        });
+      }
+      if (scheduleRes) {
+        setQrReleaseSchedule({
+          autoRelease: Boolean(scheduleRes.autoRelease ?? true),
+          releaseDate: scheduleRes.releaseDate || '',
+          releaseTime: scheduleRes.releaseTime || '17:00',
+          timezone: scheduleRes.timezone || 'Asia/Kolkata',
+          status: scheduleRes.status || 'NOT_SCHEDULED',
+          statistics: {
+            eligibleCount: scheduleRes.statistics?.eligibleCount ?? 0,
+            qrGeneratedCount: scheduleRes.statistics?.qrGeneratedCount ?? 0,
+            sentCount: scheduleRes.statistics?.sentCount ?? 0,
+            failedCount: scheduleRes.statistics?.failedCount ?? 0,
+          },
+        });
+      }
+    } catch (e) {
+      console.error('Failed to load Super Admin module settings', e);
+    }
+  };
+
+  const handleSaveWebsiteMode = async () => {
+    try {
+      setSavingWebsiteMode(true);
+      const res = await fetchApi<any>('/settings/website-mode', {
+        method: 'POST',
+        body: JSON.stringify({ mode: adminWebsiteMode }),
+      });
+      setMsg({ text: res.message || 'Public Website Mode updated successfully.', type: 'success' });
+    } catch (e: any) {
+      setMsg({ text: e.message || 'Failed to update Public Website Mode', type: 'error' });
+    } finally {
+      setSavingWebsiteMode(false);
+    }
+  };
+
+  const handleSaveEmployeeTypes = async () => {
+    try {
+      setSavingEmployeeTypes(true);
+      const res = await fetchApi<any>('/settings/employee-types', {
+        method: 'POST',
+        body: JSON.stringify(employeeTypes),
+      });
+      setMsg({ text: res.message || 'Employee registration types updated successfully.', type: 'success' });
+    } catch (e: any) {
+      setMsg({ text: e.message || 'Failed to update employee registration types', type: 'error' });
+    } finally {
+      setSavingEmployeeTypes(false);
+    }
+  };
+
+  const handleSaveQrSchedule = async () => {
+    try {
+      setSavingQrSchedule(true);
+      const res = await fetchApi<any>('/settings/qr-release-schedule', {
+        method: 'POST',
+        body: JSON.stringify({
+          autoRelease: qrReleaseSchedule.autoRelease,
+          releaseDate: qrReleaseSchedule.releaseDate || undefined,
+          releaseTime: qrReleaseSchedule.releaseTime || undefined,
+        }),
+      });
+      setMsg({ text: res.message || 'Employee QR Release Schedule updated.', type: 'success' });
+      await loadSuperAdminModuleSettings();
+    } catch (e: any) {
+      setMsg({ text: e.message || 'Failed to update QR release schedule', type: 'error' });
+    } finally {
+      setSavingQrSchedule(false);
+    }
+  };
+
+  const handleExecuteQrAction = async (action: 'SEND_NOW' | 'RETRY_FAILED') => {
+    try {
+      setExecutingQrAction(action);
+      const res = await fetchApi<any>('/settings/qr-release-schedule/execute', {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      });
+      setMsg({ text: res.message || `QR Pass execution (${action}) completed successfully.`, type: 'success' });
+      await loadSuperAdminModuleSettings();
+    } catch (e: any) {
+      setMsg({ text: e.message || `Failed to execute ${action}`, type: 'error' });
+    } finally {
+      setExecutingQrAction(null);
+    }
+  };
 
   useEffect(() => {
     serverPaymentSettingsRef.current = serverPaymentSettings;
@@ -377,6 +525,7 @@ export default function AdminSettingsPage() {
       setCurrentUser(stored as any);
       if ((stored.role || '').toUpperCase() === 'SUPER_ADMIN') {
         loadSuperAdminSettings();
+        loadSuperAdminModuleSettings();
       }
     }
 
@@ -387,6 +536,7 @@ export default function AdminSettingsPage() {
           setCurrentUser(res.user);
           if ((res.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
             loadSuperAdminSettings();
+            loadSuperAdminModuleSettings();
           }
         }
       })
@@ -398,6 +548,7 @@ export default function AdminSettingsPage() {
         setCurrentUser(event.user as any);
         if ((event.user.role || '').toUpperCase() === 'SUPER_ADMIN') {
           loadSuperAdminSettings();
+          loadSuperAdminModuleSettings();
         }
       } else if (event.type === 'LOGOUT' || event.type === 'SESSION_EXPIRED') {
         setCurrentUser(null);
@@ -409,6 +560,7 @@ export default function AdminSettingsPage() {
     const unsubscribeSync = subscribeToSuperAdminSync(() => {
       loadSuperAdminSettings();
       loadPaymentSettings(false);
+      loadSuperAdminModuleSettings();
     });
 
     if (typeof window !== 'undefined' && window.location?.search) {
@@ -547,7 +699,10 @@ export default function AdminSettingsPage() {
           { id: 'notifications', label: 'Notifications', icon: Bell },
           { id: 'security', label: 'Security & Access', icon: Shield },
           ...(isSuperAdmin
-            ? [{ id: 'payment', label: 'Payment Settings', icon: CreditCard }]
+            ? [
+                { id: 'super_admin', label: 'Super Admin Controls', icon: ShieldAlert },
+                { id: 'payment', label: 'Payment Settings', icon: CreditCard },
+              ]
             : []),
           { id: 'gates', label: 'Gates Overview', icon: DoorOpen },
           { id: 'danger', label: 'Danger Zone', icon: AlertTriangle },
@@ -564,6 +719,8 @@ export default function AdminSettingsPage() {
                   loadPaymentSettings(!paymentInitializedRef.current);
                 } else if (newTab === 'bookpass') {
                   loadBookPassSettings(!bookPassInitializedRef.current);
+                } else if (newTab === 'super_admin') {
+                  loadSuperAdminModuleSettings();
                 }
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
@@ -1616,6 +1773,320 @@ export default function AdminSettingsPage() {
                 >
                   <Save className="w-4 h-4 text-gold" />
                   <span>{savingBookPass ? 'Saving Settings...' : 'Save Settings'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Super Admin Module Controls (Employee Registration, Public Website Mode, QR Release Schedule) */}
+        {activeTab === 'super_admin' && isSuperAdmin && (
+          <div className="space-y-6 max-w-3xl">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+              <div>
+                <h3 className="font-outfit font-extrabold text-xl text-ink uppercase tracking-wide">
+                  SUPER ADMIN CONTROLS
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Configure website access mode, employee registration categories, and permanent QR release schedule.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-gold/15 text-gold-dark text-[11px] font-black uppercase tracking-wider border border-gold/30">
+                SUPER ADMIN
+              </span>
+            </div>
+
+            {/* SECTION 1: EMPLOYEE REGISTRATION */}
+            <div className="p-6 rounded-2xl border border-stone-200 bg-white shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-outfit font-bold text-sm text-ink uppercase tracking-wide">
+                      EMPLOYEE REGISTRATION
+                    </h4>
+                    <p className="text-xs text-stone-500">Toggle eligible categories for public employee registration</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {/* Regular */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-cream-soft border border-stone-200/80">
+                  <div>
+                    <div className="text-xs font-bold text-ink">Regular Employee Registration</div>
+                    <div className="text-[11px] text-stone-500">Active permanent ONGC employees</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeTypes((prev) => ({ ...prev, regular: !prev.regular }))}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-colors ${
+                      employeeTypes.regular
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-stone-200 text-stone-600'
+                    }`}
+                  >
+                    {employeeTypes.regular ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {/* Retired */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-cream-soft border border-stone-200/80">
+                  <div>
+                    <div className="text-xs font-bold text-ink">Retired Employee Registration</div>
+                    <div className="text-[11px] text-stone-500">Superannuated / retired ONGC personnel</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeTypes((prev) => ({ ...prev, retired: !prev.retired }))}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-colors ${
+                      employeeTypes.retired
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-stone-200 text-stone-600'
+                    }`}
+                  >
+                    {employeeTypes.retired ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {/* Contract */}
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-cream-soft border border-stone-200/80">
+                  <div>
+                    <div className="text-xs font-bold text-ink">Contract Employee Registration</div>
+                    <div className="text-[11px] text-stone-500">Tenure-based contract &amp; project staff</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeTypes((prev) => ({ ...prev, contract: !prev.contract }))}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-colors ${
+                      employeeTypes.contract
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-stone-200 text-stone-600'
+                    }`}
+                  >
+                    {employeeTypes.contract ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  disabled={savingEmployeeTypes}
+                  onClick={handleSaveEmployeeTypes}
+                  className="px-5 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingEmployeeTypes ? 'Saving Types...' : 'Save'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SECTION 2: PUBLIC WEBSITE MODE */}
+            <div className="p-6 rounded-2xl border border-stone-200 bg-white shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center">
+                    <Power className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-outfit font-bold text-sm text-ink uppercase tracking-wide">
+                      PUBLIC WEBSITE MODE
+                    </h4>
+                    <p className="text-xs text-stone-500">Controls public access to the root landing page</p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-stone-100 text-stone-800 border border-stone-200">
+                  {adminWebsiteMode}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    value: 'COMING_SOON',
+                    title: 'COMING SOON',
+                    desc: 'Shows coming soon screen on public homepage. Ticket purchasing and general access closed.',
+                  },
+                  {
+                    value: 'EMPLOYEE_REGISTRATION_ONLY',
+                    title: 'EMPLOYEE REGISTRATION ONLY',
+                    desc: 'Active mode. Shows employee registration hero. Commercial ticket sales closed.',
+                  },
+                  {
+                    value: 'FULL_WEBSITE',
+                    title: 'FULL WEBSITE',
+                    desc: 'Full public festival website with all public sections and commercial purchasing.',
+                  },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAdminWebsiteMode(opt.value as PublicWebsiteMode)}
+                    className={`p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                      adminWebsiteMode === opt.value
+                        ? 'border-maroon bg-maroon-soft text-maroon shadow-sm'
+                        : 'border-stone-200 bg-stone-50 hover:bg-stone-100 text-ink'
+                    }`}
+                  >
+                    <div className="font-outfit font-extrabold text-xs mb-1 flex items-center justify-between">
+                      <span>{opt.title}</span>
+                      {adminWebsiteMode === opt.value && <CheckCircle2 className="w-4 h-4 text-maroon shrink-0" />}
+                    </div>
+                    <p className="text-[11px] text-stone-600 leading-snug">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  disabled={savingWebsiteMode}
+                  onClick={handleSaveWebsiteMode}
+                  className="px-5 py-2.5 rounded-xl bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingWebsiteMode ? 'Saving Mode...' : 'Save'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SECTION 3: EMPLOYEE QR RELEASE SCHEDULE */}
+            <div className="p-6 rounded-2xl border border-stone-200 bg-white shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+                    <QrCode className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-outfit font-bold text-sm text-ink uppercase tracking-wide">
+                      EMPLOYEE QR RELEASE
+                    </h4>
+                    <p className="text-xs text-stone-500">
+                      Unified schedule &amp; execution for permanent employee &amp; family QR passes
+                    </p>
+                  </div>
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                  qrReleaseSchedule.status === 'COMPLETED'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : qrReleaseSchedule.status === 'RUNNING'
+                    ? 'bg-blue-100 text-blue-800 border border-blue-300 animate-pulse'
+                    : qrReleaseSchedule.status === 'SCHEDULED'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : qrReleaseSchedule.status === 'PARTIAL_FAILURE' || qrReleaseSchedule.status === 'FAILED'
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                    : 'bg-stone-100 text-stone-600 border border-stone-200'
+                }`}>
+                  {qrReleaseSchedule.status.replace('_', ' ')}
+                </span>
+              </div>
+
+              {/* Statistics Overview */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 text-center">
+                  <div className="text-[10px] uppercase font-bold text-stone-500 tracking-wider">Eligible</div>
+                  <div className="font-outfit font-black text-xl text-ink mt-0.5">
+                    {qrReleaseSchedule.statistics.eligibleCount}
+                  </div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 text-center">
+                  <div className="text-[10px] uppercase font-bold text-stone-500 tracking-wider">QR Generated</div>
+                  <div className="font-outfit font-black text-xl text-ink mt-0.5">
+                    {qrReleaseSchedule.statistics.qrGeneratedCount}
+                  </div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+                  <div className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Email Sent</div>
+                  <div className="font-outfit font-black text-xl text-emerald-800 mt-0.5">
+                    {qrReleaseSchedule.statistics.sentCount}
+                  </div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-center">
+                  <div className="text-[10px] uppercase font-bold text-rose-700 tracking-wider">Email Failed</div>
+                  <div className="font-outfit font-black text-xl text-rose-800 mt-0.5">
+                    {qrReleaseSchedule.statistics.failedCount}
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-bold text-ink mb-1">Automatic Release</label>
+                  <button
+                    type="button"
+                    onClick={() => setQrReleaseSchedule((prev) => ({ ...prev, autoRelease: !prev.autoRelease }))}
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                      qrReleaseSchedule.autoRelease
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-stone-200 text-stone-700'
+                    }`}
+                  >
+                    {qrReleaseSchedule.autoRelease ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-ink mb-1">Release Date</label>
+                  <input
+                    type="date"
+                    value={qrReleaseSchedule.releaseDate}
+                    onChange={(e) => setQrReleaseSchedule((prev) => ({ ...prev, releaseDate: e.target.value }))}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-cream-soft text-ink font-mono font-medium focus:outline-maroon"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-ink mb-1">Release Time (HH:MM)</label>
+                  <input
+                    type="time"
+                    value={qrReleaseSchedule.releaseTime}
+                    onChange={(e) => setQrReleaseSchedule((prev) => ({ ...prev, releaseTime: e.target.value }))}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-cream-soft text-ink font-mono font-medium focus:outline-maroon"
+                  />
+                </div>
+              </div>
+
+              <div className="text-[11px] text-stone-500 flex items-center justify-between pt-1">
+                <span>Timezone: <strong>Asia/Kolkata</strong></span>
+                <span>Idempotent: Passes &amp; emails are dispatched exactly once per person.</span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={executingQrAction !== null}
+                    onClick={() => handleExecuteQrAction('SEND_NOW')}
+                    className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{executingQrAction === 'SEND_NOW' ? 'Sending Passes...' : 'SEND NOW'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={executingQrAction !== null}
+                    onClick={() => handleExecuteQrAction('RETRY_FAILED')}
+                    className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>{executingQrAction === 'RETRY_FAILED' ? 'Retrying Failed...' : 'RETRY FAILED'}</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={savingQrSchedule}
+                  onClick={handleSaveQrSchedule}
+                  className="px-5 py-2.5 rounded-xl bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingQrSchedule ? 'Saving...' : 'SAVE'}</span>
                 </button>
               </div>
             </div>

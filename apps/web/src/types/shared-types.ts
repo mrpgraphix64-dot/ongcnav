@@ -94,6 +94,33 @@ export interface AttendeeSourceInfo {
   agentName?: string;
 }
 
+export const ALLOWED_FAMILY_RELATIONS = ['Parents', 'Spouse', 'Child'] as const;
+export type AllowedFamilyRelation = (typeof ALLOWED_FAMILY_RELATIONS)[number];
+
+export type PublicWebsiteMode = 'COMING_SOON' | 'EMPLOYEE_REGISTRATION_ONLY' | 'FULL_WEBSITE';
+
+export interface EmployeeTypeSettings {
+  regular: boolean;
+  retired: boolean;
+  contract: boolean;
+}
+
+export interface EmployeeQrReleaseSchedule {
+  enabled: boolean;
+  releaseDate: string;
+  releaseTime: string;
+  timezone: string;
+  status: 'IDLE' | 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED';
+  lastRunAt?: string | null;
+  lastRunMessage?: string | null;
+  stats?: {
+    eligibleCount: number;
+    qrGeneratedCount: number;
+    sentCount: number;
+    failedCount: number;
+  };
+}
+
 export enum EmployeeCategory {
   REGULAR = 'REGULAR',
   RETIRED = 'RETIRED',

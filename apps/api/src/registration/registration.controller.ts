@@ -68,6 +68,18 @@ export class RegistrationController {
     return this.registrationService.getMaintenanceStatus();
   }
 
+  @Get('website-mode')
+  @ApiOperation({ summary: 'Get current public website mode (COMING_SOON, EMPLOYEE_REGISTRATION_ONLY, FULL_WEBSITE)' })
+  async getWebsiteMode() {
+    return this.registrationService.getWebsiteMode();
+  }
+
+  @Get('employee-types')
+  @ApiOperation({ summary: 'Get enabled employee categories (regular, retired, contract)' })
+  async getEmployeeTypeSettings() {
+    return this.registrationService.getEmployeeTypeSettings();
+  }
+
   @Post(['employee/verify', 'verify-employee'])
   @UseGuards(PublicMaintenanceGuard)
   @ApiOperation({ summary: 'Verify employee CPF and Mobile against official ONGC master data' })
@@ -125,6 +137,11 @@ export class RegistrationController {
       phone: body.phone,
       email: body.email,
       employeeCategory: body.employeeCategory,
+      dateOfBirth: body.dateOfBirth,
+      dateOfJoining: body.dateOfJoining,
+      guidelinesAccepted: body.guidelinesAccepted === true || body.guidelinesAccepted === 'true',
+      guidelinesAcceptedAt: body.guidelinesAcceptedAt,
+      guidelinesVersion: body.guidelinesVersion,
       bookingDays: bookingDays || [],
       familyMembers,
       registrationType: body.registrationType,

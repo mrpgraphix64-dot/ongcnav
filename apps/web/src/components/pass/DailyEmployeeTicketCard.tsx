@@ -208,10 +208,10 @@ export default function DailyEmployeeTicketCard({
 
             <div className="p-2.5 rounded-xl bg-white border border-stone-200/80">
               <p className="text-stone-500 text-[10px] uppercase font-bold tracking-wider">
-                Ticket Number
+                Pass Status
               </p>
-              <p className="font-mono font-bold text-stone-900 text-sm mt-0.5">
-                {presentation.ticketNumber}
+              <p className="font-bold text-emerald-700 text-sm mt-0.5">
+                {presentation.status || 'ACTIVE'}
               </p>
             </div>
 

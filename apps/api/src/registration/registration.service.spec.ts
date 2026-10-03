@@ -36,10 +36,15 @@ describe('RegistrationService', () => {
       phone: '9876543210',
       email: 'amit@ongc.co.in',
       employeeCategory: EmployeeCategory.REGULAR,
+      dateOfBirth: '1988-05-12',
+      dateOfJoining: '2015-09-01',
+      guidelinesAccepted: true,
+      guidelinesAcceptedAt: '2026-10-03T12:00:00.000Z',
+      guidelinesVersion: '2026-employee-registration-v1',
       bookingDays: ['2026-10-11', '2026-10-12'],
       familyMembers: [
-        { name: 'Sunita Sharma', relation: 'Spouse', phone: '9876543211', email: 'sunita@example.com', bookingDays: ['2026-10-13'] },
-        { name: 'Rohan Sharma', relation: 'Son', phone: '9876543212', email: 'rohan@example.com', bookingDays: ['2026-10-14', '2026-10-15'] },
+        { name: 'Sunita Sharma', relation: 'Spouse', phone: '9876543211', email: 'sunita@example.com', dateOfBirth: '1990-01-01', bookingDays: ['2026-10-13'] },
+        { name: 'Rohan Sharma', relation: 'Son', phone: '9876543212', email: 'rohan@example.com', dateOfBirth: '2015-05-20', bookingDays: ['2026-10-14', '2026-10-15'] },
       ],
     };
 
@@ -165,10 +170,10 @@ describe('RegistrationService', () => {
 
     it('rejects employee registration if more than 3 family members are submitted', async () => {
       const fourFamily = [
-        { name: 'Member 1', relation: 'Spouse', phone: '9876543211', email: 'm1@example.com', bookingDays: ['2026-10-11'] },
-        { name: 'Member 2', relation: 'Son', phone: '9876543212', email: 'm2@example.com', bookingDays: ['2026-10-12'] },
-        { name: 'Member 3', relation: 'Daughter', phone: '9876543213', email: 'm3@example.com', bookingDays: ['2026-10-13'] },
-        { name: 'Member 4', relation: 'Parent', phone: '9876543214', email: 'm4@example.com', bookingDays: ['2026-10-14'] },
+        { name: 'Member 1', relation: 'Spouse', phone: '9876543211', email: 'm1@example.com', dateOfBirth: '1990-01-01', bookingDays: ['2026-10-11'] },
+        { name: 'Member 2', relation: 'Son', phone: '9876543212', email: 'm2@example.com', dateOfBirth: '2012-02-02', bookingDays: ['2026-10-12'] },
+        { name: 'Member 3', relation: 'Daughter', phone: '9876543213', email: 'm3@example.com', dateOfBirth: '2014-03-03', bookingDays: ['2026-10-13'] },
+        { name: 'Member 4', relation: 'Parent', phone: '9876543214', email: 'm4@example.com', dateOfBirth: '1960-04-04', bookingDays: ['2026-10-14'] },
       ];
       await expect(service.register({ ...baseDto, familyMembers: fourFamily } as any)).rejects.toThrow(
         BadRequestException,
@@ -177,7 +182,7 @@ describe('RegistrationService', () => {
 
     it('rejects employee registration if family member email is missing or empty', async () => {
       const invalidFamily = [
-        { name: 'Member 1', relation: 'Spouse', phone: '9876543211', email: '', bookingDays: ['2026-10-11'] },
+        { name: 'Member 1', relation: 'Spouse', phone: '9876543211', email: '', dateOfBirth: '1990-01-01', bookingDays: ['2026-10-11'] },
       ];
       await expect(service.register({ ...baseDto, familyMembers: invalidFamily } as any)).rejects.toThrow(
         BadRequestException,
@@ -191,6 +196,93 @@ describe('RegistrationService', () => {
           data: expect.objectContaining({ email: 'sunita@example.com' }),
         }),
       );
+    });
+
+    it('persists employee DOB, DOJ, guidelinesAcceptedAt, and guidelinesVersion', async () => {
+      await service.register(baseDto as any);
+      expect(prisma.employee.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            dateOfBirth: expect.any(Date),
+            dateOfJoining: expect.any(Date),
+            guidelinesAcceptedAt: expect.any(Date),
+            guidelinesVersion: '2026-employee-registration-v1',
+          }),
+        }),
+      );
+    });
+
+    it('rejects employee registration if employee dateOfBirth is in the future', async () => {
+      const futureDate = '2099-01-01';
+      await expect(
+        service.register({ ...baseDto, dateOfBirth: futureDate } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects employee registration if employee dateOfJoining is in the future', async () => {
+      const futureDate = '2099-01-01';
+      await expect(
+        service.register({ ...baseDto, dateOfJoining: futureDate } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects employee registration if employee dateOfJoining is before dateOfBirth', async () => {
+      await expect(
+        service.register({
+          ...baseDto,
+          dateOfBirth: '1995-05-10',
+          dateOfJoining: '1990-01-01',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects employee registration if guidelines are not accepted', async () => {
+      await expect(
+        service.register({ ...baseDto, guidelinesAccepted: false } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('persists family member dateOfBirth in the database', async () => {
+      await service.register(baseDto as any);
+      expect(prisma.familyMember.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            dateOfBirth: expect.any(Date),
+          }),
+        }),
+      );
+    });
+
+    it('rejects employee registration if family member dateOfBirth is in the future', async () => {
+      const futureFamily = [
+        {
+          name: 'Sunita Sharma',
+          relation: 'Spouse',
+          phone: '9876543211',
+          email: 'sunita@example.com',
+          dateOfBirth: '2099-01-01',
+          bookingDays: ['2026-10-13'],
+        },
+      ];
+      await expect(
+        service.register({ ...baseDto, familyMembers: futureFamily } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects employee registration if family member has empty bookingDays', async () => {
+      const emptyDatesFamily = [
+        {
+          name: 'Sunita Sharma',
+          relation: 'Spouse',
+          phone: '9876543211',
+          email: 'sunita@example.com',
+          dateOfBirth: '1990-01-01',
+          bookingDays: [],
+        },
+      ];
+      await expect(
+        service.register({ ...baseDto, familyMembers: emptyDatesFamily } as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('rejects employee registration if registrationType is incorrectly set to COMMERCIAL', async () => {

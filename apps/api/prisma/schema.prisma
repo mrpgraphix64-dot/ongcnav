@@ -240,6 +240,10 @@ model Employee {
   // when a real category-specific field is defined, it can be added
   // without a new migration, a new table, or touching existing rows.
   categoryData     Json?            @map("category_data")
+  dateOfBirth          DateTime?        @map("date_of_birth")
+  dateOfJoining        DateTime?        @map("date_of_joining")
+  guidelinesAcceptedAt DateTime?        @map("guidelines_accepted_at")
+  guidelinesVersion    String?          @map("guidelines_version") @db.VarChar(50)
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
@@ -265,6 +269,7 @@ model FamilyMember {
   // required (exact 10-digit Indian mobile) for every new registration.
   phone      String?  @db.VarChar(20)
   email      String?  @db.VarChar(255)
+  dateOfBirth DateTime? @map("date_of_birth")
   photoPath  String?  @map("photo_path") @db.VarChar(500)
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")

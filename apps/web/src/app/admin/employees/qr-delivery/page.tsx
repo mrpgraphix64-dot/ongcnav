@@ -24,6 +24,7 @@ import {
   Clock,
   Layers,
   Sparkles,
+  Save,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import AdminModal from '@/components/admin/AdminModal';
@@ -90,6 +91,35 @@ export default function DailyQrDeliveryPage() {
 
   const [viewPass, setViewPass] = useState<DailyPassItem | null>(null);
 
+  // Unified permanent QR release schedule
+  const [unifiedSchedule, setUnifiedSchedule] = useState<{
+    autoRelease: boolean;
+    releaseDate: string;
+    releaseTime: string;
+    timezone: string;
+    status: string;
+    statistics: {
+      eligibleCount: number;
+      qrGeneratedCount: number;
+      sentCount: number;
+      failedCount: number;
+    };
+  }>({
+    autoRelease: true,
+    releaseDate: '',
+    releaseTime: '17:00',
+    timezone: 'Asia/Kolkata',
+    status: 'NOT_SCHEDULED',
+    statistics: {
+      eligibleCount: 0,
+      qrGeneratedCount: 0,
+      sentCount: 0,
+      failedCount: 0,
+    },
+  });
+  const [savingUnifiedSchedule, setSavingUnifiedSchedule] = useState(false);
+  const [executingQrAction, setExecutingQrAction] = useState<string | null>(null);
+
   // Dispatch schedule state
   const [schedule, setSchedule] = useState<EmployeeDispatchSchedule | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(true);
@@ -108,6 +138,80 @@ export default function DailyQrDeliveryPage() {
   useEffect(() => {
     activeDateRef.current = selectedDate;
   }, [selectedDate]);
+
+  // Load unified permanent QR release schedule
+  const loadUnifiedSchedule = useCallback(async () => {
+    try {
+      const scheduleRes = await fetchApi<any>('/settings/qr-release-schedule').catch(() => null);
+      if (scheduleRes) {
+        setUnifiedSchedule({
+          autoRelease: Boolean(scheduleRes.autoRelease ?? true),
+          releaseDate: scheduleRes.releaseDate || '',
+          releaseTime: scheduleRes.releaseTime || '17:00',
+          timezone: scheduleRes.timezone || 'Asia/Kolkata',
+          status: scheduleRes.status || 'NOT_SCHEDULED',
+          statistics: {
+            eligibleCount: scheduleRes.statistics?.eligibleCount ?? 0,
+            qrGeneratedCount: scheduleRes.statistics?.qrGeneratedCount ?? 0,
+            sentCount: scheduleRes.statistics?.sentCount ?? 0,
+            failedCount: scheduleRes.statistics?.failedCount ?? 0,
+          },
+        });
+      }
+    } catch (e) {
+      console.error('Failed to load unified QR release schedule', e);
+    }
+  }, []);
+
+  const handleSaveUnifiedSchedule = async () => {
+    try {
+      setSavingUnifiedSchedule(true);
+      const res = await fetchApi<any>('/settings/qr-release-schedule', {
+        method: 'POST',
+        body: JSON.stringify({
+          autoRelease: unifiedSchedule.autoRelease,
+          releaseDate: unifiedSchedule.releaseDate || undefined,
+          releaseTime: unifiedSchedule.releaseTime || undefined,
+        }),
+      });
+      setActionMessage({
+        type: 'success',
+        text: res.message || 'Permanent Employee QR Release Schedule updated.',
+      });
+      await loadUnifiedSchedule();
+    } catch (e: any) {
+      setActionMessage({
+        type: 'error',
+        text: e.message || 'Failed to update QR release schedule',
+      });
+    } finally {
+      setSavingUnifiedSchedule(false);
+    }
+  };
+
+  const handleExecuteUnifiedQrAction = async (action: 'SEND_NOW' | 'RETRY_FAILED') => {
+    try {
+      setExecutingQrAction(action);
+      const res = await fetchApi<any>('/settings/qr-release-schedule/execute', {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      });
+      setActionMessage({
+        type: 'success',
+        text: res.message || `QR Pass execution (${action}) completed successfully.`,
+      });
+      await loadUnifiedSchedule();
+      await loadStats();
+      await loadPasses();
+    } catch (e: any) {
+      setActionMessage({
+        type: 'error',
+        text: e.message || `Failed to execute ${action}`,
+      });
+    } finally {
+      setExecutingQrAction(null);
+    }
+  };
 
   // Load stats for current selected date
   const loadStats = useCallback(async () => {
@@ -207,7 +311,8 @@ export default function DailyQrDeliveryPage() {
     loadStats();
     loadPasses();
     loadSchedule();
-  }, [loadStats, loadPasses, loadSchedule]);
+    loadUnifiedSchedule();
+  }, [loadStats, loadPasses, loadSchedule, loadUnifiedSchedule]);
 
   // Generate passes for selected date
   const handleGeneratePasses = async () => {
@@ -656,23 +761,17 @@ export default function DailyQrDeliveryPage() {
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
               scheduleExpanded
                 ? 'bg-maroon text-white border-maroon shadow-2xs'
-                : scheduleEnabled
+                : unifiedSchedule.autoRelease
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
                 : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
             }`}
           >
-            <Clock className={`w-3.5 h-3.5 ${scheduleLoading ? 'animate-spin' : ''}`} />
+            <Clock className="w-3.5 h-3.5" />
             <span>
-              QR DISPATCH SCHEDULE &bull;{' '}
-              {scheduleLoading
-                ? 'Loading...'
-                : scheduleError
-                ? 'Error'
-                : !schedule
-                ? 'Not Configured'
-                : scheduleEnabled
-                ? `ON &bull; ${formatTimeTo12Hour(schedule.dispatchTime || scheduleTime)}`
-                : 'OFF'}
+              EMPLOYEE QR RELEASE SCHEDULE &bull;{' '}
+              {unifiedSchedule.autoRelease
+                ? `AUTO ON (${unifiedSchedule.releaseTime}) &bull; ${unifiedSchedule.status.replace('_', ' ')}`
+                : `AUTO OFF &bull; ${unifiedSchedule.status.replace('_', ' ')}`}
             </span>
             <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${scheduleExpanded ? 'rotate-180' : ''}`} />
           </button>
@@ -720,49 +819,80 @@ export default function DailyQrDeliveryPage() {
         })()}
       </div>
 
-      {/* EXPANDED: QR DISPATCH SCHEDULE CONFIGURATION */}
+      {/* EXPANDED: UNIFIED PERMANENT EMPLOYEE QR RELEASE SCHEDULE */}
       {scheduleExpanded && (
-        <div className="bg-white p-4 rounded-xl border border-stone-200/90 shadow-xs space-y-3 animate-in fade-in duration-150">
+        <div className="bg-white p-4 rounded-xl border border-stone-200/90 shadow-xs space-y-4 animate-in fade-in duration-150">
           <div className="flex items-center justify-between border-b border-stone-100 pb-2">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-maroon" />
               <h3 className="font-outfit font-black text-xs text-ink tracking-tight uppercase">
-                QR Dispatch Schedule Configuration &bull; {formatDateDisplay(selectedDate)}
+                EMPLOYEE QR RELEASE SCHEDULE &bull; UNIFIED PERMANENT DISPATCH
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={() => setScheduleExpanded(false)}
-              className="text-stone-400 hover:text-ink text-xs font-bold cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                unifiedSchedule.status === 'COMPLETED'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : unifiedSchedule.status === 'RUNNING'
+                  ? 'bg-blue-100 text-blue-800 border border-blue-300 animate-pulse'
+                  : unifiedSchedule.status === 'SCHEDULED'
+                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                  : unifiedSchedule.status === 'PARTIAL_FAILURE' || unifiedSchedule.status === 'FAILED'
+                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                  : 'bg-stone-100 text-stone-600 border border-stone-200'
+              }`}>
+                {unifiedSchedule.status.replace('_', ' ')}
+              </span>
+              <button
+                type="button"
+                onClick={() => setScheduleExpanded(false)}
+                className="text-stone-400 hover:text-ink text-xs font-bold cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Unified Statistics Overview */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200 text-center">
+              <div className="text-[9px] uppercase font-bold text-stone-500 tracking-wider">Eligible</div>
+              <div className="font-outfit font-black text-base text-ink">
+                {unifiedSchedule.statistics.eligibleCount}
+              </div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200 text-center">
+              <div className="text-[9px] uppercase font-bold text-stone-500 tracking-wider">QR Generated</div>
+              <div className="font-outfit font-black text-base text-ink">
+                {unifiedSchedule.statistics.qrGeneratedCount}
+              </div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-center">
+              <div className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Email Sent</div>
+              <div className="font-outfit font-black text-base text-emerald-800">
+                {unifiedSchedule.statistics.sentCount}
+              </div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-center">
+              <div className="text-[9px] uppercase font-bold text-rose-700 tracking-wider">Email Failed</div>
+              <div className="font-outfit font-black text-base text-rose-800">
+                {unifiedSchedule.statistics.failedCount}
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
-            {/* Event Date */}
+            {/* Automatic Release Toggle */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
-                Event Date
-              </label>
-              <div className="py-1.5 px-2.5 rounded-lg border border-stone-200 bg-stone-50 font-outfit font-black text-xs text-ink flex items-center justify-between">
-                <span>{formatDateDisplay(selectedDate)}</span>
-                <span className="text-[10px] text-ink-soft font-normal">{selectedDate}</span>
-              </div>
-            </div>
-
-            {/* Automatic Dispatch Toggle */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
-                Automatic Dispatch
+                Automatic Release
               </label>
               <div className="p-0.5 rounded-lg border border-stone-200 bg-stone-50 flex items-center">
                 <button
                   type="button"
-                  disabled={scheduleLoading}
-                  onClick={() => setScheduleEnabled(true)}
-                  className={`flex-1 py-1 rounded text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
-                    scheduleEnabled
+                  onClick={() => setUnifiedSchedule((prev) => ({ ...prev, autoRelease: true }))}
+                  className={`flex-1 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    unifiedSchedule.autoRelease
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'text-stone-600 hover:text-ink'
                   }`}
@@ -771,10 +901,9 @@ export default function DailyQrDeliveryPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={scheduleLoading}
-                  onClick={() => setScheduleEnabled(false)}
-                  className={`flex-1 py-1 rounded text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
-                    !scheduleEnabled
+                  onClick={() => setUnifiedSchedule((prev) => ({ ...prev, autoRelease: false }))}
+                  className={`flex-1 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    !unifiedSchedule.autoRelease
                       ? 'bg-stone-600 text-white shadow-2xs'
                       : 'text-stone-600 hover:text-ink'
                   }`}
@@ -784,21 +913,33 @@ export default function DailyQrDeliveryPage() {
               </div>
             </div>
 
-            {/* Dispatch Time */}
+            {/* Release Date */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
-                Dispatch Time
+                Release Date
               </label>
               <input
-                type="time"
-                value={scheduleTime}
-                disabled={scheduleLoading}
-                onChange={(e) => setScheduleTime(e.target.value)}
-                className="w-full py-1.5 px-2 rounded-lg border border-stone-200 bg-white font-outfit font-bold text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer disabled:opacity-50"
+                type="date"
+                value={unifiedSchedule.releaseDate}
+                onChange={(e) => setUnifiedSchedule((prev) => ({ ...prev, releaseDate: e.target.value }))}
+                className="w-full py-1.5 px-2 rounded-lg border border-stone-200 bg-white font-mono font-bold text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer"
               />
             </div>
 
-            {/* Timezone (Read-only) */}
+            {/* Release Time */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
+                Release Time (HH:MM)
+              </label>
+              <input
+                type="time"
+                value={unifiedSchedule.releaseTime}
+                onChange={(e) => setUnifiedSchedule((prev) => ({ ...prev, releaseTime: e.target.value }))}
+                className="w-full py-1.5 px-2 rounded-lg border border-stone-200 bg-white font-outfit font-bold text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer"
+              />
+            </div>
+
+            {/* Timezone */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
                 Timezone
@@ -810,34 +951,44 @@ export default function DailyQrDeliveryPage() {
             </div>
           </div>
 
-          {/* Next Dispatch Status Banner & Save Schedule Button */}
-          {(() => {
-            const nextDispatch = getNextDispatchDisplay();
-            return (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-ink-soft">Next Dispatch:</span>
-                  <span className={`font-semibold ${nextDispatch.colorClass}`}>
-                    {nextDispatch.statusText}
-                  </span>
-                </div>
+          {/* Action Buttons: Save, Send Now, Retry Failed */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={executingQrAction !== null}
+                onClick={() => handleExecuteUnifiedQrAction('SEND_NOW')}
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{executingQrAction === 'SEND_NOW' ? 'Sending Passes...' : 'SEND NOW'}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleSaveSchedule}
-                  disabled={savingSchedule || scheduleLoading}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
-                >
-                  {savingSchedule ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  )}
-                  <span>Save Schedule</span>
-                </button>
-              </div>
-            );
-          })()}
+              <button
+                type="button"
+                disabled={executingQrAction !== null}
+                onClick={() => handleExecuteUnifiedQrAction('RETRY_FAILED')}
+                className="px-3.5 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs hover:bg-amber-700 transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>{executingQrAction === 'RETRY_FAILED' ? 'Retrying...' : 'RETRY FAILED'}</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveUnifiedSchedule}
+              disabled={savingUnifiedSchedule}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
+            >
+              {savingUnifiedSchedule ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              <span>SAVE SCHEDULE</span>
+            </button>
+          </div>
         </div>
       )}
 

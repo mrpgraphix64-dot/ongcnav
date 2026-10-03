@@ -74,6 +74,10 @@ interface EmployeeDetailData {
   phone: string;
   email: string;
   employeeCategory: string;
+  dateOfBirth?: string | null;
+  dateOfJoining?: string | null;
+  guidelinesAcceptedAt?: string | null;
+  guidelinesVersion?: string | null;
   registrationStatus: string;
   photoPath: string | null;
   hasPhoto: boolean;
@@ -85,7 +89,9 @@ interface EmployeeDetailData {
     relation: string;
     age?: number;
     gender?: string;
+    dateOfBirth?: string | null;
     phone: string;
+    email?: string | null;
     photoPath: string | null;
     hasPhoto: boolean;
   }>;
@@ -112,6 +118,7 @@ interface PassSummary {
 interface EmployeePassData {
   id: string;
   employeeId: string;
+  referenceNumber?: string;
   ticketNumber: string;
   name: string;
   attendeeName: string;
@@ -130,6 +137,7 @@ interface EmployeePassData {
   isCheckedIn: boolean;
   familyPasses: Array<{
     id: string;
+    referenceNumber?: string;
     ticketNumber: string;
     name: string;
     relation: string;
@@ -544,6 +552,7 @@ export default function AdminEmployeesPage() {
         name: passData.name,
         attendeeName: passData.name,
         ticketNumber: passData.ticketNumber,
+        referenceNumber: passData.referenceNumber || passData.cpf,
         registrationType: 'EMPLOYEE',
         category: 'ONGC STAFF',
         passType: 'ONGC Employee Pass',
@@ -560,6 +569,7 @@ export default function AdminEmployeesPage() {
       name: fam.name,
       attendeeName: fam.name,
       ticketNumber: fam.ticketNumber,
+      referenceNumber: fam.referenceNumber || passData.referenceNumber || passData.cpf,
       registrationType: 'EMPLOYEE',
       category: fam.category,
       passType: fam.passType,
@@ -1182,7 +1192,7 @@ export default function AdminEmployeesPage() {
             {/* ACTION BUTTONS (PRINT & DOWNLOAD) */}
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-stone-100">
               <div className="text-xs text-ink-soft">
-                Pass Ticket ID: <strong className="font-mono text-ink">{activeTicketPass.ticketNumber}</strong>
+                Reference No: <strong className="font-mono text-ink">{activeTicketPass.referenceNumber || activeTicketPass.employee?.referenceNumber || activeTicketPass.employee?.cpf || activeTicketPass.ticketNumber}</strong>
               </div>
 
               <div className="flex items-center gap-2">
@@ -1291,9 +1301,25 @@ export default function AdminEmployeesPage() {
                 <div className="text-ink-soft">
                   Mobile: <strong>{detailEmployee.phone}</strong> &bull; Email: <strong>{detailEmployee.email}</strong>
                 </div>
+                {(detailEmployee.dateOfBirth || detailEmployee.dateOfJoining) && (
+                  <div className="text-ink-soft">
+                    {detailEmployee.dateOfBirth && (
+                      <>DOB: <strong className="text-ink">{detailEmployee.dateOfBirth}</strong></>
+                    )}
+                    {detailEmployee.dateOfBirth && detailEmployee.dateOfJoining && ' • '}
+                    {detailEmployee.dateOfJoining && (
+                      <>Date of Joining: <strong className="text-ink">{detailEmployee.dateOfJoining}</strong></>
+                    )}
+                  </div>
+                )}
                 <div className="text-[11px] text-stone-500 pt-1">
                   Category: <span className="font-semibold text-ink">{detailEmployee.employeeCategory}</span> &bull; Submitted: {new Date(detailEmployee.createdAt).toLocaleString('en-IN')}
                 </div>
+                {detailEmployee.guidelinesAcceptedAt && (
+                  <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md inline-block mt-1 font-semibold">
+                    ✓ Guidelines Accepted (v{detailEmployee.guidelinesVersion || '1.0'} on {new Date(detailEmployee.guidelinesAcceptedAt).toLocaleDateString('en-IN')})
+                  </div>
+                )}
 
                 {/* Selected Dates */}
                 <div className="pt-2">
@@ -1343,9 +1369,10 @@ export default function AdminEmployeesPage() {
                         <div className="flex-1 min-w-0 text-xs space-y-1">
                           <div className="font-bold text-ink truncate">{fam.name}</div>
                           <div className="text-[11px] text-maroon font-semibold">
-                            {fam.relation} {fam.age ? `• ${fam.age} yrs` : ''} {fam.gender ? `• ${fam.gender}` : ''}
+                            {fam.relation} {fam.dateOfBirth ? `• DOB: ${fam.dateOfBirth}` : fam.age ? `• ${fam.age} yrs` : ''} {fam.gender ? `• ${fam.gender}` : ''}
                           </div>
                           <div className="text-[11px] text-ink-soft">Mobile: {fam.phone}</div>
+                          {fam.email && <div className="text-[11px] text-ink-soft truncate">Email: {fam.email}</div>}
                           <div className="pt-1">
                             <span className="text-[10px] text-stone-500 font-bold block mb-0.5">Dates:</span>
                             <div className="flex flex-wrap gap-1">

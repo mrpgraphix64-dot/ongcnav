@@ -1012,4 +1012,75 @@ describe('CheckinService Concurrency & Security Tests', () => {
       expect(prisma.dailyCheckin.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('Permanent Employee QR Architecture', () => {
+    it('accepts permanent attendee qrCodeToken directly at turnstile gate and returns referenceNumber', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(888),
+        ticketNumber: 'NR26-000888',
+        qrCodeToken: 'permanent-employee-qr-token-abc',
+        status: AttendeeStatus.ACTIVE,
+        registrationType: RegistrationType.EMPLOYEE,
+        bookingDays: ['2026-10-11', '2026-10-13', '2026-10-15'],
+        employee: {
+          id: BigInt(88),
+          cpf: '12345',
+          referenceNumber: 'ONGC-00088',
+          name: 'Vikram Patel',
+          designation: 'Chief Engineer',
+          department: 'Instrumentation',
+          photoPath: null,
+        },
+        familyMember: null,
+      });
+
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-11' });
+        return Promise.resolve(null);
+      });
+
+      const res = await service.processCheckin(
+        { token: 'permanent-employee-qr-token-abc', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.result).toBe(CheckinResult.SUCCESS);
+      expect(res.data?.referenceNumber).toBe('ONGC-00088');
+      expect(res.data?.employee?.referenceNumber).toBe('ONGC-00088');
+      expect(res.data?.attendeeName).toBe('Vikram Patel');
+    });
+
+    it('rejects with NOT_BOOKED_TODAY when scanned on a date not in person bookingDays', async () => {
+      prisma.attendee.findFirst.mockResolvedValueOnce({
+        id: BigInt(888),
+        ticketNumber: 'NR26-000888',
+        qrCodeToken: 'permanent-employee-qr-token-abc',
+        status: AttendeeStatus.ACTIVE,
+        registrationType: RegistrationType.EMPLOYEE,
+        bookingDays: ['2026-10-11', '2026-10-13'],
+        employee: {
+          id: BigInt(88),
+          cpf: '12345',
+          referenceNumber: 'ONGC-00088',
+          name: 'Vikram Patel',
+        },
+        familyMember: null,
+      });
+
+      prisma.setting.findUnique.mockImplementation(({ where }: any) => {
+        if (where.key === 'active_event_date') return Promise.resolve({ value: '2026-10-12' });
+        return Promise.resolve(null);
+      });
+
+      const res = await service.processCheckin(
+        { token: 'permanent-employee-qr-token-abc', gateId: '1' },
+        { id: '1', role: UserRole.GATE_OPERATOR },
+      );
+
+      expect(res.success).toBe(false);
+      expect(res.result).toBe(CheckinResult.NOT_BOOKED_TODAY);
+      expect(res.message).toContain('Pass is not registered for today (2026-10-12)');
+    });
+  });
 });
