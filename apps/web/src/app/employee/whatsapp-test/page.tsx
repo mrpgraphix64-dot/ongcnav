@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Info,
   CheckCircle2,
@@ -38,6 +39,7 @@ import {
   AllowedFamilyRelation,
   WhatsAppConfigDto,
   WhatsAppTestSubmissionResultDto,
+  DEFAULT_SPONSOR_VOUCHER_CONFIG,
 } from '@ongc/shared-types';
 
 // ----------------------------------------------------------------------------
@@ -743,23 +745,13 @@ export default function WhatsAppTestRegistrationPage() {
       });
 
       if (res.status === 'SENT' || res.status === 'SUCCESS' || res.success) {
-        setSendWhatsAppSuccess(
-          `WhatsApp message successfully dispatched to ${res.safeRecipient || testResult.safeRecipient || 'safe recipient'}! Provider Message ID: ${res.providerMessageId || 'N/A'}`
-        );
-      } else if (res.status === 'TEMPLATE_NOT_CONFIGURED') {
-        setSendWhatsAppError(
-          `Custom template '${res.templateName || 'ongc_navratri_test_pass'}' is currently pending Meta approval. Meta Cloud API cannot deliver arbitrary pass text through 'hello_world'. Preview mode is available below.`
-        );
-      } else if (res.status === 'TEST_RECIPIENT_NOT_CONFIGURED') {
-        setSendWhatsAppError(
-          'Safe test recipient is not configured in the server environment (WHATSAPP_TEST_RECIPIENT).'
-        );
-      } else if (res.status === 'PROVIDER_NOT_CONFIGURED') {
-        setSendWhatsAppError(
-          'WhatsApp Cloud API credentials are not configured in the server environment.'
-        );
+        setSendWhatsAppSuccess('✓ WhatsApp test message sent');
       } else {
-        setSendWhatsAppError(res.error || 'Failed to dispatch WhatsApp message.');
+        setSendWhatsAppError(
+          res.status === 'TEMPLATE_NOT_CONFIGURED'
+            ? 'Custom WhatsApp template is pending Meta verification. Simulated preview is rendered below.'
+            : 'Unable to deliver WhatsApp test message. Please verify network connectivity and try again.'
+        );
       }
     } catch (err: any) {
       setSendWhatsAppError(err.message || 'Failed to dispatch WhatsApp message.');
@@ -802,29 +794,38 @@ export default function WhatsAppTestRegistrationPage() {
           </p>
         </div>
 
-        {/* PERSISTENT SPONSOR BRANDING BANNER (VISIBLE ACROSS ALL STEPS & RESULTS) */}
-        <div className="mb-6 p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/20 to-amber-500/10 border-2 border-gold/60 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gold/20 border border-gold/40 flex items-center justify-center shrink-0 text-maroon">
-              <Sparkles className="w-5 h-5 text-amber-700" />
+        {/* PERSISTENT SPONSOR BRANDING BANNER (TITLE SPONSOR WITH REAL LOGO) */}
+        <div className="mb-6 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/20 to-amber-500/10 border-2 border-gold/60 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-start">
+            <div className="w-13 h-13 sm:w-16 sm:h-16 relative rounded-xl overflow-hidden shrink-0 shadow-sm border border-gold/40 bg-[#001036] flex items-center justify-center">
+              <Image
+                src="/images/sponsors/mahavir-jewellers-logo.png"
+                alt="Mahavir Jewellers Logo"
+                width={64}
+                height={64}
+                className="w-full h-full object-cover"
+                priority
+              />
             </div>
-            <div>
-              <div className="flex items-center gap-2 justify-center sm:justify-start">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-900 bg-gold/30 px-2 py-0.5 rounded-full border border-gold/50">
-                  Official Festival Sponsor
-                </span>
-              </div>
-              <h3 className="font-cinzel font-black text-base sm:text-lg text-maroon uppercase tracking-wider mt-0.5">
-                MAHAVIR JEWELLERS
+            <div className="text-left flex-1 min-w-0">
+              <span className="inline-block text-[10px] sm:text-[11px] font-extrabold uppercase tracking-widest text-amber-900 bg-gold/30 px-2 py-0.5 rounded-full border border-gold/50 mb-0.5">
+                TITLE SPONSOR
+              </span>
+              <h3 className="font-cinzel font-black text-sm sm:text-lg text-maroon uppercase tracking-wider truncate">
+                {DEFAULT_SPONSOR_VOUCHER_CONFIG.sponsorName || 'MAHAVIR JEWELLERS'}
               </h3>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:text-right">
-            <div className="px-3 py-1.5 rounded-xl bg-white/80 border border-gold/40 shadow-xs">
-              <span className="text-xs sm:text-sm font-black text-rose-700 tracking-tight">₹5,000 OFF</span>
-              <span className="text-[10px] font-bold text-stone-700 block uppercase tracking-wider">On Making Charges</span>
+          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gold/25 w-full sm:w-auto">
+            <div className="text-left sm:text-right">
+              <span className="text-base sm:text-lg font-black text-rose-700 tracking-tight leading-none block">
+                {DEFAULT_SPONSOR_VOUCHER_CONFIG.offerHeadline || '₹5,000 OFF'}
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-bold text-stone-700 uppercase tracking-wider block mt-0.5">
+                {DEFAULT_SPONSOR_VOUCHER_CONFIG.offerSubtext || 'ON MAKING CHARGES'}
+              </span>
             </div>
-            <div className="hidden md:block text-[10px] font-semibold text-stone-500">
+            <div className="text-[10px] font-semibold text-stone-600 bg-white/80 px-2 py-0.5 rounded-md border border-stone-200">
               Lifetime | No Expiry
             </div>
           </div>
@@ -853,311 +854,52 @@ export default function WhatsAppTestRegistrationPage() {
           </div>
         ) : submitted && testResult ? (
           <div className="space-y-8">
-            {/* SUCCESS STATE CARD — TEST REGISTRATION SUCCESSFUL */}
-            <div className="bg-white rounded-3xl p-6 sm:p-10 border-2 border-emerald-500/40 shadow-xl text-center space-y-6">
-              <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner border border-emerald-200">
-                <CheckCircle2 className="w-10 h-10" />
+            {/* SUCCESS STATE CARD — CLEAN TARGET UI */}
+            <div className="bg-white rounded-3xl p-6 sm:p-10 border-2 border-emerald-500/40 shadow-xl text-center space-y-6 max-w-xl mx-auto">
+              <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner border border-emerald-200">
+                <Check className="w-9 h-9 stroke-[3]" />
               </div>
 
-              <div className="space-y-2">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider">
-                  TEST REGISTRATION SUCCESSFUL
-                </div>
-                <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink">
-                  Test Pass Generated (Isolated)
+              <div className="space-y-1.5">
+                <h2 className="font-outfit font-black text-2xl sm:text-3xl text-ink uppercase tracking-wide leading-tight">
+                  TEST REGISTRATION<br />SUCCESSFUL!
                 </h2>
-                <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full" />
+                <p className="text-stone-600 text-sm sm:text-base">
+                  Your test pass has been generated successfully.
+                </p>
               </div>
 
-              {/* Official Pass Reference Number Banner */}
-              <div className="bg-gradient-to-r from-maroon/10 via-gold/15 to-maroon/10 border-2 border-gold/60 rounded-2xl p-5 max-w-lg mx-auto shadow-sm">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-maroon-dark block">
-                  Test Pass Reference Number
-                </span>
-                <div className="flex items-center justify-center gap-2 mt-1">
+              {/* Reference Number Card */}
+              <div className="bg-stone-50 border-2 border-stone-200 rounded-2xl p-5 max-w-md mx-auto shadow-xs text-center space-y-2">
+                <div className="flex items-center justify-center gap-2 text-stone-600 text-xs font-bold uppercase tracking-wider">
+                  <Ticket className="w-4 h-4 text-maroon" />
+                  <span>Reference No.</span>
+                </div>
+                <div className="flex items-center justify-center gap-2">
                   <span className="font-mono text-2xl sm:text-3xl font-black text-maroon tracking-wider">
                     {testResult.referenceNumber}
                   </span>
                   <button
                     type="button"
                     onClick={handleCopyRef}
-                    className="p-1.5 rounded-lg bg-white/80 hover:bg-white text-maroon border border-maroon/20 transition cursor-pointer"
+                    className="p-1.5 rounded-lg bg-white hover:bg-stone-100 text-maroon border border-stone-300 transition cursor-pointer"
                     title="Copy Reference Number"
                   >
                     {copiedRef ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-stone-600 mt-1">
-                  Isolated test credential. Production employee records remain completely untouched.
-                </p>
               </div>
 
-              {/* 3-Column Info Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left max-w-xl mx-auto">
-                <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wide block">
-                    Employee Name
-                  </span>
-                  <span className="font-bold text-ink text-sm block truncate">
-                    {common.name}
-                  </span>
-                  <span className="text-[11px] font-mono text-stone-600 block">
-                    CPF: {common.cpf}
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1">
-                  <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide block">
-                    Safe WhatsApp Target
-                  </span>
-                  <span className="font-bold text-emerald-950 text-sm block font-mono">
-                    {testResult.safeRecipient || providerConfig?.safeRecipient || 'Not Configured'}
-                  </span>
-                  <span className="text-[10px] text-emerald-800 block">
-                    Guarded (Super Admin only)
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 space-y-1">
-                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wide block">
-                    Permanent E-Pass
-                  </span>
-                  <Link
-                    href={`/employee/my-tickets?ref=${encodeURIComponent(testResult.referenceNumber)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 underline mt-0.5"
-                  >
-                    <span>Open Pass Link</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </Link>
-                  <span className="text-[10px] text-blue-700 block">
-                    Permanent QR verified
-                  </span>
-                </div>
-              </div>
-
-              {/* WHATSAPP TEST SECTION */}
-              <div className="bg-cream-light border-2 border-stone-300 rounded-3xl p-5 sm:p-7 text-left space-y-5 max-w-xl mx-auto shadow-inner">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-stone-200">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-emerald-700" />
-                    <div>
-                      <h3 className="font-outfit font-extrabold text-base text-ink">
-                        WhatsApp Test Dispatch
-                      </h3>
-                      <p className="text-[11px] text-stone-500">
-                        Meta Cloud API Test Integration
-                      </p>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 w-fit">
-                    <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                    <span>{testResult.providerName || 'Meta WhatsApp Cloud API'}</span>
-                  </span>
-                </div>
-
-                {/* Safe Recipient Strict Enforcement Notice */}
-                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-950 flex items-start gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <strong>Safe Recipient Enforcement:</strong>
-                    <p className="text-[11px] text-blue-900">
-                      The entered employee mobile ({common.mobile}) is <strong>never</strong> messaged. All test dispatches are routed strictly to the configured safe test recipient ({testResult.safeRecipient || providerConfig?.safeRecipient || 'WHATSAPP_TEST_RECIPIENT'}).
-                    </p>
-                  </div>
-                </div>
-
-                {/* Template State Guidance */}
-                {testResult.passTemplateConfigured ? (
-                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 flex items-start gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <strong>Custom Template Active:</strong> Template <code className="font-mono bg-emerald-100 px-1 py-0.5 rounded">{testResult.passTemplateName || 'ongc_navratri_test_pass'}</code> is configured and ready for pass dispatch.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start gap-2">
-                    <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <div>
-                        <strong>Meta Template Pending:</strong> Dedicated custom template <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-[11px]">{testResult.passTemplateName || 'ongc_navratri_test_pass'}</code> requires active approval in Meta WhatsApp Business Account for dynamic pass parameter delivery ({'{{1}}'}=name, {'{{2}}'}=ref, {'{{3}}'}=url).
-                      </div>
-                      <p className="text-[11px] text-amber-800">
-                        While approval is pending, the exact WhatsApp pass copy is rendered in the preview bubble below. You can also test basic Meta connectivity using the <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">hello_world</code> ping.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Feedback Alerts */}
-                {sendWhatsAppSuccess && (
-                  <div className="p-3.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-semibold flex items-start gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                    <div className="flex-1">{sendWhatsAppSuccess}</div>
-                  </div>
-                )}
-
-                {sendWhatsAppError && (
-                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    <div className="flex-1">{sendWhatsAppError}</div>
-                  </div>
-                )}
-
-                {/* High-Fidelity WhatsApp Chat Bubble Container */}
-                <div className="bg-[#EFEAE2] p-3 sm:p-5 rounded-2xl border border-stone-300 shadow-inner relative">
-                  <div className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2.5 text-center">
-                    WhatsApp Chat Preview (Simulated)
-                  </div>
-
-                  {/* Single Authentic WhatsApp Message Bubble — No nested cards or colored boxes */}
-                  <div className="bg-white rounded-2xl rounded-tl-xs p-3.5 sm:p-4 shadow-sm border border-stone-200/60 text-stone-900 text-xs sm:text-[13px] leading-relaxed max-w-[95%] sm:max-w-[480px] space-y-2.5 mx-auto">
-                    <div className="font-black text-stone-900 text-sm tracking-wide text-center">
-                      🎉 *ONGC NAVRATRI 2026* 🎉
-                    </div>
-
-                    <div>
-                      Hello <strong>*{common.name || 'Siddharth'}*</strong> 👋
-                    </div>
-
-                    <div>
-                      Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨
-                    </div>
-
-                    <div>
-                      🎟️ <strong>*Reference No.:*</strong> {testResult.referenceNumber}
-                    </div>
-
-                    <div className="text-stone-700">
-                      Your permanent QR pass is your entry credential for the event. Please keep your QR safe and do not share it.
-                    </div>
-
-                    {testResult.sponsorVoucher && (
-                      <div className="pt-1 space-y-0.5 text-stone-800">
-                        <div className="font-black text-amber-900 text-xs">
-                          💎 *A SPECIAL GIFT FOR YOU* 💎
-                        </div>
-                        <div className="font-extrabold text-stone-900">
-                          *{testResult.sponsorVoucher.sponsorName || 'MAHAVIR JEWELLERS'}*
-                        </div>
-                        <div>
-                          ✨ <strong>*{testResult.sponsorVoucher.offerHeadline || '₹5,000 OFF'}*</strong> <strong>*{testResult.sponsorVoucher.offerSubtext || 'ON MAKING CHARGES'}*</strong>
-                        </div>
-                        <div className="text-[11px] text-stone-600">
-                          {testResult.sponsorVoucher.validityNote || 'Lifetime | No expiry'}
-                        </div>
-                        <div className="text-[11px] text-stone-600">
-                          📍 {testResult.sponsorVoucher.address || '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda'}
-                        </div>
-                        <div className="text-[11px] text-stone-600">
-                          📞 {testResult.sponsorVoucher.phone || '90330 56098'}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="pt-1 space-y-0.5">
-                      <div className="font-bold text-stone-900 text-xs">
-                        🎟️ *VIEW YOUR E-PASS:*
-                      </div>
-                      <a
-                        href={testResult.passUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#027EB5] underline font-mono text-[11px] sm:text-xs break-all block"
-                      >
-                        {testResult.passUrl}
-                      </a>
-                    </div>
-
-                    <div className="text-[11px] text-stone-600 italic pt-1">
-                      ⚠️ *Notice:* This is a test registration. The generated pass is isolated from production employee records.
-                    </div>
-
-                    <div className="font-extrabold text-xs text-stone-800 pt-1 text-center">
-                      ✨ See you at ONGC Navratri 2026! ✨
-                    </div>
-
-                    {/* WhatsApp Timestamp and Blue Double Checkmarks */}
-                    <div className="flex justify-end items-center gap-1 text-[10px] text-stone-400 select-none pt-1">
-                      <span>10:42 PM</span>
-                      <span className="text-[#53BDEB] font-bold">✓✓</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dispatch Controls */}
-                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                  {testResult.passTemplateConfigured ? (
-                    <button
-                      type="button"
-                      onClick={() => handleSendWhatsApp()}
-                      disabled={sendingWhatsApp}
-                      className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider transition shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      {sendingWhatsApp ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Dispatching...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-4 h-4" />
-                          <span>Send Test Pass WhatsApp</span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleSendWhatsApp('hello_world')}
-                      disabled={sendingWhatsApp}
-                      className="flex-1 py-3 px-4 rounded-xl bg-stone-800 hover:bg-stone-900 text-white font-bold text-xs uppercase tracking-wider transition shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      {sendingWhatsApp ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Pinging Meta...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-4 h-4" />
-                          <span>Ping Meta (hello_world)</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleCopyMessage}
-                    className="py-3 px-4 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs transition border border-stone-300 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {copiedMessage ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-600" />
-                        <span>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" />
-                        <span>Copy Message</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              {/* Primary Action: View E-Pass */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                 <Link
                   href={`/employee/my-tickets?ref=${encodeURIComponent(testResult.referenceNumber)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-maroon text-white font-bold text-sm hover:bg-maroon-dark transition-all shadow-md inline-flex items-center justify-center gap-2 border border-gold/40 cursor-pointer"
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-maroon hover:bg-maroon-dark text-white font-bold text-base transition shadow-md inline-flex items-center justify-center gap-2.5 cursor-pointer border border-gold/40"
                 >
-                  <Ticket className="w-4 h-4 text-gold-light" />
-                  <span>View Test E-Pass</span>
+                  <Ticket className="w-5 h-5 text-gold-light" />
+                  <span>View E-Pass</span>
                   <ExternalLink className="w-4 h-4" />
                 </Link>
                 <button
@@ -1168,10 +910,170 @@ export default function WhatsAppTestRegistrationPage() {
                     setStep(1);
                     scrollTop();
                   }}
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-sm transition border border-stone-300 cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-sm transition border border-stone-300 cursor-pointer"
                 >
                   Register Another Test Pass
                 </button>
+              </div>
+            </div>
+
+            {/* WHATSAPP MESSAGE PREVIEW SECTION */}
+            <div className="max-w-xl mx-auto space-y-4">
+              <div className="text-center">
+                <h3 className="font-outfit font-black text-base sm:text-lg text-ink uppercase tracking-wider">
+                  WhatsApp Message Preview
+                </h3>
+              </div>
+
+              {/* Authentic WhatsApp Chat Container */}
+              <div className="rounded-2xl shadow-md overflow-hidden border border-stone-300">
+                {/* Green WhatsApp Header */}
+                <div className="bg-[#008069] text-white px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+                      <MessageSquare className="w-4 h-4 text-white fill-white" />
+                    </div>
+                    <span className="font-bold text-sm sm:text-base tracking-wide">WhatsApp</span>
+                  </div>
+                  <span className="text-xs text-white/80 font-medium">now</span>
+                </div>
+
+                {/* Subtle WhatsApp Chat Wallpaper Background */}
+                <div className="bg-[#EFEAE2] p-4 sm:p-6">
+                  {/* Single Authentic WhatsApp Message Bubble */}
+                  <div className="bg-white rounded-2xl rounded-tl-none p-4 sm:p-5 shadow-sm border border-stone-200/50 text-[#111B21] text-[15px] sm:text-base leading-relaxed max-w-[94%] sm:max-w-[460px] space-y-3.5 relative">
+                    {/* Small message tail on top-left */}
+                    <div className="absolute top-0 -left-2 w-0 h-0 border-t-[8px] border-t-white border-l-[8px] border-l-transparent" />
+
+                    <div className="font-bold text-[#111B21] text-base sm:text-[17px] text-center">
+                      🎉 ONGC NAVRATRI 2026 🎉
+                    </div>
+
+                    <div>
+                      Hello <strong>{common.name || 'Siddharth'}</strong> 👋
+                    </div>
+
+                    <div>
+                      Your ONGC Navratri E-Pass has been generated successfully as a TEST PASS. 🪔✨
+                    </div>
+
+                    <div>
+                      🎟️ <strong>Reference No.:</strong>
+                      <div className="font-bold text-base sm:text-lg font-mono text-ink mt-0.5">
+                        {testResult.referenceNumber}
+                      </div>
+                    </div>
+
+                    <div className="text-[#3b4a54]">
+                      Your permanent QR pass is your entry credential for the event. Please keep your QR safe and do not share it.
+                    </div>
+
+                    {testResult.sponsorVoucher && (
+                      <div className="space-y-1 pt-1 text-[#111B21]">
+                        <div className="font-bold">
+                          💎 A SPECIAL GIFT FOR YOU 💎
+                        </div>
+                        <div className="font-bold">
+                          {testResult.sponsorVoucher.sponsorName || 'MAHAVIR JEWELLERS'}
+                        </div>
+                        <div>
+                          ✨ <strong>{testResult.sponsorVoucher.offerHeadline || '₹5,000 OFF'}</strong>
+                          <br />
+                          <strong>{testResult.sponsorVoucher.offerSubtext || 'ON MAKING CHARGES'}</strong>
+                        </div>
+                        <div className="text-stone-600 text-sm">
+                          {testResult.sponsorVoucher.validityNote || 'Lifetime | No expiry'}
+                        </div>
+                        <div className="text-stone-600 text-sm">
+                          📍 {testResult.sponsorVoucher.address || '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda'}
+                        </div>
+                        <div className="text-stone-600 text-sm">
+                          📞 {testResult.sponsorVoucher.phone || '90330 56098'}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-1 pt-1">
+                      <div className="font-bold text-[#111B21]">
+                        🎟️ VIEW YOUR E-PASS:
+                      </div>
+                      <a
+                        href={testResult.passUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#027EB5] hover:underline font-mono text-sm break-all block"
+                      >
+                        {testResult.passUrl}
+                      </a>
+                    </div>
+
+                    <div className="text-stone-600 text-xs sm:text-sm italic pt-1">
+                      ⚠️ <strong>Notice:</strong> This is a test registration. Your test pass and WhatsApp message are isolated from production employee records.
+                    </div>
+
+                    {/* WhatsApp Timestamp and Blue Double Checkmarks */}
+                    <div className="flex justify-end items-center gap-1.5 text-xs text-[#667781] select-none pt-1">
+                      <span>12:45 PM</span>
+                      <span className="text-[#53BDEB] font-bold text-sm">✓✓</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dispatch Controls & Feedback */}
+              <div className="space-y-2 pt-1 max-w-md sm:max-w-[460px] mx-auto">
+                {sendWhatsAppSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center justify-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>{sendWhatsAppSuccess}</span>
+                  </div>
+                )}
+
+                {sendWhatsAppError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600" />
+                    <span>{sendWhatsAppError}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSendWhatsApp()}
+                    disabled={sendingWhatsApp}
+                    className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider transition shadow flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {sendingWhatsApp ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Send Test WhatsApp</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyMessage}
+                    className="py-3 px-4 rounded-xl bg-white hover:bg-stone-100 text-stone-800 font-bold text-xs transition border border-stone-300 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  >
+                    {copiedMessage ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-600" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        <span>Copy Message Text</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 

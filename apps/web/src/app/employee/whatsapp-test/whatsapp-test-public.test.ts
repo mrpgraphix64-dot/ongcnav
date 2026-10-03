@@ -219,11 +219,13 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
       expect(pageSrc).not.toContain("chintan@ongc.co.in");
     });
 
-    it('renders the persistent Mahavir Jewellers sponsor banner above registration form', () => {
+    it('renders the persistent Mahavir Jewellers sponsor banner with real logo asset and TITLE SPONSOR badge', () => {
       expect(pageSrc).toContain('MAHAVIR JEWELLERS');
-      expect(pageSrc).toContain('Official Festival Sponsor');
+      expect(pageSrc).toContain('TITLE SPONSOR');
+      expect(pageSrc).not.toContain('Official Festival Sponsor');
+      expect(pageSrc).toContain('/images/sponsors/mahavir-jewellers-logo.png');
       expect(pageSrc).toContain('₹5,000 OFF');
-      expect(pageSrc).toContain('On Making Charges');
+      expect(pageSrc).toContain('ON MAKING CHARGES');
       expect(pageSrc).toContain('Lifetime | No Expiry');
     });
 
@@ -248,12 +250,31 @@ describe('Public WhatsApp Test Registration - Frontend & Logic Tests', () => {
       expect(pageSrc).toContain('compact={true}');
     });
 
-    it('renders simulated WhatsApp message as a single realistic chat bubble without nested card containers', () => {
-      expect(pageSrc).toContain('WhatsApp Chat Preview (Simulated)');
-      expect(pageSrc).toContain('Single Authentic WhatsApp Message Bubble');
+    it('renders clean success screen without technical provider diagnostics or pending alerts', () => {
+      expect(pageSrc).toContain('TEST REGISTRATION');
+      expect(pageSrc).toContain('SUCCESSFUL!');
+      expect(pageSrc).toContain('Your test pass has been generated successfully.');
+      expect(pageSrc).toContain('Reference No.');
+      expect(pageSrc).toContain('View E-Pass');
+
+      // Technical diagnostics cleanly removed from public test UI
+      expect(pageSrc).not.toContain('Safe WhatsApp Target');
+      expect(pageSrc).not.toContain('Guarded (Super Admin only)');
+      expect(pageSrc).not.toContain('Meta Template Pending');
+    });
+
+    it('renders simulated WhatsApp message as a realistic green-header chat bubble without literal markdown asterisks', () => {
+      expect(pageSrc).toContain('WhatsApp Message Preview');
+      expect(pageSrc).toContain('bg-[#008069]'); // WhatsApp green bar
+      expect(pageSrc).toContain('bg-[#EFEAE2]'); // WhatsApp wallpaper
       expect(pageSrc).toContain('text-[#53BDEB] font-bold'); // WhatsApp blue ticks
       expect(pageSrc).toContain('✓✓');
       expect(pageSrc).toContain('text-[#027EB5]'); // WhatsApp link color
+
+      // No literal markdown asterisks rendered in visual WhatsApp text
+      expect(pageSrc).not.toContain('*{common.name');
+      expect(pageSrc).not.toContain('*{testResult.referenceNumber}*');
+      expect(pageSrc).not.toContain('*ONGC NAVRATRI 2026*');
     });
   });
 });

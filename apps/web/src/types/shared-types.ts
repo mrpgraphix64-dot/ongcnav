@@ -1343,6 +1343,7 @@ export const DEFAULT_SPONSOR_VOUCHER_CONFIG: SponsorVoucherConfig = {
   address: '2 Amrakunj, Anne, below NY Cinemas, Tapovan Circle, Chandkheda',
   phone: '90330 56098',
   voucherImagePath: '/images/sponsors/mahavir-jewellers-voucher.jpg',
+  sponsorLogoPath: '/images/sponsors/mahavir-jewellers-logo.png',
   terms: [
     'One voucher per bill.',
     'Not redeemable for cash.',
