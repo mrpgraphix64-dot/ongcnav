@@ -19,6 +19,8 @@ import { CommercialModule } from './commercial/commercial.module';
 import { MailModule } from './mail/mail.module';
 import { SuperAdminTestingModule } from './testing/super-admin-testing.module';
 import { EmployeeDailyPassTestModule } from './testing/employee-daily-pass/employee-daily-pass-test.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { WhatsAppTestModule } from './testing/whatsapp-test/whatsapp-test.module';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { EmployeeDailyPassTestModule } from './testing/employee-daily-pass/emplo
     CommercialModule,
     SuperAdminTestingModule,
     EmployeeDailyPassTestModule,
+    WhatsAppModule,
+    WhatsAppTestModule,
   ],
 })
 export class AppModule {}

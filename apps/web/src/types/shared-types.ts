@@ -622,6 +622,8 @@ export const DOMAIN_PAGE_ROUTES: Record<AdminDomain, string[]> = {
     '/admin/staff',
     '/admin/settings',
     '/admin/traffic-test',
+    '/admin/test-lab/employee-daily-pass',
+    '/admin/employees/whatsapp-test',
   ],
 };
 
@@ -667,7 +669,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
       cleanPath.startsWith('/admin/traffic-test') ||
-      cleanPath.startsWith('/admin/test-lab')
+      cleanPath.startsWith('/admin/test-lab') ||
+      cleanPath.startsWith('/admin/employees/whatsapp-test')
     ) {
       return false;
     }
@@ -716,7 +719,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
       cleanPath.startsWith('/admin/traffic-test') ||
-      cleanPath.startsWith('/admin/test-lab')
+      cleanPath.startsWith('/admin/test-lab') ||
+      cleanPath.startsWith('/admin/employees/whatsapp-test')
     ) {
       return false;
     }
@@ -752,7 +756,8 @@ export function isRoutePermittedForRole(
     if (
       cleanPath.startsWith('/admin/commercial') ||
       cleanPath.startsWith('/agent') ||
-      cleanPath.startsWith('/admin/test-lab')
+      cleanPath.startsWith('/admin/test-lab') ||
+      cleanPath.startsWith('/admin/employees/whatsapp-test')
     ) {
       return false;
     }
@@ -1344,3 +1349,116 @@ export const DEFAULT_SPONSOR_VOUCHER_CONFIG: SponsorVoucherConfig = {
     'Not applicable on silver jewellery.',
   ],
 };
+
+export interface BuildEmployeeWhatsAppMessageParams {
+  employeeName: string;
+  referenceNumber: string;
+  passUrl: string;
+  sponsorVoucher?: SponsorVoucherConfig | null;
+}
+
+export function buildEmployeeWhatsAppMessage(params: BuildEmployeeWhatsAppMessageParams): string {
+  const name = params.employeeName?.trim() || 'Attendee';
+  const refNo = params.referenceNumber?.trim() || 'N/A';
+  const passUrl = params.passUrl?.trim() || '';
+  const voucher = params.sponsorVoucher;
+
+  let message = `🎉 *ONGC NAVRATRI 2026* 🎉\n\n` +
+    `Hello *${name}* 👋\n\n` +
+    `Your ONGC Navratri E-Pass is ready! 🪔✨\n\n` +
+    `🎟️ *Reference No.: ${refNo}*\n\n` +
+    `Your permanent QR pass is your entry credential for the event.\n\n` +
+    `Please keep your QR safe and show it at the entry gate.\n`;
+
+  if (voucher && voucher.enabled !== false) {
+    const validity = (voucher.validityNote || 'Lifetime | No expiry').replace(/^Valid:\s*/i, '');
+
+    message += `\n━━━━━━━━━━━━━━━━\n\n` +
+      `💎 *A SPECIAL GIFT FOR YOU* 💎\n\n` +
+      `*${voucher.sponsorName || 'MAHAVIR JEWELLERS'}*\n\n` +
+      `✨ *${voucher.offerHeadline || '₹5,000 OFF'}*\n` +
+      `*${voucher.offerSubtext || 'ON MAKING CHARGES'}*\n\n` +
+      `_${validity}_\n`;
+
+    if (voucher.address) {
+      message += `\n📍 ${voucher.address}\n`;
+    }
+    if (voucher.phone) {
+      message += `\n📞 ${voucher.phone}\n`;
+    }
+  }
+
+  message += `\n━━━━━━━━━━━━━━━━\n\n` +
+    `🎟️ *VIEW YOUR E-PASS*\n` +
+    `${passUrl}\n\n` +
+    `Please do not share your QR/e-pass with anyone.\n\n` +
+    `✨ See you at ONGC Navratri 2026! ✨`;
+
+  return message;
+}
+
+export type WhatsAppDeliveryStatus =
+  | 'READY'
+  | 'QUEUED'
+  | 'SENT'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'PROVIDER_NOT_CONFIGURED'
+  | 'TEST_RECIPIENT_NOT_CONFIGURED'
+  | 'TEMPLATE_NOT_CONFIGURED';
+
+export interface WhatsAppConfigDto {
+  configured: boolean;
+  isConfigured: boolean;
+  provider: string;
+  providerName: string;
+  providerStatus: WhatsAppDeliveryStatus;
+  safeRecipient: string | null;
+  phoneNumberIdConfigured: boolean;
+  businessAccountConfigured: boolean;
+  apiVersion: string;
+  testRecipientConfigured: boolean;
+  templateConfigured: boolean;
+  templateName: string;
+  templateLanguage: string;
+  sponsorVoucher: SponsorVoucherConfig;
+  voucherImageUrl: string;
+  isolationMode: 'ISOLATED_TEST_MODE';
+  notice: string;
+}
+
+export interface WhatsAppSendResultDto {
+  success: boolean;
+  status: WhatsAppDeliveryStatus;
+  provider: string;
+  providerMessageId?: string | null;
+  safeRecipient: string | null;
+  referenceNumber?: string;
+  templateName?: string | null;
+  templateLanguage?: string | null;
+  httpStatus?: number | null;
+  metaErrorCode?: number | null;
+  metaErrorSubcode?: number | null;
+  error?: string | null;
+  messageText?: string;
+  voucherImageUrl?: string;
+  timestamp: string;
+}
+
+export interface WhatsAppTestSubmissionResultDto {
+  referenceNumber: string;
+  attendeeId: string;
+  employeeId: string;
+  ticketNumber: string;
+  qrToken: string;
+  passUrl: string;
+  safeRecipient: string | null;
+  messageText: string;
+  voucherImageUrl: string;
+  sponsorVoucher: SponsorVoucherConfig;
+  providerStatus: WhatsAppDeliveryStatus;
+  providerName: string;
+  isConfigured: boolean;
+  templateName?: string;
+  templateLanguage?: string;
+}

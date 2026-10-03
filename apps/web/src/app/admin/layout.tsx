@@ -35,6 +35,7 @@ import {
   Mail,
   QrCode,
   Database,
+  Smartphone,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
@@ -362,6 +363,13 @@ const ALL_NAV_ITEMS: NavItem[] = [
     label: 'Employee Daily Pass',
     href: '/admin/test-lab/employee-daily-pass',
     icon: QrCode,
+    roles: ['SUPER_ADMIN'],
+    section: 'TEST LAB',
+  },
+  {
+    label: 'WhatsApp Test Lab',
+    href: '/admin/employees/whatsapp-test',
+    icon: Smartphone,
     roles: ['SUPER_ADMIN'],
     section: 'TEST LAB',
   },

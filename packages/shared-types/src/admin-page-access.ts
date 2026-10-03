@@ -230,6 +230,7 @@ export const DOMAIN_PAGE_ROUTES: Record<AdminDomain, string[]> = {
     '/admin/settings',
     '/admin/traffic-test',
     '/admin/test-lab/employee-daily-pass',
+    '/admin/employees/whatsapp-test',
   ],
 };
 
@@ -275,7 +276,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
       cleanPath.startsWith('/admin/traffic-test') ||
-      cleanPath.startsWith('/admin/test-lab')
+      cleanPath.startsWith('/admin/test-lab') ||
+      cleanPath.startsWith('/admin/employees/whatsapp-test')
     ) {
       return false;
     }
@@ -324,7 +326,8 @@ export function isRoutePermittedForRole(
       cleanPath.startsWith('/admin/gates') ||
       cleanPath.startsWith('/admin/settings') ||
       cleanPath.startsWith('/admin/traffic-test') ||
-      cleanPath.startsWith('/admin/test-lab')
+      cleanPath.startsWith('/admin/test-lab') ||
+      cleanPath.startsWith('/admin/employees/whatsapp-test')
     ) {
       return false;
     }
@@ -366,7 +369,8 @@ export function isRoutePermittedForRole(
     if (
       cleanPath.startsWith('/admin/commercial') ||
       cleanPath.startsWith('/agent') ||
-      cleanPath.startsWith('/admin/test-lab')
+      cleanPath.startsWith('/admin/test-lab') ||
+      cleanPath.startsWith('/admin/employees/whatsapp-test')
     ) {
       return false;
     }
