@@ -89,13 +89,23 @@ export default function TicketPassCard({
         <div className="h-2 bg-gradient-to-r from-maroon-deep via-gold to-maroon" />
 
         <div className="p-6 sm:p-8 text-center space-y-5">
-          {/* Logo & Event Title */}
-          <div className="space-y-2">
+          {/* Logo, Festival Emblem & Title Sponsor */}
+          <div className="space-y-3">
             <img
-              src="/images/logo-web.png"
-              alt="ONGC Logo"
-              className="h-14 w-auto max-w-[200px] object-contain mx-auto"
+              src="/images/ongc-navratri-2026-festival-emblem.png"
+              alt="ONGC Navratri 2026"
+              className="h-20 sm:h-24 w-auto max-w-[260px] object-contain mx-auto"
             />
+            <div className="pt-0.5">
+              <span className="text-[9px] font-extrabold uppercase tracking-widest text-amber-800 block">
+                TITLE SPONSOR
+              </span>
+              <img
+                src="/images/sponsors/zaira-diamond-logo.png"
+                alt="Zaira Diamond"
+                className="h-6 sm:h-7 w-auto object-contain mx-auto mt-1"
+              />
+            </div>
             <div>
               <div className="text-[10px] font-bold uppercase tracking-widest text-maroon">
                 Official Event Entry Pass
@@ -183,6 +193,24 @@ export default function TicketPassCard({
             </div>
             <div className="text-[10px] text-ink-soft font-mono uppercase tracking-widest">
               Scan for Gate Verification
+            </div>
+          </div>
+
+          {/* Organised By & System Partner (Bottom Center) */}
+          <div className="pt-4 border-t border-stone-200 text-center space-y-1">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-stone-500 block">
+              ORGANISED BY
+            </span>
+            <img
+              src="/images/digant-art-logo.png"
+              alt="Digant Art"
+              className="h-8 w-auto object-contain mx-auto"
+            />
+            <div className="text-xs font-bold text-maroon">
+              Organised by Digant Art
+            </div>
+            <div className="text-[10px] text-stone-500">
+              E-Ticketing &amp; E-Pass System by Reworkzone.com
             </div>
           </div>
         </div>

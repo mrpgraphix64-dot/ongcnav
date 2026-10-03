@@ -353,62 +353,53 @@ export class EmployeeDispatchSchedulerService implements OnModuleInit, OnModuleD
         this.logger.error(`Error checking permanent QR release schedule: ${err.message}`);
       }
 
-      // Only evaluate if currentDate is an official event date
-      if (!isOfficialEventDate(currentDate)) {
-        return { checked: true, executedDates, skippedDates };
-      }
+      // Evaluate date-specific schedules (for backwards compatibility with existing event dates & automated test suites)
+      if (isOfficialEventDate(currentDate)) {
+        const schedule = await this.getScheduleForDate(currentDate);
 
-      const schedule = await this.getScheduleForDate(currentDate);
+        if (!schedule) {
+          skippedDates.push(`${currentDate} (not configured)`);
+          return { checked: true, executedDates, skippedDates };
+        }
 
-      // Schedule must be configured
-      if (!schedule) {
-        skippedDates.push(`${currentDate} (not configured)`);
-        return { checked: true, executedDates, skippedDates };
-      }
+        if (!schedule.enabled) {
+          skippedDates.push(`${currentDate} (disabled)`);
+          return { checked: true, executedDates, skippedDates };
+        }
 
-      // Schedule must be enabled
-      if (!schedule.enabled) {
-        skippedDates.push(`${currentDate} (disabled)`);
-        return { checked: true, executedDates, skippedDates };
-      }
+        const [schedH, schedM] = schedule.dispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
+        const scheduleMinutes = schedH * 60 + schedM;
 
-      // Parse schedule dispatch time (HH:mm)
-      const [schedH, schedM] = schedule.dispatchTime.split(':').map((v) => parseInt(v, 10) || 0);
-      const scheduleMinutes = schedH * 60 + schedM;
+        if (currentMinutes < scheduleMinutes) {
+          skippedDates.push(`${currentDate} (not due: ${currentTime} < ${schedule.dispatchTime})`);
+          return { checked: true, executedDates, skippedDates };
+        }
 
-      // Check if current time has reached or passed dispatch time
-      if (currentMinutes < scheduleMinutes) {
-        skippedDates.push(`${currentDate} (not due: ${currentTime} < ${schedule.dispatchTime})`);
-        return { checked: true, executedDates, skippedDates };
-      }
-
-      // Check execution status for today in IST
-      if (schedule.lastRunAt) {
-        const lastRunIst = getCurrentIstDateTime(new Date(schedule.lastRunAt));
-        if (lastRunIst.currentDate === currentDate) {
-          if (schedule.lastRunStatus === 'SUCCESS') {
-            skippedDates.push(`${currentDate} (already executed today at ${schedule.lastRunAt})`);
-            return { checked: true, executedDates, skippedDates };
-          }
-          if (schedule.lastRunStatus === 'RUNNING') {
-            skippedDates.push(`${currentDate} (currently running)`);
-            return { checked: true, executedDates, skippedDates };
-          }
-          // Cooldown check for FAILED / PARTIAL_FAILURE to avoid hammering SMTP every 30s
-          const diffMs = (overrideNow || new Date()).getTime() - new Date(schedule.lastRunAt).getTime();
-          const cooldownMs = 15 * 60 * 1000;
-          if (diffMs < cooldownMs) {
-            skippedDates.push(
-              `${currentDate} (recently attempted at ${schedule.lastRunAt}; awaiting retry cooldown)`,
-            );
-            return { checked: true, executedDates, skippedDates };
+        if (schedule.lastRunAt) {
+          const lastRunIst = getCurrentIstDateTime(new Date(schedule.lastRunAt));
+          if (lastRunIst.currentDate === currentDate) {
+            if (schedule.lastRunStatus === 'SUCCESS') {
+              skippedDates.push(`${currentDate} (already executed today at ${schedule.lastRunAt})`);
+              return { checked: true, executedDates, skippedDates };
+            }
+            if (schedule.lastRunStatus === 'RUNNING') {
+              skippedDates.push(`${currentDate} (currently running)`);
+              return { checked: true, executedDates, skippedDates };
+            }
+            const diffMs = (overrideNow || new Date()).getTime() - new Date(schedule.lastRunAt).getTime();
+            const cooldownMs = 15 * 60 * 1000;
+            if (diffMs < cooldownMs) {
+              skippedDates.push(
+                `${currentDate} (recently attempted at ${schedule.lastRunAt}; awaiting retry cooldown)`,
+              );
+              return { checked: true, executedDates, skippedDates };
+            }
           }
         }
-      }
 
-      // Condition satisfied: Trigger automatic dispatch!
-      await this.executeDispatchForDate(currentDate, overrideNow);
-      executedDates.push(currentDate);
+        await this.executeDispatchForDate(currentDate, overrideNow);
+        executedDates.push(currentDate);
+      }
     } finally {
       this.isProcessing = false;
     }

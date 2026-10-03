@@ -35,27 +35,46 @@ export default function DailyEmployeeTicketCard({
     >
       {/* Top Accent Strip & Header */}
       <div
-        className="px-6 py-4 text-center bg-white border-b-2 relative"
+        className="px-6 py-5 text-center bg-white border-b-2 relative space-y-3"
         style={{
           borderTop: `5px solid ${theme.primaryColor}`,
           borderColor: `${theme.secondaryColor}40`,
         }}
       >
-        <p className="text-[10px] sm:text-xs font-semibold tracking-widest uppercase text-stone-500">
-          Oil and Natural Gas Corporation Limited
-        </p>
-        <h1
-          className="font-cinzel text-xl sm:text-2xl font-black tracking-wide mt-0.5"
-          style={{ color: theme.primaryColor }}
-        >
-          ONGC NAVRATRI 2026
-        </h1>
-        <p
-          className="text-[11px] sm:text-xs font-bold tracking-wider uppercase mt-0.5"
-          style={{ color: theme.secondaryColor }}
-        >
-          Official Employee &amp; Family Entry Pass
-        </p>
+        <img
+          src="/images/ongc-navratri-2026-festival-emblem.png"
+          alt="ONGC Navratri 2026"
+          className="h-20 sm:h-24 w-auto max-w-[260px] object-contain mx-auto"
+        />
+
+        <div className="pt-0.5">
+          <span className="text-[9px] font-extrabold uppercase tracking-widest text-amber-800 block">
+            TITLE SPONSOR
+          </span>
+          <img
+            src="/images/sponsors/zaira-diamond-logo.png"
+            alt="Zaira Diamond"
+            className="h-6 sm:h-7 w-auto object-contain mx-auto mt-1"
+          />
+        </div>
+
+        <div>
+          <p className="text-[10px] sm:text-xs font-semibold tracking-widest uppercase text-stone-500">
+            Oil and Natural Gas Corporation Limited
+          </p>
+          <h1
+            className="font-cinzel text-xl sm:text-2xl font-black tracking-wide mt-0.5"
+            style={{ color: theme.primaryColor }}
+          >
+            ONGC NAVRATRI 2026
+          </h1>
+          <p
+            className="text-[11px] sm:text-xs font-bold tracking-wider uppercase mt-0.5"
+            style={{ color: theme.secondaryColor }}
+          >
+            Official Permanent Entry Pass
+          </p>
+        </div>
       </div>
 
       {/* Prominent Hero Night & Date Banner */}
@@ -245,7 +264,7 @@ export default function DailyEmployeeTicketCard({
             )}
           </div>
 
-          {/* Date-Specific Validation Alert Badge */}
+          {/* Permanent Pass Validation Badge */}
           <div
             className="mt-4 px-4 py-1.5 rounded-full text-center text-xs font-bold tracking-wide uppercase border flex items-center gap-1.5 shadow-xs"
             style={{
@@ -255,11 +274,11 @@ export default function DailyEmployeeTicketCard({
             }}
           >
             <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-            <span>Valid strictly on {presentation.eventDateFormatted}</span>
+            <span>Permanent QR Pass &bull; Valid For All Registered Event Dates</span>
           </div>
 
           <p className="text-[11px] text-stone-500 mt-2 text-center font-medium">
-            Single-scan entry pass for designated employee turnstiles. Non-transferable.
+            One entry per person per eligible event day. Server authorizes entry date-by-date at turnstiles.
           </p>
         </div>
 
@@ -286,11 +305,29 @@ export default function DailyEmployeeTicketCard({
               <Clock className="w-3 h-3 text-stone-500" /> Entry Timing: {presentation.entryTiming}
             </span>
             <span>&bull;</span>
-            <span>Organizer: {presentation.organizer}</span>
+            <span>Organizer: Digant Art</span>
           </div>
           <p className="text-[10px] text-stone-500 leading-relaxed pt-1">
-            Important: Please present this digital QR or the printed pass at the gate. Turnstile scanners will reject passes scanned on any other date or scanned more than once.
+            Important: Please present this permanent QR pass at the designated gate. This single QR remains active across all your registered event dates. Maximum one entry per day.
           </p>
+        </div>
+
+        {/* Organised By & System Partner (Bottom Center) */}
+        <div className="pt-4 border-t border-stone-200 text-center space-y-1">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-stone-500 block">
+            ORGANISED BY
+          </span>
+          <img
+            src="/images/digant-art-logo.png"
+            alt="Digant Art"
+            className="h-8 w-auto object-contain mx-auto"
+          />
+          <div className="text-xs font-bold" style={{ color: theme.primaryColor }}>
+            Organised by Digant Art
+          </div>
+          <div className="text-[10px] text-stone-500">
+            E-Ticketing &amp; E-Pass System by Reworkzone.com
+          </div>
         </div>
       </div>
 
@@ -307,7 +344,7 @@ export default function DailyEmployeeTicketCard({
           <span className="font-mono text-stone-700">
             {presentation.qrToken ? `${presentation.qrToken.substring(0, 16)}...` : 'SECURE-TOKEN'}
           </span>{' '}
-          &bull; Official ONGC Entry E-Pass &bull; Night {presentation.nightNumber}
+          &bull; Official ONGC Navratri 2026 Permanent Entry Pass
         </div>
       )}
     </div>

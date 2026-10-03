@@ -230,7 +230,19 @@ export class EmployeeDailyPassTestService {
         },
       });
 
-      const qrToken = crypto.randomBytes(32).toString('hex');
+      // Reuse existing permanent attendee qrCodeToken if present, else assign and persist one
+      let qrToken = attendee.qrCodeToken;
+      if (!qrToken || qrToken.trim() === '') {
+        qrToken = crypto.randomBytes(32).toString('hex');
+        if (this.prisma.attendee && typeof this.prisma.attendee.update === 'function') {
+          await this.prisma.attendee.update({
+            where: { id: attendee.id },
+            data: { qrCodeToken: qrToken },
+          });
+        }
+        attendee.qrCodeToken = qrToken;
+      }
+
       const pass = await this.prisma.dailyEmployeePass.create({
         data: {
           attendeeId: attendee.id,
@@ -668,12 +680,25 @@ export class EmployeeDailyPassTestService {
       throw new ForbiddenException('Only SUPER_ADMIN can run scanner test validations.');
     }
 
-    const pass = await this.prisma.dailyEmployeePass.findUnique({
+    let pass = await this.prisma.dailyEmployeePass.findUnique({
       where: { qrToken: dto.token.trim() },
       include: {
         attendee: true,
       },
     });
+
+    if (!pass) {
+      const att = await this.prisma.attendee.findFirst({
+        where: { qrCodeToken: dto.token.trim() },
+      });
+      if (att) {
+        pass = await this.prisma.dailyEmployeePass.findFirst({
+          where: { attendeeId: att.id, isTest: true },
+          include: { attendee: true },
+          orderBy: { id: 'desc' },
+        });
+      }
+    }
 
     if (!pass) {
       throw new NotFoundException('Test pass not found');
@@ -774,9 +799,21 @@ export class EmployeeDailyPassTestService {
       throw new BadRequestException('QR token is required to reset scanner state.');
     }
 
-    const pass = await this.prisma.dailyEmployeePass.findUnique({
+    let pass = await this.prisma.dailyEmployeePass.findUnique({
       where: { qrToken: token.trim() },
     });
+
+    if (!pass) {
+      const att = await this.prisma.attendee.findFirst({
+        where: { qrCodeToken: token.trim() },
+      });
+      if (att) {
+        pass = await this.prisma.dailyEmployeePass.findFirst({
+          where: { attendeeId: att.id, isTest: true },
+          orderBy: { id: 'desc' },
+        });
+      }
+    }
 
     if (!pass) {
       throw new NotFoundException('Test pass not found');

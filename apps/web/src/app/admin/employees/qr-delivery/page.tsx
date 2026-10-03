@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Calendar,
   Mail,
   RefreshCw,
   Send,
@@ -16,557 +15,314 @@ import {
   Printer,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   ShieldCheck,
   Users,
   QrCode,
-  ArrowRight,
   Clock,
-  Layers,
   Sparkles,
   Save,
+  RotateCcw,
+  Copy,
+  Calendar,
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import AdminModal from '@/components/admin/AdminModal';
 import {
-  OFFICIAL_EVENT_DATES,
-  getEventDayTheme,
   buildDailyEmployeePassPresentation,
-  EmployeeDispatchSchedule,
+  DailyEmployeePassPresentation,
 } from '@ongc/shared-types';
 import DailyEmployeeTicketCard from '@/components/pass/DailyEmployeeTicketCard';
 
-interface DeliveryStats {
-  eventDate: string;
-  eligibleCount: number;
-  generatedCount: number;
-  sentCount: number;
-  failedCount: number;
-  pendingCount: number;
-  checkedInCount: number;
-}
-
-interface DailyPassItem {
+interface PermanentPassItem {
   id: string;
   attendeeId: string;
-  eventDate: string;
-  ticketNumber: string;
-  qrToken: string;
-  qrSvg: string | null;
   attendeeName: string;
   relation: string;
   isFamily: boolean;
   employeeName: string;
   cpf: string;
+  referenceNumber: string;
   department: string;
   email: string;
   phone: string;
+  qrCodeToken: string;
+  ticketNumber: string;
+  bookingDays: string[];
   status: string;
-  lifecycleStatus?: 'ELIGIBLE' | 'PASS_GENERATED' | 'EMAIL_SENT' | 'EMAIL_FAILED' | 'CHECKED_IN' | string;
+  qrStatus: 'ACTIVE' | 'PENDING';
   emailStatus: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
   emailSentAt: string | null;
   emailError: string | null;
-  checkedInAt: string | null;
   createdAt: string;
 }
 
-export default function DailyQrDeliveryPage() {
-  const [selectedDate, setSelectedDate] = useState<string>(OFFICIAL_EVENT_DATES[0]);
-  const [stats, setStats] = useState<DeliveryStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+interface QrReleaseScheduleState {
+  enabled: boolean;
+  releaseDate: string;
+  releaseTime: string;
+  timezone: string;
+  status: string;
+  lastRunAt: string | null;
+  lastRunMessage: string | null;
+  stats: {
+    eligibleCount: number;
+    qrGeneratedCount: number;
+    sentCount: number;
+    failedCount: number;
+  };
+}
 
-  const [passes, setPasses] = useState<DailyPassItem[]>([]);
-  const [passesLoading, setPassesLoading] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [emailStatusFilter, setEmailStatusFilter] = useState('ALL');
-  const [passStatusFilter, setPassStatusFilter] = useState('ALL');
-
-  const [generating, setGenerating] = useState(false);
-  const [sendingEmails, setSendingEmails] = useState(false);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const [viewPass, setViewPass] = useState<DailyPassItem | null>(null);
-
-  // Unified permanent QR release schedule
-  const [unifiedSchedule, setUnifiedSchedule] = useState<{
-    autoRelease: boolean;
-    releaseDate: string;
-    releaseTime: string;
-    timezone: string;
-    status: string;
-    statistics: {
-      eligibleCount: number;
-      qrGeneratedCount: number;
-      sentCount: number;
-      failedCount: number;
-    };
-  }>({
-    autoRelease: true,
-    releaseDate: '',
-    releaseTime: '17:00',
+export default function EmployeeQrReleasePage() {
+  // Statistics and release schedule
+  const [schedule, setSchedule] = useState<QrReleaseScheduleState>({
+    enabled: true,
+    releaseDate: '2026-10-10',
+    releaseTime: '10:00',
     timezone: 'Asia/Kolkata',
-    status: 'NOT_SCHEDULED',
-    statistics: {
+    status: 'IDLE',
+    lastRunAt: null,
+    lastRunMessage: null,
+    stats: {
       eligibleCount: 0,
       qrGeneratedCount: 0,
       sentCount: 0,
       failedCount: 0,
     },
   });
-  const [savingUnifiedSchedule, setSavingUnifiedSchedule] = useState(false);
-  const [executingQrAction, setExecutingQrAction] = useState<string | null>(null);
-
-  // Dispatch schedule state
-  const [schedule, setSchedule] = useState<EmployeeDispatchSchedule | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(true);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
-  const [scheduleTime, setScheduleTime] = useState('17:00');
-  const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [executingAction, setExecutingAction] = useState<string | null>(null);
 
-  // Collapsible panels state (default collapsed for operational compactness)
-  const [scheduleExpanded, setScheduleExpanded] = useState(false);
-  const [manualActionsExpanded, setManualActionsExpanded] = useState(false);
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  // Passes table state
+  const [passes, setPasses] = useState<PermanentPassItem[]>([]);
+  const [passesLoading, setPassesLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  // Active date tracking to prevent out-of-order race conditions
-  const activeDateRef = React.useRef(selectedDate);
-  useEffect(() => {
-    activeDateRef.current = selectedDate;
-  }, [selectedDate]);
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [emailStatusFilter, setEmailStatusFilter] = useState('ALL');
+  const [qrStatusFilter, setQrStatusFilter] = useState('ALL');
 
-  // Load unified permanent QR release schedule
-  const loadUnifiedSchedule = useCallback(async () => {
+  // Messages and actions
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [viewPass, setViewPass] = useState<PermanentPassItem | null>(null);
+  const [sendingSingleEmailId, setSendingSingleEmailId] = useState<string | null>(null);
+  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
+
+  // 1. Load Schedule & Stats
+  const loadScheduleAndStats = useCallback(async () => {
     try {
-      const scheduleRes = await fetchApi<any>('/settings/qr-release-schedule').catch(() => null);
-      if (scheduleRes) {
-        setUnifiedSchedule({
-          autoRelease: Boolean(scheduleRes.autoRelease ?? true),
-          releaseDate: scheduleRes.releaseDate || '',
-          releaseTime: scheduleRes.releaseTime || '17:00',
-          timezone: scheduleRes.timezone || 'Asia/Kolkata',
-          status: scheduleRes.status || 'NOT_SCHEDULED',
-          statistics: {
-            eligibleCount: scheduleRes.statistics?.eligibleCount ?? 0,
-            qrGeneratedCount: scheduleRes.statistics?.qrGeneratedCount ?? 0,
-            sentCount: scheduleRes.statistics?.sentCount ?? 0,
-            failedCount: scheduleRes.statistics?.failedCount ?? 0,
+      setScheduleLoading(true);
+      const res = await fetchApi<any>('/settings/qr-release-schedule');
+      if (res) {
+        setSchedule({
+          enabled: Boolean(res.enabled ?? true),
+          releaseDate: res.releaseDate || '2026-10-10',
+          releaseTime: res.releaseTime || '10:00',
+          timezone: res.timezone || 'Asia/Kolkata',
+          status: res.status || 'IDLE',
+          lastRunAt: res.lastRunAt || null,
+          lastRunMessage: res.lastRunMessage || null,
+          stats: {
+            eligibleCount: res.stats?.eligibleCount ?? 0,
+            qrGeneratedCount: res.stats?.qrGeneratedCount ?? 0,
+            sentCount: res.stats?.sentCount ?? 0,
+            failedCount: res.stats?.failedCount ?? 0,
           },
         });
       }
-    } catch (e) {
-      console.error('Failed to load unified QR release schedule', e);
+    } catch (err: any) {
+      console.error('Failed to load QR release schedule:', err);
+    } finally {
+      setScheduleLoading(false);
     }
   }, []);
 
-  const handleSaveUnifiedSchedule = async () => {
-    try {
-      setSavingUnifiedSchedule(true);
-      const res = await fetchApi<any>('/settings/qr-release-schedule', {
-        method: 'POST',
-        body: JSON.stringify({
-          autoRelease: unifiedSchedule.autoRelease,
-          releaseDate: unifiedSchedule.releaseDate || undefined,
-          releaseTime: unifiedSchedule.releaseTime || undefined,
-        }),
-      });
-      setActionMessage({
-        type: 'success',
-        text: res.message || 'Permanent Employee QR Release Schedule updated.',
-      });
-      await loadUnifiedSchedule();
-    } catch (e: any) {
-      setActionMessage({
-        type: 'error',
-        text: e.message || 'Failed to update QR release schedule',
-      });
-    } finally {
-      setSavingUnifiedSchedule(false);
-    }
-  };
-
-  const handleExecuteUnifiedQrAction = async (action: 'SEND_NOW' | 'RETRY_FAILED') => {
-    try {
-      setExecutingQrAction(action);
-      const res = await fetchApi<any>('/settings/qr-release-schedule/execute', {
-        method: 'POST',
-        body: JSON.stringify({ action }),
-      });
-      setActionMessage({
-        type: 'success',
-        text: res.message || `QR Pass execution (${action}) completed successfully.`,
-      });
-      await loadUnifiedSchedule();
-      await loadStats();
-      await loadPasses();
-    } catch (e: any) {
-      setActionMessage({
-        type: 'error',
-        text: e.message || `Failed to execute ${action}`,
-      });
-    } finally {
-      setExecutingQrAction(null);
-    }
-  };
-
-  // Load stats for current selected date
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    try {
-      const data = await fetchApi<DeliveryStats>(`/admin/employees/daily-passes/stats?date=${selectedDate}`);
-      setStats(data);
-    } catch (err: any) {
-      console.error('Failed to load stats:', err);
-    } finally {
-      setStatsLoading(false);
-    }
-  }, [selectedDate]);
-
-  // Load schedule for current selected date
-  const loadSchedule = useCallback(async () => {
-    const targetDate = selectedDate;
-    setScheduleLoading(true);
-    setScheduleError(null);
-    try {
-      const res = await fetchApi<{
-        schedule?: EmployeeDispatchSchedule | null;
-        defaultDispatchTime?: string;
-        dispatchTime?: string;
-        enabled?: boolean;
-      }>(`/admin/employees/daily-passes/dispatch-schedule?date=${targetDate}`);
-
-      // Avoid overwriting if user already switched date
-      if (activeDateRef.current !== targetDate) {
-        return;
-      }
-
-      // Check whether response was { schedule } or direct object
-      const loadedSchedule =
-        res && 'schedule' in res
-          ? res.schedule
-          : res && typeof res === 'object' && 'dispatchTime' in res
-          ? (res as unknown as EmployeeDispatchSchedule)
-          : null;
-
-      const fallbackTime = res?.defaultDispatchTime || '17:00';
-
-      if (loadedSchedule) {
-        setSchedule(loadedSchedule);
-        setScheduleTime(loadedSchedule.dispatchTime || fallbackTime);
-        setScheduleEnabled(Boolean(loadedSchedule.enabled));
-      } else {
-        // No schedule configured yet
-        setSchedule(null);
-        setScheduleTime(fallbackTime);
-        setScheduleEnabled(false);
-      }
-    } catch (err: any) {
-      if (activeDateRef.current === targetDate) {
-        console.error('Failed to load dispatch schedule:', err);
-        setScheduleError(err.message || 'Failed to load schedule');
-        setSchedule(null);
-      }
-    } finally {
-      if (activeDateRef.current === targetDate) {
-        setScheduleLoading(false);
-      }
-    }
-  }, [selectedDate]);
-
-  // Load passes list
+  // 2. Load Passes
   const loadPasses = useCallback(async () => {
-    setPassesLoading(true);
     try {
-      const params = new URLSearchParams({
-        date: selectedDate,
-        page: page.toString(),
-        limit: '20',
-      });
-      if (searchQuery.trim()) params.append('search', searchQuery.trim());
-      if (emailStatusFilter !== 'ALL') params.append('emailStatus', emailStatusFilter);
-      if (passStatusFilter !== 'ALL') params.append('status', passStatusFilter);
+      setPassesLoading(true);
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', '20');
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (emailStatusFilter !== 'ALL') params.set('emailStatus', emailStatusFilter);
+      if (qrStatusFilter !== 'ALL') params.set('qrStatus', qrStatusFilter);
 
       const res = await fetchApi<{
-        passes: DailyPassItem[];
+        passes: PermanentPassItem[];
         total: number;
         page: number;
+        limit: number;
         totalPages: number;
-      }>(`/admin/employees/daily-passes?${params.toString()}`);
+      }>(`/admin/employees/qr-release/passes?${params.toString()}`);
 
       setPasses(res.passes || []);
       setTotalCount(res.total || 0);
       setTotalPages(res.totalPages || 1);
     } catch (err: any) {
-      console.error('Failed to load passes:', err);
+      console.error('Failed to load permanent passes:', err);
     } finally {
       setPassesLoading(false);
     }
-  }, [selectedDate, page, searchQuery, emailStatusFilter, passStatusFilter]);
+  }, [page, searchQuery, emailStatusFilter, qrStatusFilter]);
 
   useEffect(() => {
-    loadStats();
+    loadScheduleAndStats();
+  }, [loadScheduleAndStats]);
+
+  useEffect(() => {
     loadPasses();
-    loadSchedule();
-    loadUnifiedSchedule();
-  }, [loadStats, loadPasses, loadSchedule, loadUnifiedSchedule]);
+  }, [loadPasses]);
 
-  // Generate passes for selected date
-  const handleGeneratePasses = async () => {
-    setGenerating(true);
-    setActionMessage(null);
-    try {
-      const res = await fetchApi<{
-        success: boolean;
-        message: string;
-        generatedCount: number;
-        existingCount: number;
-      }>('/admin/employees/daily-passes/generate', {
-        method: 'POST',
-        body: JSON.stringify({ eventDate: selectedDate }),
-      });
-      setActionMessage({ type: 'success', text: res.message });
-      await loadStats();
-      await loadPasses();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to generate passes' });
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Send emails
-  const handleSendEmails = async (retryFailedOnly: boolean = false) => {
-    setSendingEmails(true);
-    setActionMessage(null);
-    try {
-      const res = await fetchApi<{
-        success: boolean;
-        message: string;
-        sentCount: number;
-        failedCount: number;
-      }>('/admin/employees/daily-passes/send-emails', {
-        method: 'POST',
-        body: JSON.stringify({ eventDate: selectedDate, retryFailedOnly }),
-      });
-      setActionMessage({ type: 'success', text: res.message });
-      await loadStats();
-      await loadPasses();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to dispatch emails' });
-    } finally {
-      setSendingEmails(false);
-    }
-  };
-
-  const formatDateDisplay = (iso: string) => {
-    const d = new Date(`${iso}T00:00:00`);
-    return d.toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-  };
-
-  const formatTimeTo12Hour = (timeStr: string) => {
-    if (!timeStr) return '';
-    const [hStr, mStr] = timeStr.split(':');
-    const h = parseInt(hStr, 10);
-    const m = parseInt(mStr, 10);
-    if (isNaN(h) || isNaN(m)) return timeStr;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hour12 = h % 12 || 12;
-    const minuteStr = m < 10 ? `0${m}` : `${m}`;
-    return `${hour12}:${minuteStr} ${ampm}`;
-  };
-
-  // Save schedule for selected date
+  // Handle Save Schedule
   const handleSaveSchedule = async () => {
-    setSavingSchedule(true);
     try {
-      const res = await fetchApi<{
-        success?: boolean;
-        message?: string;
-        schedule?: EmployeeDispatchSchedule;
-        dispatchTime?: string;
-        enabled?: boolean;
-      }>(
-        '/admin/employees/daily-passes/dispatch-schedule',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            eventDate: selectedDate,
-            dispatchTime: scheduleTime,
-            enabled: scheduleEnabled,
-          }),
-        }
-      );
-
-      const savedSchedule =
-        res && 'schedule' in res && res.schedule
-          ? res.schedule
-          : res && typeof res === 'object' && 'dispatchTime' in res
-          ? (res as unknown as EmployeeDispatchSchedule)
-          : null;
-
-      if (savedSchedule) {
-        setSchedule(savedSchedule);
-        setScheduleTime(savedSchedule.dispatchTime);
-        setScheduleEnabled(Boolean(savedSchedule.enabled));
-        setActionMessage({
-          type: 'success',
-          text: `Dispatch schedule for ${formatDateDisplay(selectedDate)} saved: ${
-            savedSchedule.enabled ? 'ON' : 'OFF'
-          } at ${formatTimeTo12Hour(savedSchedule.dispatchTime)} IST.`,
-        });
-      } else {
-        const fallbackSched: EmployeeDispatchSchedule = {
-          eventDate: selectedDate,
-          dispatchTime: scheduleTime,
-          timezone: 'Asia/Kolkata',
-          enabled: scheduleEnabled,
-          updatedAt: new Date().toISOString(),
-        };
-        setSchedule(fallbackSched);
-        setActionMessage({
-          type: 'success',
-          text: `Dispatch schedule for ${formatDateDisplay(selectedDate)} saved: ${
-            scheduleEnabled ? 'ON' : 'OFF'
-          } at ${formatTimeTo12Hour(scheduleTime)} IST.`,
-        });
-      }
+      setSavingSchedule(true);
+      await fetchApi('/settings/qr-release-schedule', {
+        method: 'POST',
+        body: JSON.stringify({
+          enabled: schedule.enabled,
+          releaseDate: schedule.releaseDate,
+          releaseTime: schedule.releaseTime,
+          timezone: schedule.timezone,
+        }),
+      });
+      setActionMessage({
+        type: 'success',
+        text: 'Employee QR Release Schedule updated successfully.',
+      });
+      await loadScheduleAndStats();
     } catch (err: any) {
       setActionMessage({
         type: 'error',
-        text: err.message || 'Failed to save dispatch schedule',
+        text: err.message || 'Failed to update schedule.',
       });
     } finally {
       setSavingSchedule(false);
     }
   };
 
-  const getNextDispatchDisplay = () => {
-    if (scheduleLoading) {
-      return {
-        statusText: 'Loading schedule configuration...',
-        colorClass: 'text-stone-500',
-        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
-      };
+  // Handle Send Now / Retry Failed
+  const handleExecuteRelease = async (action: 'SEND_NOW' | 'RETRY_FAILED') => {
+    const isRetry = action === 'RETRY_FAILED';
+    const confirmText = isRetry
+      ? 'Are you sure you want to retry sending failed QR emails now?'
+      : 'Are you sure you want to trigger the permanent QR release now? This will send QR emails to all eligible approved employees/family members.';
+
+    if (!window.confirm(confirmText)) {
+      return;
     }
 
-    if (scheduleError) {
-      return {
-        statusText: `Error loading schedule: ${scheduleError}`,
-        colorClass: 'text-rose-600',
-        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
-      };
-    }
-
-    // No schedule saved in database yet
-    if (!schedule) {
-      return {
-        statusText: 'Automatic dispatch is not configured for this date.',
-        colorClass: 'text-stone-500',
-        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
-      };
-    }
-
-    // Saved schedule exists, but is disabled
-    if (!scheduleEnabled) {
-      return {
-        statusText: 'Automatic dispatch is disabled for this date.',
-        colorClass: 'text-stone-500',
-        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
-      };
-    }
-
-    // Saved schedule is enabled — check execution state
-    if (schedule.lastRunStatus === 'RUNNING') {
-      return {
-        statusText: 'Automatic dispatch is currently running...',
-        colorClass: 'text-blue-700 animate-pulse',
-        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-      };
-    }
-
-    if (schedule.lastRunStatus === 'SUCCESS' && schedule.lastRunAt) {
-      const runDate = new Date(schedule.lastRunAt);
-      const runTimeStr = runDate.toLocaleTimeString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
+    try {
+      setExecutingAction(action);
+      const res = await fetchApi<any>('/settings/qr-release-schedule/execute', {
+        method: 'POST',
+        body: JSON.stringify({ action }),
       });
-      return {
-        statusText: `Automatic dispatch completed at ${runTimeStr} IST (${schedule.lastRunMessage || 'Dispatched successfully'}).`,
-        colorClass: 'text-emerald-700',
-        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      };
+      setActionMessage({
+        type: 'success',
+        text: res.message || `Permanent QR Release (${action}) executed successfully.`,
+      });
+      await loadScheduleAndStats();
+      await loadPasses();
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err.message || `Failed to execute ${action}.`,
+      });
+    } finally {
+      setExecutingAction(null);
     }
+  };
 
-    if (schedule.lastRunStatus === 'PARTIAL_FAILURE') {
-      return {
-        statusText: `Automatic dispatch partially failed: ${schedule.lastFailedCount || 0} email(s) failed.`,
-        colorClass: 'text-amber-700',
-        badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
-      };
+  // Handle Individual Email Send
+  const handleSendSingleEmail = async (attendeeId: string) => {
+    try {
+      setSendingSingleEmailId(attendeeId);
+      await fetchApi('/admin/employees/qr-release/send-email', {
+        method: 'POST',
+        body: JSON.stringify({ attendeeId }),
+      });
+      setActionMessage({
+        type: 'success',
+        text: 'Permanent entry pass email dispatched successfully.',
+      });
+      await loadScheduleAndStats();
+      await loadPasses();
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err.message || 'Failed to dispatch pass email.',
+      });
+    } finally {
+      setSendingSingleEmailId(null);
     }
+  };
 
-    if (schedule.lastRunStatus === 'FAILED') {
-      return {
-        statusText: `Automatic dispatch execution failed: ${schedule.lastRunMessage || 'Check server logs'}.`,
-        colorClass: 'text-rose-700',
-        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
-      };
-    }
+  // Copy token to clipboard
+  const handleCopyToken = (token: string, id: string) => {
+    navigator.clipboard.writeText(token);
+    setCopiedTokenId(id);
+    setTimeout(() => setCopiedTokenId(null), 2000);
+  };
 
-    // Scheduled, has not run yet — compare selectedDate with current IST date
-    const d = new Date(`${selectedDate}T00:00:00`);
-    const dayName = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-    const timeFormatted = formatTimeTo12Hour(scheduleTime);
-
-    // Compute current IST date string (YYYY-MM-DD)
-    const istParts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(new Date());
-    const istYear = istParts.find((p) => p.type === 'year')?.value || '';
-    const istMonth = istParts.find((p) => p.type === 'month')?.value || '';
-    const istDay = istParts.find((p) => p.type === 'day')?.value || '';
-    const currentIstDate = `${istYear}-${istMonth}-${istDay}`;
-
-    if (selectedDate === currentIstDate) {
-      return {
-        statusText: `Automatic dispatch scheduled for Today at ${timeFormatted} IST.`,
-        colorClass: 'text-emerald-800 font-bold',
-        badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-      };
-    } else if (selectedDate < currentIstDate) {
-      return {
-        statusText: `Event date has passed (${formatDateDisplay(selectedDate)}).`,
-        colorClass: 'text-stone-500',
-        badgeClass: 'bg-stone-100 text-stone-600 border-stone-200',
-      };
-    }
-
-    return {
-      statusText: `Automatic dispatch scheduled for ${dayName} at ${timeFormatted} IST.`,
-      colorClass: 'text-amber-800',
-      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
-    };
+  // Format booking days
+  const formatDaysDisplay = (days: string[]) => {
+    if (!days || days.length === 0) return 'None';
+    if (days.length >= 9) return 'All 9 Days (11–19 Oct)';
+    return days
+      .map((d) => {
+        const parts = d.split('-');
+        if (parts.length === 3) {
+          const dt = new Date(`${d}T00:00:00`);
+          return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        }
+        return d;
+      })
+      .join(', ');
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
+      {/* HEADER */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-maroon-soft text-maroon">
+              <QrCode className="w-5 h-5" />
+            </span>
+            <h1 className="font-cinzel text-xl sm:text-2xl font-bold text-ink">
+              EMPLOYEE QR RELEASE
+            </h1>
+          </div>
+          <p className="text-xs text-ink-soft max-w-2xl leading-relaxed">
+            One permanent QR is issued to each approved employee/family member and remains valid for all selected event dates.
+            The server verifies entry date-by-date at the turnstiles.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              loadScheduleAndStats();
+              loadPasses();
+            }}
+            className="p-2.5 rounded-xl border border-stone-200 hover:bg-stone-50 text-stone-600 transition-colors shadow-2xs"
+            title="Refresh statistics and passes"
+          >
+            <RefreshCw className={`w-4 h-4 ${scheduleLoading || passesLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
       {/* ACTION BANNER */}
       {actionMessage && (
         <div
-          className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2.5 ${
+          className={`py-3 px-4 rounded-xl border text-xs font-semibold flex items-center justify-between gap-3 ${
             actionMessage.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : 'bg-rose-50 border-rose-200 text-rose-800'
@@ -589,765 +345,404 @@ export default function DailyQrDeliveryPage() {
         </div>
       )}
 
-      {/* 1. COMPACT EVENT DATE SELECTOR TABS */}
-      <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-stone-200/80 shadow-2xs space-y-1.5">
-        <div className="flex flex-wrap items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-ink uppercase tracking-wider">
-            <Calendar className="w-3.5 h-3.5 text-maroon" />
-            <span>Official Event Nights</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Auto-Dispatch Pill */}
-            <div
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${
-                scheduleLoading
-                  ? 'bg-stone-100 text-stone-500 border-stone-200'
-                  : scheduleError
-                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                  : !schedule
-                  ? 'bg-stone-100 text-stone-600 border-stone-200'
-                  : scheduleEnabled
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                  : 'bg-stone-100 text-stone-600 border-stone-200'
-              }`}
-            >
-              <Clock className={`w-3 h-3 ${scheduleLoading ? 'animate-spin' : ''}`} />
-              <span>
-                {scheduleLoading
-                  ? 'Auto: Loading...'
-                  : scheduleError
-                  ? 'Auto: Error'
-                  : !schedule
-                  ? 'Auto: Not Configured'
-                  : scheduleEnabled
-                  ? `Auto: ON (${formatTimeTo12Hour(schedule.dispatchTime || scheduleTime)} IST)`
-                  : 'Auto: OFF'}
-              </span>
-            </div>
-
-            {/* Night Theme Badge */}
-            {(() => {
-              const currentTheme = getEventDayTheme(selectedDate);
-              return (
-                <div
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border transition-colors"
-                  style={{
-                    backgroundColor: currentTheme.bgColor,
-                    borderColor: `${currentTheme.primaryColor}40`,
-                    color: currentTheme.primaryColor,
-                  }}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: currentTheme.secondaryColor }}
-                  />
-                  <span>Night {currentTheme.dayNumber} &bull; {currentTheme.themeTitle}</span>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-
-        {/* 9 Event Date Buttons (Shorter height) */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-1.5">
-          {OFFICIAL_EVENT_DATES.map((d, idx) => {
-            const isSelected = selectedDate === d;
-            const theme = getEventDayTheme(d);
-            return (
-              <button
-                key={d}
-                type="button"
-                onClick={() => {
-                  setSelectedDate(d);
-                  setPage(1);
-                  setActionMessage(null);
-                }}
-                style={
-                  isSelected
-                    ? {
-                        backgroundColor: theme.primaryColor,
-                        borderColor: theme.primaryColor,
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.18)',
-                      }
-                    : {
-                        backgroundColor: theme.bgColor,
-                        borderColor: `${theme.primaryColor}38`,
-                      }
-                }
-                className={`py-1.5 px-2 rounded-lg border text-center transition-all cursor-pointer ${
-                  isSelected ? 'scale-[1.02]' : 'hover:scale-[1.01]'
-                }`}
-              >
-                <div
-                  className="text-[9px] uppercase font-bold tracking-wider"
-                  style={{
-                    color: isSelected ? theme.secondaryColor : theme.primaryColor,
-                  }}
-                >
-                  Night {idx + 1}
-                </div>
-                <div
-                  className={`font-outfit font-black text-xs leading-tight mt-0.5 ${
-                    isSelected ? 'text-white' : 'text-stone-800'
-                  }`}
-                >
-                  {formatDateDisplay(d)}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 2. COMPACT STATS STRIP FOR SELECTED DATE */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      {/* UNIFIED METRIC CARDS */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Eligible */}
-        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
-          <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">Eligible</span>
-          <span className="font-outfit font-black text-xl text-ink leading-none">
-            {statsLoading ? '—' : stats?.eligibleCount.toLocaleString() ?? 0}
-          </span>
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-ink-soft uppercase tracking-wider block">
+              Eligible
+            </span>
+            <span className="font-outfit font-black text-2xl text-ink leading-none block">
+              {scheduleLoading ? '—' : schedule.stats.eligibleCount.toLocaleString()}
+            </span>
+            <span className="text-[10px] text-stone-400">Approved attendees</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600">
+            <Users className="w-5 h-5" />
+          </div>
         </div>
 
-        {/* Generated */}
-        <div className="bg-white py-2 px-3 rounded-xl border border-stone-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
-          <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">Generated</span>
-          <span className="font-outfit font-black text-xl text-purple-700 leading-none">
-            {statsLoading ? '—' : stats?.generatedCount.toLocaleString() ?? 0}
-          </span>
+        {/* QR Generated */}
+        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">
+              QR Generated
+            </span>
+            <span className="font-outfit font-black text-2xl text-purple-700 leading-none block">
+              {scheduleLoading ? '—' : schedule.stats.qrGeneratedCount.toLocaleString()}
+            </span>
+            <span className="text-[10px] text-purple-400">Permanent tokens</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+            <QrCode className="w-5 h-5" />
+          </div>
         </div>
 
-        {/* Sent */}
-        <div className="bg-emerald-50/40 py-2 px-3 rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
-          <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Emails Sent</span>
-          <span className="font-outfit font-black text-xl text-emerald-700 leading-none">
-            {statsLoading ? '—' : stats?.sentCount.toLocaleString() ?? 0}
-          </span>
+        {/* Emails Sent */}
+        <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-xs flex items-center justify-between bg-emerald-50/20">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+              Emails Sent
+            </span>
+            <span className="font-outfit font-black text-2xl text-emerald-700 leading-none block">
+              {scheduleLoading ? '—' : schedule.stats.sentCount.toLocaleString()}
+            </span>
+            <span className="text-[10px] text-emerald-500">Delivered passes</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-100/60 flex items-center justify-center text-emerald-700">
+            <Mail className="w-5 h-5" />
+          </div>
         </div>
 
         {/* Failed */}
-        <div className="bg-rose-50/40 py-2 px-3 rounded-xl border border-rose-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
-          <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Failed</span>
-          <span className="font-outfit font-black text-xl text-rose-700 leading-none">
-            {statsLoading ? '—' : stats?.failedCount.toLocaleString() ?? 0}
-          </span>
-        </div>
-
-        {/* Pending */}
-        <div className="bg-amber-50/40 py-2 px-3 rounded-xl border border-amber-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
-          <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Pending</span>
-          <span className="font-outfit font-black text-xl text-amber-700 leading-none">
-            {statsLoading ? '—' : stats?.pendingCount.toLocaleString() ?? 0}
-          </span>
-        </div>
-
-        {/* Scans */}
-        <div className="bg-blue-50/40 py-2 px-3 rounded-xl border border-blue-200/80 shadow-2xs flex items-center justify-between min-h-[55px]">
-          <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Gate Scans</span>
-          <span className="font-outfit font-black text-xl text-blue-700 leading-none">
-            {statsLoading ? '—' : stats?.checkedInCount.toLocaleString() ?? 0}
-          </span>
+        <div className="bg-white p-4 rounded-2xl border border-rose-200 shadow-xs flex items-center justify-between bg-rose-50/20">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider block">
+              Failed
+            </span>
+            <span className="font-outfit font-black text-2xl text-rose-700 leading-none block">
+              {scheduleLoading ? '—' : schedule.stats.failedCount.toLocaleString()}
+            </span>
+            <span className="text-[10px] text-rose-500">Delivery errors</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-rose-100/60 flex items-center justify-center text-rose-700">
+            <AlertCircle className="w-5 h-5" />
+          </div>
         </div>
       </div>
 
-      {/* 3, 4, 5. COLLAPSIBLE CONTROLS STRIP (SCHEDULE, MANUAL ACTIONS, FILTERS) */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-stone-200/80 shadow-2xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* QR Dispatch Schedule Accordion Button */}
-          <button
-            type="button"
-            onClick={() => setScheduleExpanded((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-              scheduleExpanded
-                ? 'bg-maroon text-white border-maroon shadow-2xs'
-                : unifiedSchedule.autoRelease
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>
-              EMPLOYEE QR RELEASE SCHEDULE &bull;{' '}
-              {unifiedSchedule.autoRelease
-                ? `AUTO ON (${unifiedSchedule.releaseTime}) &bull; ${unifiedSchedule.status.replace('_', ' ')}`
-                : `AUTO OFF &bull; ${unifiedSchedule.status.replace('_', ' ')}`}
+      {/* RELEASE SCHEDULE CARD */}
+      <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-maroon" />
+            <h2 className="font-cinzel font-bold text-base text-ink tracking-wide">
+              RELEASE SCHEDULE
+            </h2>
+          </div>
+
+          {/* Status Badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+              Status:
             </span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${scheduleExpanded ? 'rotate-180' : ''}`} />
-          </button>
-
-          {/* Manual Actions Accordion Button */}
-          <button
-            type="button"
-            onClick={() => setManualActionsExpanded((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-              manualActionsExpanded
-                ? 'bg-stone-800 text-white border-stone-800 shadow-2xs'
-                : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-gold-deep" />
-            <span>MANUAL ACTIONS</span>
-            {stats && (stats.pendingCount > 0 || stats.failedCount > 0) && (
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            )}
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${manualActionsExpanded ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
-
-        {/* Search & Filters Accordion Button */}
-        {(() => {
-          const hasActiveFilters = searchQuery.trim() !== '' || emailStatusFilter !== 'ALL' || passStatusFilter !== 'ALL';
-          return (
-            <button
-              type="button"
-              onClick={() => setFiltersExpanded((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                filtersExpanded || hasActiveFilters
-                  ? 'bg-maroon/10 text-maroon border-maroon/40 shadow-2xs'
-                  : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${
+                schedule.status === 'COMPLETED'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : schedule.status === 'RUNNING'
+                  ? 'bg-blue-50 text-blue-800 border-blue-200 animate-pulse'
+                  : schedule.status === 'PARTIAL_FAILURE' || schedule.status === 'FAILED'
+                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : 'bg-stone-100 text-stone-700 border-stone-200'
               }`}
             >
-              <Search className="w-3.5 h-3.5" />
-              <span>SEARCH &amp; FILTERS</span>
-              {hasActiveFilters && (
-                <span className="w-2 h-2 rounded-full bg-maroon shrink-0" />
-              )}
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${filtersExpanded ? 'rotate-180' : ''}`} />
-            </button>
-          );
-        })()}
-      </div>
-
-      {/* EXPANDED: UNIFIED PERMANENT EMPLOYEE QR RELEASE SCHEDULE */}
-      {scheduleExpanded && (
-        <div className="bg-white p-4 rounded-xl border border-stone-200/90 shadow-xs space-y-4 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-maroon" />
-              <h3 className="font-outfit font-black text-xs text-ink tracking-tight uppercase">
-                EMPLOYEE QR RELEASE SCHEDULE &bull; UNIFIED PERMANENT DISPATCH
-              </h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                unifiedSchedule.status === 'COMPLETED'
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  : unifiedSchedule.status === 'RUNNING'
-                  ? 'bg-blue-100 text-blue-800 border border-blue-300 animate-pulse'
-                  : unifiedSchedule.status === 'SCHEDULED'
-                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                  : unifiedSchedule.status === 'PARTIAL_FAILURE' || unifiedSchedule.status === 'FAILED'
-                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                  : 'bg-stone-100 text-stone-600 border border-stone-200'
-              }`}>
-                {unifiedSchedule.status.replace('_', ' ')}
-              </span>
-              <button
-                type="button"
-                onClick={() => setScheduleExpanded(false)}
-                className="text-stone-400 hover:text-ink text-xs font-bold cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+              {schedule.status}
+            </span>
           </div>
+        </div>
 
-          {/* Unified Statistics Overview */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200 text-center">
-              <div className="text-[9px] uppercase font-bold text-stone-500 tracking-wider">Eligible</div>
-              <div className="font-outfit font-black text-base text-ink">
-                {unifiedSchedule.statistics.eligibleCount}
-              </div>
-            </div>
-            <div className="p-2.5 rounded-lg bg-stone-50 border border-stone-200 text-center">
-              <div className="text-[9px] uppercase font-bold text-stone-500 tracking-wider">QR Generated</div>
-              <div className="font-outfit font-black text-base text-ink">
-                {unifiedSchedule.statistics.qrGeneratedCount}
-              </div>
-            </div>
-            <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-center">
-              <div className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Email Sent</div>
-              <div className="font-outfit font-black text-base text-emerald-800">
-                {unifiedSchedule.statistics.sentCount}
-              </div>
-            </div>
-            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-center">
-              <div className="text-[9px] uppercase font-bold text-rose-700 tracking-wider">Email Failed</div>
-              <div className="font-outfit font-black text-base text-rose-800">
-                {unifiedSchedule.statistics.failedCount}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
-            {/* Automatic Release Toggle */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
-                Automatic Release
-              </label>
-              <div className="p-0.5 rounded-lg border border-stone-200 bg-stone-50 flex items-center">
-                <button
-                  type="button"
-                  onClick={() => setUnifiedSchedule((prev) => ({ ...prev, autoRelease: true }))}
-                  className={`flex-1 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                    unifiedSchedule.autoRelease
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-stone-600 hover:text-ink'
-                  }`}
-                >
-                  ON
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUnifiedSchedule((prev) => ({ ...prev, autoRelease: false }))}
-                  className={`flex-1 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                    !unifiedSchedule.autoRelease
-                      ? 'bg-stone-600 text-white shadow-2xs'
-                      : 'text-stone-600 hover:text-ink'
-                  }`}
-                >
-                  OFF
-                </button>
-              </div>
-            </div>
-
-            {/* Release Date */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
-                Release Date
-              </label>
-              <input
-                type="date"
-                value={unifiedSchedule.releaseDate}
-                onChange={(e) => setUnifiedSchedule((prev) => ({ ...prev, releaseDate: e.target.value }))}
-                className="w-full py-1.5 px-2 rounded-lg border border-stone-200 bg-white font-mono font-bold text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer"
-              />
-            </div>
-
-            {/* Release Time */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
-                Release Time (HH:MM)
-              </label>
-              <input
-                type="time"
-                value={unifiedSchedule.releaseTime}
-                onChange={(e) => setUnifiedSchedule((prev) => ({ ...prev, releaseTime: e.target.value }))}
-                className="w-full py-1.5 px-2 rounded-lg border border-stone-200 bg-white font-outfit font-bold text-xs text-ink focus:outline-none focus:ring-1 focus:ring-maroon cursor-pointer"
-              />
-            </div>
-
-            {/* Timezone */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-ink-soft uppercase tracking-wider">
-                Timezone
-              </label>
-              <div className="py-1.5 px-2.5 rounded-lg border border-stone-200 bg-stone-50 font-mono text-xs text-ink font-semibold flex items-center justify-between">
-                <span>Asia/Kolkata</span>
-                <span className="text-stone-500 font-sans font-bold">(IST)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons: Save, Send Now, Retry Failed */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={executingQrAction !== null}
-                onClick={() => handleExecuteUnifiedQrAction('SEND_NOW')}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{executingQrAction === 'SEND_NOW' ? 'Sending Passes...' : 'SEND NOW'}</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={executingQrAction !== null}
-                onClick={() => handleExecuteUnifiedQrAction('RETRY_FAILED')}
-                className="px-3.5 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs hover:bg-amber-700 transition shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>{executingQrAction === 'RETRY_FAILED' ? 'Retrying...' : 'RETRY FAILED'}</span>
-              </button>
-            </div>
-
+        {/* Schedule Inputs & Actions Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          {/* Automatic Release Toggle */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">
+              Automatic Release
+            </label>
             <button
               type="button"
-              onClick={handleSaveUnifiedSchedule}
-              disabled={savingUnifiedSchedule}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-maroon text-white text-xs font-bold hover:bg-maroon-dark transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
+              onClick={() => setSchedule((s) => ({ ...s, enabled: !s.enabled }))}
+              className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                schedule.enabled
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
+                  : 'bg-stone-100 border-stone-300 text-stone-600'
+              }`}
             >
-              {savingUnifiedSchedule ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Save className="w-3.5 h-3.5" />
-              )}
-              <span>SAVE SCHEDULE</span>
+              <span>{schedule.enabled ? 'Automatic: ON' : 'Automatic: OFF'}</span>
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  schedule.enabled ? 'bg-emerald-600' : 'bg-stone-400'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Release Date */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">
+              Release Date (YYYY-MM-DD)
+            </label>
+            <input
+              type="date"
+              value={schedule.releaseDate}
+              onChange={(e) => setSchedule((s) => ({ ...s, releaseDate: e.target.value }))}
+              className="w-full py-2 px-3 rounded-xl border border-stone-200 text-xs font-bold text-ink focus:border-maroon focus:outline-hidden"
+            />
+          </div>
+
+          {/* Release Time & Timezone */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">
+              Release Time (IST)
+            </label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="time"
+                value={schedule.releaseTime}
+                onChange={(e) => setSchedule((s) => ({ ...s, releaseTime: e.target.value }))}
+                className="w-full py-2 px-3 rounded-xl border border-stone-200 text-xs font-bold text-ink focus:border-maroon focus:outline-hidden"
+              />
+              <span className="text-[10px] font-bold text-stone-400 uppercase shrink-0">
+                IST
+              </span>
+            </div>
+          </div>
+
+          {/* Save Schedule Button */}
+          <div>
+            <button
+              type="button"
+              onClick={handleSaveSchedule}
+              disabled={savingSchedule}
+              className="w-full py-2 px-4 rounded-xl bg-stone-900 hover:bg-black text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <Save className={`w-3.5 h-3.5 ${savingSchedule ? 'animate-spin' : ''}`} />
+              <span>{savingSchedule ? 'Saving...' : 'SAVE SCHEDULE'}</span>
             </button>
           </div>
         </div>
-      )}
 
-      {/* EXPANDED: MANUAL ACTIONS PANEL */}
-      {manualActionsExpanded && (
-        <div className="bg-gradient-to-r from-cream-light to-white p-3.5 rounded-xl border border-gold/40 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 animate-in fade-in duration-150">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-stone-200 text-stone-700">
-                Admin Override
+        {/* Action Controls: Send Now & Retry Failed */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-100">
+          <div className="text-xs text-stone-500">
+            {schedule.lastRunAt ? (
+              <span>
+                Last execution: <strong>{new Date(schedule.lastRunAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</strong>
+                {schedule.lastRunMessage && ` &bull; ${schedule.lastRunMessage}`}
               </span>
-              <h3 className="font-outfit font-extrabold text-xs text-ink flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-maroon" />
-                <span>Manual Actions for {formatDateDisplay(selectedDate)}</span>
-              </h3>
-            </div>
-            <p className="text-[11px] text-ink-soft mt-0.5">
-              Deliveries are idempotent. Use manual buttons for immediate generation or emailing.
+            ) : (
+              <span>No execution has taken place yet.</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleExecuteRelease('SEND_NOW')}
+              disabled={executingAction !== null}
+              className="py-2 px-4 rounded-xl bg-maroon hover:bg-maroon-dark text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <Send className={`w-3.5 h-3.5 ${executingAction === 'SEND_NOW' ? 'animate-spin' : ''}`} />
+              <span>SEND NOW</span>
+            </button>
+
+            {schedule.stats.failedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => handleExecuteRelease('RETRY_FAILED')}
+                disabled={executingAction !== null}
+                className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${executingAction === 'RETRY_FAILED' ? 'animate-spin' : ''}`} />
+                <span>RETRY FAILED ({schedule.stats.failedCount})</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* PASSES LIST SECTION */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden space-y-4 p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-cinzel font-bold text-base text-ink">
+              APPROVED ATTENDEES &amp; PERMANENT PASSES
+            </h3>
+            <p className="text-xs text-stone-500">
+              Each approved attendee holds a single permanent QR token valid for all registered dates.
             </p>
           </div>
 
+          {/* FILTERS */}
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleGeneratePasses}
-              disabled={generating}
-              className="px-3 py-1.5 rounded-lg bg-maroon text-white font-bold text-xs hover:bg-maroon-dark transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              {generating ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <QrCode className="w-3.5 h-3.5 text-gold-light" />
-              )}
-              <span>1. Generate Today's Passes</span>
-            </button>
+            <div className="relative min-w-[200px]">
+              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search name, CPF, ref no..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-stone-200 text-xs focus:border-maroon focus:outline-hidden"
+              />
+            </div>
 
-            <button
-              type="button"
-              onClick={() => handleSendEmails(false)}
-              disabled={sendingEmails || (stats?.pendingCount === 0 && stats?.failedCount === 0)}
-              className="px-3 py-1.5 rounded-lg bg-gold text-maroon-deep font-extrabold text-xs hover:bg-gold-light transition-all shadow-2xs flex items-center gap-1.5 border border-maroon/20 cursor-pointer disabled:opacity-50"
-            >
-              {sendingEmails ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Send className="w-3.5 h-3.5" />
-              )}
-              <span>2. Send QR Pass Emails</span>
-            </button>
-
-            {stats && stats.failedCount > 0 && (
-              <button
-                type="button"
-                onClick={() => handleSendEmails(true)}
-                disabled={sendingEmails}
-                className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs hover:bg-rose-200 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Retry {stats.failedCount} Failed</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setManualActionsExpanded(false)}
-              className="p-1 text-stone-400 hover:text-ink cursor-pointer ml-1"
-              title="Collapse"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* EXPANDED: SEARCH & FILTERS ROW */}
-      {filtersExpanded && (
-        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 animate-in fade-in duration-150">
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-            <input
-              type="text"
-              value={searchQuery}
+            <select
+              value={emailStatusFilter}
               onChange={(e) => {
-                setSearchQuery(e.target.value);
+                setEmailStatusFilter(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search Attendee Name, Employee CPF, Email, Ticket..."
-              className="w-full pl-9 pr-7 py-1.5 rounded-lg border border-stone-200 text-xs focus:outline-none focus:border-maroon bg-cream/30"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-ink cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs">
-              <span className="text-ink-soft text-[11px] font-bold">Email:</span>
-              <select
-                value={emailStatusFilter}
-                onChange={(e) => {
-                  setEmailStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-transparent border-none text-xs font-bold text-ink focus:outline-none cursor-pointer"
-              >
-                <option value="ALL">All Delivery States</option>
-                <option value="SENT">Sent</option>
-                <option value="FAILED">Failed</option>
-                <option value="PENDING">Pending</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1 text-xs">
-              <span className="text-ink-soft text-[11px] font-bold">Status:</span>
-              <select
-                value={passStatusFilter}
-                onChange={(e) => {
-                  setPassStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-transparent border-none text-xs font-bold text-ink focus:outline-none cursor-pointer"
-              >
-                <option value="ALL">All Attendees &amp; Passes</option>
-                <option value="ELIGIBLE">Eligible (Pass Not Generated)</option>
-                <option value="PASS_GENERATED">Pass Generated (Email Pending)</option>
-                <option value="EMAIL_SENT">Email Sent</option>
-                <option value="EMAIL_FAILED">Email Failed</option>
-                <option value="CHECKED_IN">Checked In</option>
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setEmailStatusFilter('ALL');
-                setPassStatusFilter('ALL');
-                setPage(1);
-              }}
-              className="px-2 py-1 text-[11px] font-bold text-stone-500 hover:text-maroon transition-colors cursor-pointer"
+              className="py-1.5 px-3 rounded-xl border border-stone-200 text-xs font-semibold focus:border-maroon focus:outline-hidden bg-white"
             >
-              Reset
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFiltersExpanded(false)}
-              className="p-1 text-stone-400 hover:text-ink cursor-pointer"
-              title="Collapse Filters"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+              <option value="ALL">All Email Status</option>
+              <option value="SENT">Sent</option>
+              <option value="PENDING">Pending</option>
+              <option value="FAILED">Failed</option>
+            </select>
           </div>
         </div>
-      )}
 
-      {/* 6. COMPACT ELIGIBILITY NOTICE */}
-      {stats && stats.eligibleCount > 0 && stats.generatedCount === 0 && (
-        <div className="py-2 px-3.5 bg-amber-50/90 border border-amber-300/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 shadow-2xs min-h-[46px]">
-          <div className="flex items-center gap-2 truncate">
-            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-            <div className="truncate">
-              <strong>{stats.eligibleCount} approved attendees</strong> eligible for {formatDateDisplay(selectedDate)}.
-              <span className="text-stone-600 ml-1">Daily passes have not yet been generated.</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleGeneratePasses}
-            disabled={generating}
-            className="px-3 py-1 bg-maroon hover:bg-maroon-dark text-white font-bold text-xs rounded-lg transition-all shrink-0 shadow-2xs cursor-pointer disabled:opacity-50"
-          >
-            {generating ? 'Generating...' : 'Generate Passes'}
-          </button>
-        </div>
-      )}
-
-      {/* PASSES DATA TABLE */}
-      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-stone-50/80 border-b border-stone-200/70 text-ink-soft uppercase text-[10px] font-bold tracking-wider">
-                <th className="py-2 px-3 font-bold">Attendee</th>
-                <th className="py-2 px-3 font-bold">Role / Family</th>
-                <th className="py-2 px-3 font-bold">Employee &amp; CPF</th>
-                <th className="py-2 px-3 font-bold">Recipient Email</th>
-                <th className="py-2 px-3 font-bold">Email Status</th>
-                <th className="py-2 px-3 font-bold">Pass Status</th>
-                <th className="py-2 px-3 font-bold">Check-in</th>
-                <th className="py-2 px-3 font-bold text-right">Actions</th>
+        {/* TABLE */}
+        <div className="overflow-x-auto border border-stone-200 rounded-xl">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-stone-50 text-stone-600 font-bold uppercase tracking-wider text-[10px] border-b border-stone-200">
+              <tr>
+                <th className="py-2.5 px-3">Attendee &amp; Role</th>
+                <th className="py-2.5 px-3">Primary / Ref No.</th>
+                <th className="py-2.5 px-3">Permanent QR Token</th>
+                <th className="py-2.5 px-3">Registered Dates</th>
+                <th className="py-2.5 px-3 text-center">QR Status</th>
+                <th className="py-2.5 px-3 text-center">Email Status</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {passesLoading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-ink-soft">
-                    <RefreshCw className="w-5 h-5 animate-spin mx-auto text-maroon mb-2" />
-                    <span>Loading daily passes...</span>
+                  <td colSpan={7} className="py-8 text-center text-stone-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-maroon" />
+                    <span>Loading permanent passes...</span>
                   </td>
                 </tr>
               ) : passes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-ink-soft">
-                    <QrCode className="w-7 h-7 text-stone-300 mx-auto mb-1.5" />
-                    <p className="font-semibold text-ink text-xs sm:text-sm">No attendees found matching filter for this date</p>
-                    <p className="text-[11px] text-ink-soft mt-0.5">
-                      {stats && stats.eligibleCount > 0
-                        ? `Click "Generate Today's Passes" above to generate passes for ${stats.eligibleCount} eligible attendees.`
-                        : 'No employees are registered or approved for this event date.'}
-                    </p>
+                  <td colSpan={7} className="py-8 text-center text-stone-400">
+                    No approved attendees found matching criteria.
                   </td>
                 </tr>
               ) : (
                 passes.map((p) => {
-                  const isEligibleOnly = p.lifecycleStatus === 'ELIGIBLE' || p.status === 'ELIGIBLE';
-                  const isPassGenerated = p.lifecycleStatus === 'PASS_GENERATED';
-                  const isEmailSent = p.lifecycleStatus === 'EMAIL_SENT' || p.emailStatus === 'SENT';
-                  const isEmailFailed = p.lifecycleStatus === 'EMAIL_FAILED' || p.emailStatus === 'FAILED';
-                  const isCheckedIn = p.lifecycleStatus === 'CHECKED_IN' || !!p.checkedInAt;
-
+                  const hasToken = Boolean(p.qrCodeToken && p.qrCodeToken.trim() !== '');
                   return (
-                    <tr key={p.id} className="hover:bg-cream/40 transition-colors">
-                      {/* Attendee */}
-                      <td className="py-2 px-3">
-                        <div className="font-bold text-ink text-xs sm:text-sm leading-tight">{p.attendeeName}</div>
-                        <div className="font-mono text-[9px] text-stone-400 mt-0.5">{p.ticketNumber}</div>
-                      </td>
-
-                      {/* Role / Family */}
-                      <td className="py-2 px-3">
-                        <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
-                            p.isFamily
-                              ? 'bg-purple-50 text-purple-800 border-purple-200'
-                              : 'bg-blue-50 text-blue-800 border-blue-200'
-                          }`}
-                        >
-                          {p.relation}
-                        </span>
-                      </td>
-
-                      {/* Employee & CPF */}
-                      <td className="py-2 px-3">
-                        <div className="font-semibold text-ink text-xs leading-tight">{p.employeeName}</div>
-                        {p.cpf && (
-                          <div className="font-mono text-[10px] text-maroon font-bold mt-0.5">CPF: {p.cpf}</div>
-                        )}
-                      </td>
-
-                      {/* Recipient Email */}
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-1 text-ink-soft text-xs">
-                          <Mail className="w-3 h-3 text-stone-400 shrink-0" />
-                          <span className="truncate max-w-[150px]">{p.email || '—'}</span>
+                    <tr key={p.id} className="hover:bg-stone-50/60 transition-colors">
+                      {/* Attendee & Role */}
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-ink">{p.attendeeName}</div>
+                        <div className="text-[10px] text-stone-500 flex items-center gap-1.5 mt-0.5">
+                          <span className="font-semibold text-maroon">{p.relation}</span>
+                          <span>&bull;</span>
+                          <span>{p.email || p.phone || 'No direct contact'}</span>
                         </div>
                       </td>
 
+                      {/* Primary / Ref No */}
+                      <td className="py-2.5 px-3">
+                        <div className="font-mono font-bold text-maroon">{p.referenceNumber}</div>
+                        <div className="text-[10px] text-stone-500">
+                          {p.employeeName} (CPF: {p.cpf})
+                        </div>
+                      </td>
+
+                      {/* Permanent QR Token */}
+                      <td className="py-2.5 px-3 font-mono">
+                        {hasToken ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-stone-700 bg-stone-100 px-2 py-0.5 rounded border border-stone-200">
+                              {p.qrCodeToken.substring(0, 10)}...{p.qrCodeToken.substring(p.qrCodeToken.length - 6)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyToken(p.qrCodeToken, p.id)}
+                              className="text-stone-400 hover:text-ink cursor-pointer"
+                              title="Copy permanent QR token"
+                            >
+                              {copiedTokenId === p.id ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-stone-400 italic">Auto-generated on release</span>
+                        )}
+                      </td>
+
+                      {/* Registered Booking Days */}
+                      <td className="py-2.5 px-3">
+                        <span className="text-[11px] font-semibold text-stone-800">
+                          {formatDaysDisplay(p.bookingDays)}
+                        </span>
+                        <div className="text-[10px] text-stone-400">
+                          {p.bookingDays.length} day(s) authorized
+                        </div>
+                      </td>
+
+                      {/* QR Status */}
+                      <td className="py-2.5 px-3 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                            p.qrStatus === 'ACTIVE'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-stone-100 text-stone-600 border-stone-200'
+                          }`}
+                        >
+                          {p.qrStatus}
+                        </span>
+                      </td>
+
                       {/* Email Status */}
-                      <td className="py-2 px-3">
-                        {isEligibleOnly ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-stone-100 text-stone-500 border border-stone-200">
-                            Pass Not Generated
-                          </span>
-                        ) : isEmailSent ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                              <span>Email Sent</span>
-                            </span>
-                            {p.emailSentAt && (
-                              <div className="text-[9px] text-ink-soft mt-0.5">
-                                {new Date(p.emailSentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                            )}
+                      <td className="py-2.5 px-3 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                            p.emailStatus === 'SENT'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : p.emailStatus === 'FAILED'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
+                          title={p.emailError || undefined}
+                        >
+                          {p.emailStatus}
+                        </span>
+                        {p.emailSentAt && (
+                          <div className="text-[9px] text-stone-400 mt-0.5">
+                            {new Date(p.emailSentAt).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </div>
-                        ) : isEmailFailed ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200 uppercase">
-                              <AlertCircle className="w-2.5 h-2.5 text-rose-600" />
-                              <span>Email Failed</span>
-                            </span>
-                            {p.emailError && (
-                              <div className="text-[9px] text-rose-600 truncate max-w-[110px] mt-0.5" title={p.emailError}>
-                                {p.emailError}
-                              </div>
-                            )}
-                          </div>
-                        ) : p.emailStatus === 'SENDING' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200 uppercase">
-                            <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-600" />
-                            <span>Sending</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 uppercase">
-                            <Clock className="w-2.5 h-2.5 text-amber-600" />
-                            <span>Email Pending</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Pass Status */}
-                      <td className="py-2 px-3">
-                        {isEligibleOnly ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
-                            ELIGIBLE
-                          </span>
-                        ) : isCheckedIn ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-300">
-                            CHECKED IN
-                          </span>
-                        ) : isPassGenerated ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-900 border border-purple-300">
-                            PASS GENERATED
-                          </span>
-                        ) : (
-                          <span
-                            className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase border ${
-                              p.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : 'bg-rose-50 text-rose-800 border-rose-200'
-                            }`}
-                          >
-                            {p.status}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Check-in */}
-                      <td className="py-2 px-3">
-                        {p.checkedInAt ? (
-                          <div className="text-[10px] font-bold text-blue-800">
-                            {new Date(p.checkedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-stone-400 font-semibold">—</span>
                         )}
                       </td>
 
                       {/* Actions */}
-                      <td className="py-2 px-3 text-right">
-                        {p.qrToken ? (
+                      <td className="py-2.5 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
                             onClick={() => setViewPass(p)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-stone-100 hover:bg-maroon hover:text-white text-ink text-[11px] font-bold transition-colors cursor-pointer"
-                            title="View Scannable QR Pass"
+                            className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700 transition-colors shadow-2xs"
+                            title="Preview Permanent Pass"
                           >
-                            <QrCode className="w-3 h-3" />
-                            <span>View QR</span>
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
-                        ) : (
-                          <span className="text-[10px] text-stone-400 italic">Pass Not Generated</span>
-                        )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleSendSingleEmail(p.attendeeId)}
+                            disabled={sendingSingleEmailId === p.attendeeId}
+                            className="p-1.5 rounded-lg border border-maroon/30 bg-maroon/5 hover:bg-maroon/10 text-maroon transition-colors shadow-2xs disabled:opacity-50"
+                            title={p.emailStatus === 'SENT' ? 'Resend Pass Email' : 'Send Pass Email'}
+                          >
+                            <Send className={`w-3.5 h-3.5 ${sendingSingleEmailId === p.attendeeId ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1358,9 +753,9 @@ export default function DailyQrDeliveryPage() {
         </div>
 
         {/* PAGINATION */}
-        <div className="py-2.5 px-3 border-t border-stone-200/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-ink-soft">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-stone-500 pt-2">
           <div>
-            Showing <strong>{passes.length}</strong> of <strong>{totalCount}</strong> passes
+            Showing <strong>{passes.length}</strong> of <strong>{totalCount}</strong> permanent passes
           </div>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
@@ -1368,7 +763,7 @@ export default function DailyQrDeliveryPage() {
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="px-2.5 py-1 rounded-md border border-stone-200 bg-white font-bold disabled:opacity-40 cursor-pointer text-xs"
+                className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white font-bold disabled:opacity-40 cursor-pointer"
               >
                 Previous
               </button>
@@ -1379,7 +774,7 @@ export default function DailyQrDeliveryPage() {
                 type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="px-2.5 py-1 rounded-md border border-stone-200 bg-white font-bold disabled:opacity-40 cursor-pointer text-xs"
+                className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white font-bold disabled:opacity-40 cursor-pointer"
               >
                 Next
               </button>
@@ -1388,12 +783,13 @@ export default function DailyQrDeliveryPage() {
         </div>
       </div>
 
-      {/* VIEW QR MODAL */}
+      {/* VIEW PERMANENT PASS MODAL */}
       {viewPass && (() => {
-        const presentation = buildDailyEmployeePassPresentation({
-          eventDate: viewPass.eventDate,
+        const firstDate = viewPass.bookingDays[0] || '2026-10-11';
+        const presentation: DailyEmployeePassPresentation = buildDailyEmployeePassPresentation({
+          eventDate: firstDate,
           ticketNumber: viewPass.ticketNumber,
-          qrToken: viewPass.qrToken,
+          qrToken: viewPass.qrCodeToken,
           status: viewPass.status,
           attendeeName: viewPass.attendeeName,
           isFamily: viewPass.isFamily,
@@ -1407,12 +803,11 @@ export default function DailyQrDeliveryPage() {
           <AdminModal
             isOpen={!!viewPass}
             onClose={() => setViewPass(null)}
-            title="Daily Entry QR Pass"
+            title="Official Permanent Entry Pass"
           >
             <div className="space-y-4 p-1">
               <DailyEmployeeTicketCard
                 presentation={presentation}
-                qrSvg={viewPass.qrSvg}
               />
 
               <div className="pt-2 flex items-center justify-center gap-3">
@@ -1422,7 +817,7 @@ export default function DailyQrDeliveryPage() {
                   className="px-4 py-2 rounded-xl bg-gold text-maroon-deep font-bold text-xs hover:bg-gold-light transition-all flex items-center gap-1.5"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>Print QR Pass</span>
+                  <span>Print Pass</span>
                 </button>
                 <button
                   type="button"

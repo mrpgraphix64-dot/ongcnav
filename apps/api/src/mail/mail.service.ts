@@ -870,12 +870,12 @@ Reworkzone.com (https://reworkzone.com)
 
     const emailSubject =
       data.subjectOverride ||
-      `Your ONGC Navratri Entry Pass for Night ${presentation.nightNumber} (${presentation.eventDateFormatted}) - ${presentation.attendeeName}`;
+      `Your ONGC Navratri 2026 Permanent Entry Pass - ${presentation.attendeeName} (Ref: ${presentation.referenceNumber || presentation.employeeCpf}) - Night ${presentation.nightNumber} (${dayTheme.fullDateLabel})`;
 
     // Optional direct PDF attachment
     if (data.pdfBuffer && data.pdfBuffer.length > 0) {
       attachments.push({
-        filename: `ONGC-Pass-${data.eventDate}-${data.attendeeName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+        filename: `ONGC-Pass-${presentation.attendeeName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
         content: data.pdfBuffer.toString('base64'),
         contentType: 'application/pdf',
       });
@@ -894,26 +894,27 @@ Reworkzone.com (https://reworkzone.com)
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #E5D5BA; border-top: 6px solid ${dayTheme.primaryColor};">
-          <!-- BRAND HEADER -->
+          <!-- TOP BRAND HEADER -->
           <tr>
-            <td style="background-color: #FFFFFF; border-top: 4px solid ${dayTheme.primaryColor}; border-bottom: 2px solid ${dayTheme.secondaryColor}; padding: 24px 20px 18px 20px; text-align: center;">
+            <td style="background-color: #FFFFFF; border-top: 4px solid ${dayTheme.primaryColor}; border-bottom: 2px solid #C49A45; padding: 24px 20px 18px 20px; text-align: center;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
                 <tr>
                   <td align="center" style="padding-bottom: 8px;">
-                    <img src="${brandingUrls.ongcLogoUrl}" alt="ONGC Logo" width="100" style="display: block; width: 100px; max-width: 100px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
+                    <img src="${brandingUrls.festivalEmblemUrl}" alt="ONGC Navratri 2026 Festival Emblem" width="180" style="display: block; width: 180px; max-width: 220px; height: auto; margin: 0 auto; border: 0; background: transparent;" />
                   </td>
                 </tr>
                 <tr>
-                  <td align="center" style="padding-bottom: 2px;">
-                    <div style="font-family: 'Cinzel', 'Georgia', serif; font-size: 20px; font-weight: 800; color: ${dayTheme.primaryColor}; letter-spacing: 3px; text-transform: uppercase; line-height: 1.2;">
-                      ONGC NAVRATRI 2026
+                  <td align="center" style="padding-bottom: 4px;">
+                    <div style="font-size: 10px; font-weight: 800; color: #C49A45; letter-spacing: 2px; text-transform: uppercase;">
+                      TITLE SPONSOR
                     </div>
+                    <img src="${brandingUrls.zairaDiamondLogoUrl}" alt="Zaira Diamond" width="120" style="display: block; width: 120px; max-width: 130px; height: auto; margin: 4px auto 0 auto; border: 0;" />
                   </td>
                 </tr>
                 <tr>
-                  <td align="center">
-                    <div style="font-size: 11px; font-weight: 700; color: ${dayTheme.secondaryColor}; letter-spacing: 1.5px; text-transform: uppercase;">
-                      OFFICIAL EMPLOYEE & FAMILY ENTRY E-PASS
+                  <td align="center" style="padding-top: 8px;">
+                    <div style="font-size: 11px; font-weight: 800; color: ${dayTheme.primaryColor}; letter-spacing: 1.5px; text-transform: uppercase;">
+                      PERMANENT EMPLOYEE &amp; FAMILY ENTRY E-PASS
                     </div>
                   </td>
                 </tr>
@@ -929,19 +930,15 @@ Reworkzone.com (https://reworkzone.com)
                 Hello ${this.escapeHtml(presentation.attendeeName)},
               </div>
               <div style="font-size: 13px; color: #4A3B32; line-height: 1.5; margin-bottom: 16px;">
-                Your official entry pass for:
+                Your official permanent entry pass for <strong>ONGC Navratri 2026</strong> is ready.
                 <div style="margin: 8px 0; padding: 12px 16px; background-color: ${dayTheme.bgColor}; border-left: 4px solid ${dayTheme.primaryColor}; border-radius: 8px; border: 1px solid #EADDCF;">
-                  <div style="font-size: 15px; font-weight: 800; color: ${dayTheme.primaryColor};">
-                    ${presentation.eventDateFormatted} (${dayTheme.dayOfWeek})
-                  </div>
-                  <div style="font-size: 12px; font-weight: 800; color: ${dayTheme.secondaryColor}; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;">
-                    NIGHT ${presentation.nightNumber} OF 9 — ${presentation.themeTitle}
+                  <div style="font-size: 14px; font-weight: 800; color: ${dayTheme.primaryColor};">
+                    NIGHT ${presentation.nightNumber} &bull; ${presentation.themeTitle}
                   </div>
                   <div style="font-size: 11px; color: #6E5C50; margin-top: 2px;">
-                    Visual Motif: ${presentation.motifName}
+                    One QR For The Entire Navratri Festival &bull; Entry authorized date-by-date at the turnstile.
                   </div>
                 </div>
-                is ready. Please present this date-specific pass at the gate.
               </div>
 
               <!-- ==================== TICKET PREVIEW ==================== -->
@@ -950,7 +947,7 @@ Reworkzone.com (https://reworkzone.com)
                   <td style="padding: 20px 18px; text-align: center;">
                     <!-- TOP TICKET TAG -->
                     <div style="display: inline-block; background-color: ${dayTheme.primaryColor}; border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 800; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
-                      NIGHT ${presentation.nightNumber} &bull; ${presentation.themeTitle}
+                      PERMANENT ENTRY PASS
                     </div>
 
                     <!-- ATTENDEE NAME -->
@@ -976,9 +973,10 @@ Reworkzone.com (https://reworkzone.com)
                             <div><strong>Ref No.:</strong> <span style="font-family: monospace; color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.referenceNumber || presentation.employeeCpf)}</span></div>
                             <div><strong>Department:</strong> <span style="color: #1A1A1A;">${this.escapeHtml(presentation.department)}</span></div>
                           `}
-                          <div><strong>Authorized Date:</strong> <span style="font-weight: 800; color: ${dayTheme.primaryColor};">${presentation.eventDateFormatted}</span></div>
+                          <div><strong>Ticket Number:</strong> <span style="font-family: monospace; color: #1A1A1A; font-weight: 700;">${this.escapeHtml(presentation.ticketNumber)}</span></div>
+                          <div><strong>Pass Status:</strong> <span style="font-weight: 800; color: #15803D;">ACTIVE</span></div>
                           <div><strong>Venue:</strong> ${presentation.venue.name}</div>
-                          <div><strong>Entry Timing:</strong> ${presentation.entryTiming}</div>
+                          <div><strong>Entry Timing:</strong> From 7:00 PM onwards</div>
                         </td>
                       </tr>
                     </table>
@@ -994,15 +992,15 @@ Reworkzone.com (https://reworkzone.com)
                               QR code loading...
                             </div>
                           `}
-                          <div style="display: inline-block; background-color: ${dayTheme.bgColor}; border: 1px solid ${dayTheme.primaryColor}; border-radius: 12px; padding: 4px 10px; margin-top: 8px; font-size: 10px; font-weight: 900; letter-spacing: 1px; color: ${dayTheme.primaryColor}; text-transform: uppercase;">
-                            VALID STRICTLY ON ${presentation.eventDateFormatted.toUpperCase()}
+                          <div style="display: inline-block; background-color: ${dayTheme.bgColor}; border: 1px solid ${dayTheme.primaryColor}; border-radius: 12px; padding: 4px 12px; margin-top: 8px; font-size: 10px; font-weight: 900; letter-spacing: 1px; color: ${dayTheme.primaryColor}; text-transform: uppercase;">
+                            VALID STRICTLY ON ${dayTheme.fullDateLabel.toUpperCase()} &bull; PERMANENT PASS
                           </div>
                         </td>
                       </tr>
                     </table>
 
                     <div style="font-size: 11px; color: #6E5C50; margin-top: 4px;">
-                      Single-entry credential valid strictly for ${presentation.eventDateFormatted}.
+                      One entry per person per eligible event day. Server authorizes entry date-by-date.
                     </div>
                   </td>
                 </tr>
@@ -1016,7 +1014,7 @@ Reworkzone.com (https://reworkzone.com)
                       <tr>
                         <td align="center" style="padding: 6px;">
                           <a href="${viewTicketUrl}" target="_blank" style="display: inline-block; background-color: ${dayTheme.primaryColor}; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 800; text-decoration: none; padding: 13px 24px; border-radius: 12px; letter-spacing: 0.5px; border: 1px solid ${dayTheme.secondaryColor}; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
-                            &#x1F39F;&#xFE0F; VIEW TICKET
+                            &#x1F39F;&#xFE0F; VIEW PERMANENT PASS
                           </a>
                         </td>
                         <td align="center" style="padding: 6px;">
@@ -1033,29 +1031,47 @@ Reworkzone.com (https://reworkzone.com)
               <!-- INSTRUCTIONS BELOW BUTTONS -->
               <div style="text-align: center; margin-bottom: 22px;">
                 <p style="font-size: 13px; color: #4A3B32; margin: 0 0 4px 0;">
-                  Your QR code is also included in the ticket above.
+                  Your permanent QR code is included in the pass above.
                 </p>
                 <p style="font-size: 13px; font-weight: 700; color: #2A1810; margin: 0 0 4px 0;">
-                  Please show this QR at the entry gate.
+                  Please present this QR at the designated turnstiles on each of your registered event days.
                 </p>
                 <p style="font-size: 12px; font-weight: 600; color: ${dayTheme.primaryColor}; margin: 0;">
-                  This QR is valid only for the date shown on the ticket (${dayTheme.fullDateLabel}).
+                  Your QR remains the same throughout Navratri 2026.
                 </p>
               </div>
 
               <!-- GUIDELINES -->
               <div style="background-color: #FAF5F0; border: 1px solid ${dayTheme.secondaryColor}; border-left: 4px solid ${dayTheme.primaryColor}; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px;">
                 <h4 style="font-size: 12px; font-weight: 800; color: ${dayTheme.primaryColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">
-                  ENTRY GUIDELINES
+                  PERMANENT PASS ENTRY GUIDELINES
                 </h4>
                 <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #4A3B32; line-height: 1.6;">
                   <li>Keep this digital pass or downloaded PDF ready on your mobile device at the gate.</li>
-                  <li>Each attendee must present their own specific QR pass.</li>
-                  <li>This pass allows <strong>single entry only</strong> on ${dayTheme.fullDateLabel}.</li>
-                  <li>Once scanned, the pass cannot be reused on the same day or any other date.</li>
-                  <li>Passes are strictly non-transferable. Please carry valid photo ID.</li>
+                  <li><strong>One Permanent QR:</strong> Your QR code remains unchanged across all your registered event dates.</li>
+                  <li><strong>Daily Authorization:</strong> Entry authorization is verified date-by-date at the turnstile for your registered dates.</li>
+                  <li><strong>Single Entry Per Day:</strong> Each registered person is permitted one entry per eligible event day. Repeated same-day scans are rejected.</li>
+                  <li>Passes are strictly non-transferable. Please carry valid government/employee photo ID.</li>
                 </ul>
               </div>
+
+              <!-- ==================== ORGANISED BY (BOTTOM CENTER) ==================== -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0 12px 0; border-top: 1px solid #E5D5BA; padding-top: 16px;">
+                <tr>
+                  <td align="center">
+                    <div style="font-size: 10px; font-weight: 700; color: #8A7B70; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;">
+                      ORGANISED BY
+                    </div>
+                    <img src="${brandingUrls.digantArtLogoUrl}" alt="Digant Art" width="90" style="display: block; width: 90px; max-width: 90px; height: auto; margin: 0 auto 6px auto; border: 0;" />
+                    <div style="font-size: 12px; font-weight: 800; color: ${dayTheme.primaryColor}; letter-spacing: 0.5px;">
+                      Organised by Digant Art
+                    </div>
+                    <div style="font-size: 10px; color: #8A7B70; margin-top: 2px;">
+                      E-Ticketing &amp; E-Pass System by Reworkzone.com
+                    </div>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
@@ -1069,7 +1085,7 @@ Reworkzone.com (https://reworkzone.com)
                 For assistance, contact <a href="mailto:ongcnavratri@gmail.com" style="color: #F5E6B3; text-decoration: underline;">ongcnavratri@gmail.com</a>
               </div>
               <div style="font-size: 11px; color: #A69080; border-top: 1px solid rgba(229, 213, 186, 0.15); padding-top: 8px; margin-top: 8px;">
-                Official date-specific pass delivery &bull; Organizer: Digant Art &bull; Venue: Malaviya Cricket Ground ONGC
+                Official Permanent E-Pass Delivery &bull; Organizer: Digant Art &bull; Venue: Malaviya Cricket Ground ONGC
               </div>
             </td>
           </tr>
@@ -1083,32 +1099,32 @@ Reworkzone.com (https://reworkzone.com)
 
     const textContent = `
 ONGC NAVRATRI 2026
-Your Daily Entry Pass
+Official Permanent Entry Pass
 
 Hello ${presentation.attendeeName},
 
-Your entry pass for:
-${dayTheme.fullDateLabel} (${dayTheme.dayOfWeek})
-NIGHT ${presentation.nightNumber} — ${presentation.themeTitle}
-is ready.
+Your permanent entry pass for ONGC Navratri 2026 is ready.
+This single QR pass is valid for all your registered event dates.
 
 PASS DETAILS:
 Attendee: ${presentation.attendeeName}
 Pass Type: ${presentation.passTypeWithRelation}
-${presentation.isFamily ? `Primary Employee: ${presentation.primaryEmployeeName}\nRef No.: ${presentation.referenceNumber || presentation.employeeCpf}\nRelationship: ${presentation.relation}\n` : `Ref No.: ${presentation.referenceNumber || presentation.employeeCpf}\n`}Date: ${dayTheme.fullDateLabel}
-Venue: Malaviya Cricket Ground ONGC, Ahmedabad
+${presentation.isFamily ? `Primary Employee: ${presentation.primaryEmployeeName}\nRef No.: ${presentation.referenceNumber || presentation.employeeCpf}\nRelationship: ${presentation.relation}\n` : `Ref No.: ${presentation.referenceNumber || presentation.employeeCpf}\n`}Venue: Malaviya Cricket Ground ONGC, Ahmedabad
 Gates Open: From 7:00 PM
 
 ACTIONS:
-- View Online Ticket: ${viewTicketUrl}
-- Download PDF Ticket: ${downloadPdfUrl}
+- View Online Pass: ${viewTicketUrl}
+- Download PDF Pass: ${downloadPdfUrl}
 
-Your QR code is also included in the ticket above.
-Please show this QR at the entry gate.
-This QR is valid only for the date shown on the ticket.
+IMPORTANT PASS RULES:
+1. One Permanent QR: The same QR pass is used for all your registered event nights.
+2. Daily Authorization: Entry is validated by the server at the gate on each registered date.
+3. Single Entry Per Day: Maximum one entry per person per event day. Repeated scans on the same day are rejected.
+4. Non-Transferable: Please carry valid ID matching your registration.
 
+Organised by Digant Art
+E-Ticketing & E-Pass System by Reworkzone.com
 ONGC Navratri 2026 Organizing Committee
-Organizer: Digant Art
     `.trim();
 
     return {

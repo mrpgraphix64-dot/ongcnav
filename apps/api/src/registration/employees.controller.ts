@@ -165,6 +165,45 @@ export class EmployeesController {
     });
   }
 
+  @Get(['employees/qr-release/passes', 'employees/permanent-passes'])
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'List permanent employee QR passes across all approved employees' })
+  async listPermanentPasses(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('emailStatus') emailStatus?: string,
+    @Query('qrStatus') qrStatus?: string,
+  ) {
+    return this.employeesService.listPermanentQrPasses({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      emailStatus,
+      qrStatus,
+    });
+  }
+
+  @Post('employees/qr-release/send-email')
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE_ADMIN,
+    UserRole.EVENT_ADMIN,
+  )
+  @ApiOperation({ summary: 'Send or resend permanent QR pass email for a specific attendee' })
+  async sendPermanentPassEmail(@Body() body: { attendeeId: string }) {
+    if (!body?.attendeeId || !/^\d+$/.test(body.attendeeId)) {
+      throw new BadRequestException('Invalid attendeeId provided.');
+    }
+    return this.employeesService.releaseEmployeeQrPasses({
+      attendeeId: BigInt(body.attendeeId),
+    });
+  }
+
   @Get('employees')
   @Roles(
     UserRole.SUPER_ADMIN,

@@ -567,27 +567,57 @@ export class RegistrationService {
       }
     }
 
-    const pass = await this.prisma.dailyEmployeePass.findUnique({
-      where: { qrToken: cleanToken },
-      include: {
-        attendee: {
-          include: {
-            employee: true,
-            familyMember: {
-              include: {
-                employee: true,
+    let pass: any = null;
+    try {
+      pass = await this.prisma.dailyEmployeePass.findUnique({
+        where: { qrToken: cleanToken },
+        include: {
+          attendee: {
+            include: {
+              employee: true,
+              familyMember: {
+                include: {
+                  employee: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
+    } catch {}
 
-    if (!pass) {
-      throw new NotFoundException('Daily pass not found');
+    let attendee: any = null;
+    let eventDate = '2026-10-11';
+    let passStatus = 'ACTIVE';
+
+    if (pass) {
+      attendee = pass.attendee;
+      eventDate = pass.eventDate;
+      passStatus = pass.status;
+    } else {
+      attendee = await this.prisma.attendee.findFirst({
+        where: {
+          OR: [{ qrCodeToken: cleanToken }, { ticketNumber: cleanToken }],
+        },
+        include: {
+          employee: true,
+          familyMember: {
+            include: {
+              employee: true,
+            },
+          },
+        },
+      });
+
+      if (!attendee) {
+        throw new NotFoundException('Entry pass not found');
+      }
+
+      const days = resolveBookingDays(attendee);
+      eventDate = days[0] || '2026-10-11';
+      passStatus = attendee.status || 'ACTIVE';
     }
 
-    const attendee = pass.attendee;
     const familyMember = attendee.familyMember;
     const primaryEmployee = familyMember?.employee || attendee.employee;
 
@@ -600,13 +630,13 @@ export class RegistrationService {
     const department = primaryEmployee?.department || 'EWC Ahmedabad';
     const passType = isFamily ? `Family Member Pass (${relation})` : 'ONGC Employee Pass';
     const ticketNumber = attendee.ticketNumber || `TK-${cleanToken.substring(0, 10).toUpperCase()}`;
-    const dayTheme: EventDayTheme = getEventDayTheme(pass.eventDate);
+    const dayTheme: EventDayTheme = getEventDayTheme(eventDate);
 
     const presentation = buildDailyEmployeePassPresentation({
-      eventDate: pass.eventDate,
+      eventDate,
       ticketNumber,
-      qrToken: pass.qrToken,
-      status: pass.status,
+      qrToken: cleanToken,
+      status: passStatus,
       attendeeName,
       isFamily,
       relation,

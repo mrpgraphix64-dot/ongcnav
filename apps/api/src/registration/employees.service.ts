@@ -1297,7 +1297,7 @@ export class EmployeesService {
     return updated;
   }
 
-  async releaseEmployeeQrPasses(options?: { retryFailedOnly?: boolean; passId?: bigint }) {
+  async releaseEmployeeQrPasses(options?: { retryFailedOnly?: boolean; passId?: bigint; attendeeId?: bigint }) {
     // 1. Fetch eligible attendees
     const eligibleAttendees = await this.prisma.attendee.findMany({
       where: {
@@ -1347,7 +1347,9 @@ export class EmployeesService {
 
     // 4. Filter target attendees
     let targetAttendees = activeAttendees;
-    if (options?.retryFailedOnly) {
+    if (options?.attendeeId) {
+      targetAttendees = activeAttendees.filter((att) => att.id === options.attendeeId);
+    } else if (options?.retryFailedOnly) {
       targetAttendees = activeAttendees.filter(
         (att) => deliveryRecords[att.id.toString()]?.status === 'FAILED',
       );
@@ -1488,6 +1490,122 @@ export class EmployeesService {
       totalFailed,
       message: summaryMsg,
       schedule: updatedSchedule,
+    };
+  }
+
+  async listPermanentQrPasses(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    emailStatus?: string;
+    qrStatus?: string;
+  }) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const deliverySetting = await this.prisma.setting.findUnique({
+      where: { key: 'employee.qr_release.delivery_records' },
+    });
+    let deliveryRecords: Record<string, { status: string; sentAt?: string; error?: string }> = {};
+    if (deliverySetting?.value) {
+      try {
+        deliveryRecords = JSON.parse(deliverySetting.value) || {};
+      } catch {}
+    }
+
+    const allApprovedAttendees = await this.prisma.attendee.findMany({
+      where: {
+        isLoadTest: false,
+        status: AttendeeStatus.ACTIVE as any,
+        OR: [
+          { registrationType: RegistrationType.EMPLOYEE as any },
+          { employeeId: { not: null } },
+        ],
+        employee: {
+          registrationStatus: RegistrationStatus.APPROVED as any,
+        },
+      },
+      include: {
+        employee: true,
+        familyMember: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const activeAttendees = allApprovedAttendees.filter((att) => {
+      const days = resolveBookingDays(att);
+      return days.length > 0;
+    });
+
+    let passes = activeAttendees.map((att) => {
+      const emp = att.employee;
+      const fam = att.familyMember;
+      const attendeeName = fam ? fam.name : (emp?.name || att.name || 'Employee');
+      const relation = fam ? fam.relation : 'Primary Employee';
+      const isFamily = !!fam;
+      const recipientEmail = (fam ? (fam.email || att.email || emp?.email) : (emp?.email || att.email))?.trim() || '';
+      const recipientPhone = (fam ? (fam.phone || emp?.phone) : emp?.phone)?.trim() || '';
+      const delivery = deliveryRecords[att.id.toString()];
+      const bookingDays = resolveBookingDays(att);
+      const hasQr = Boolean(att.qrCodeToken && att.qrCodeToken.trim() !== '');
+
+      return {
+        id: att.id.toString(),
+        attendeeId: att.id.toString(),
+        attendeeName,
+        relation,
+        isFamily,
+        employeeName: emp?.name || attendeeName,
+        cpf: emp?.cpf || 'N/A',
+        referenceNumber: emp?.referenceNumber || emp?.cpf || 'N/A',
+        department: emp?.department || '',
+        email: recipientEmail,
+        phone: recipientPhone,
+        qrCodeToken: att.qrCodeToken || '',
+        ticketNumber: att.ticketNumber || '',
+        bookingDays,
+        status: att.status,
+        qrStatus: hasQr ? 'ACTIVE' : 'PENDING',
+        emailStatus: delivery?.status || 'PENDING',
+        emailSentAt: delivery?.sentAt || null,
+        emailError: delivery?.error || null,
+        createdAt: att.createdAt ? att.createdAt.toISOString() : new Date().toISOString(),
+      };
+    });
+
+    if (query.search && query.search.trim()) {
+      const q = query.search.toLowerCase().trim();
+      passes = passes.filter(
+        (p) =>
+          p.attendeeName.toLowerCase().includes(q) ||
+          p.employeeName.toLowerCase().includes(q) ||
+          p.cpf.toLowerCase().includes(q) ||
+          p.referenceNumber.toLowerCase().includes(q) ||
+          p.email.toLowerCase().includes(q) ||
+          p.phone.includes(q) ||
+          p.qrCodeToken.toLowerCase().includes(q),
+      );
+    }
+
+    if (query.emailStatus && query.emailStatus !== 'ALL') {
+      passes = passes.filter((p) => p.emailStatus === query.emailStatus);
+    }
+
+    if (query.qrStatus && query.qrStatus !== 'ALL') {
+      passes = passes.filter((p) => p.qrStatus === query.qrStatus);
+    }
+
+    const total = passes.length;
+    const paginated = passes.slice(skip, skip + limit);
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    return {
+      passes: paginated,
+      total,
+      page,
+      limit,
+      totalPages,
     };
   }
 }

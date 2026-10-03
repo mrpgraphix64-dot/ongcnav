@@ -310,23 +310,33 @@ function EmployeeTicketsContent() {
 
                     <div className="relative z-10 flex flex-col justify-between">
                       {/* CARD HEADER */}
-                      <div className="flex items-start justify-between gap-4 pb-4 border-b border-gold/30">
-                        <div className="flex items-center gap-3">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-gold/30">
+                        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                           <img
-                            src="/images/logo-web.png"
-                            alt="ONGC Logo"
-                            className="h-10 sm:h-12 w-auto object-contain shrink-0 bg-white/95 p-1 rounded-xl border border-gold/50 shadow-md"
+                            src="/images/ongc-navratri-2026-festival-emblem.png"
+                            alt="ONGC Navratri 2026"
+                            className="h-14 sm:h-16 w-auto object-contain shrink-0 bg-white/95 p-1 rounded-xl border border-gold/50 shadow-md"
                           />
                           <div>
-                            <div className="font-cinzel font-bold text-lg sm:text-xl text-gold tracking-wider">
-                              NAVRATRI
+                            <div className="font-cinzel font-bold text-base sm:text-lg text-gold tracking-wider">
+                              ONGC NAVRATRI 2026
                             </div>
-                            <div className="text-[11px] font-semibold text-gold-light/80 uppercase tracking-widest">
-                              EWC AHMEDABAD 2026
+                            <div className="text-[10px] font-semibold text-gold-light/80 uppercase tracking-widest">
+                              Official Permanent Pass
                             </div>
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
+                        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                          <div className="text-center sm:text-right bg-black/30 px-3 py-1.5 rounded-xl border border-gold/30">
+                            <span className="text-[8px] font-extrabold uppercase tracking-widest text-gold-light block">
+                              TITLE SPONSOR
+                            </span>
+                            <img
+                              src="/images/sponsors/zaira-diamond-logo.png"
+                              alt="Zaira Diamond"
+                              className="h-5 w-auto object-contain mx-auto sm:ml-auto mt-0.5"
+                            />
+                          </div>
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gold text-maroon-deep shadow-md">
                             <Award className="w-3.5 h-3.5" />
                             <span>
@@ -431,6 +441,24 @@ function EmployeeTicketsContent() {
                             <span>Open Dedicated Pass</span>
                             <ArrowRight className="w-3.5 h-3.5" />
                           </Link>
+                        </div>
+                      </div>
+
+                      {/* Organised By & Partner (Bottom Center) */}
+                      <div className="mt-4 pt-3 border-t border-gold/20 text-center space-y-1">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-gold-light/70 block">
+                          ORGANISED BY
+                        </span>
+                        <img
+                          src="/images/digant-art-logo.png"
+                          alt="Digant Art"
+                          className="h-7 w-auto object-contain mx-auto bg-white/90 p-0.5 rounded"
+                        />
+                        <div className="text-xs font-bold text-gold">
+                          Organised by Digant Art
+                        </div>
+                        <div className="text-[10px] text-cream/60">
+                          E-Ticketing &amp; E-Pass System by Reworkzone.com
                         </div>
                       </div>
                     </div>

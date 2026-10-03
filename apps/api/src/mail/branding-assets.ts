@@ -6,6 +6,8 @@
 
 export const EMAIL_BRANDING_PATHS = {
   ongcLogo: '/images/logo-web.png',
+  festivalEmblem: '/images/ongc-navratri-2026-festival-emblem.png',
+  legacyOngcLogo: '/images/logo-web.png',
   zairaDiamondLogo: '/images/sponsors/zaira-diamond-logo.png',
   omSanctuaryLogo: '/images/sponsors/om-sanctuary-palace-logo.png',
   lalkaarLogo: '/images/sponsors/lalkaar-news-logo.png',
@@ -14,6 +16,7 @@ export const EMAIL_BRANDING_PATHS = {
 
 export interface EmailBrandingUrls {
   ongcLogoUrl: string;
+  festivalEmblemUrl: string;
   zairaDiamondLogoUrl: string;
   omSanctuaryLogoUrl: string;
   lalkaarLogoUrl: string;
@@ -24,6 +27,7 @@ export function getEmailBrandingUrls(baseUrl: string): EmailBrandingUrls {
   const cleanBase = (baseUrl || 'https://ongcnavratri.reworkzone.in').replace(/\/+$/, '');
   return {
     ongcLogoUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.ongcLogo}`,
+    festivalEmblemUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.festivalEmblem}`,
     zairaDiamondLogoUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.zairaDiamondLogo}`,
     omSanctuaryLogoUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.omSanctuaryLogo}`,
     lalkaarLogoUrl: `${cleanBase}${EMAIL_BRANDING_PATHS.lalkaarLogo}`,
