@@ -26,7 +26,12 @@ import { WhatsAppTestModule } from './testing/whatsapp-test/whatsapp-test.module
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env'],
+      envFilePath: [
+        '.env',
+        'apps/api/.env',
+        '../../.env',
+        '../.env',
+      ],
     }),
     MailModule,
     PrismaModule,

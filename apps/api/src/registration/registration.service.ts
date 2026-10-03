@@ -74,8 +74,8 @@ export class RegistrationService {
 
   async verifyEmployee(cpf: string, mobile: string) {
     const cleanCpf = (cpf || '').trim();
-    if (!/^[0-9]{5}$/.test(cleanCpf)) {
-      throw new BadRequestException('Employee CPF No. must accept ONLY 5 numeric digits.');
+    if (!/^[0-9]{5,6}$/.test(cleanCpf)) {
+      throw new BadRequestException('Employee CPF No. must contain 5 or 6 numeric digits.');
     }
     const cleanMobile = (mobile || '').trim();
     if (!/^[6-9][0-9]{9}$/.test(cleanMobile)) {
@@ -100,6 +100,11 @@ export class RegistrationService {
       const master = await this.prisma.ongcEmployeeMaster.findUnique({
         where: { cpf: cleanCpf },
       });
+      if (master && (!master.mobile || master.mobile.trim() === '')) {
+        throw new BadRequestException(
+          'Your CPF is present in the official ONGC records, but no mobile number is available for this CPF. Please contact the event team for verification.',
+        );
+      }
       const masterMobile = (master?.mobile || '').replace(/\D/g, '');
       if (!master || !masterMobile.endsWith(cleanMobile)) {
         throw new BadRequestException(
@@ -224,8 +229,8 @@ export class RegistrationService {
     }
 
     const cleanCpf = dto.cpf.trim();
-    if (!/^[0-9]{5}$/.test(cleanCpf)) {
-      throw new BadRequestException('Employee CPF No. must accept ONLY 5 numeric digits.');
+    if (!/^[0-9]{5,6}$/.test(cleanCpf)) {
+      throw new BadRequestException('Employee CPF No. must contain 5 or 6 numeric digits.');
     }
 
     // Check if employee already registered
@@ -245,6 +250,11 @@ export class RegistrationService {
       const master = await this.prisma.ongcEmployeeMaster.findUnique({
         where: { cpf: cleanCpf },
       });
+      if (master && (!master.mobile || master.mobile.trim() === '')) {
+        throw new BadRequestException(
+          'Your CPF is present in the official ONGC records, but no mobile number is available for this CPF. Please contact the event team for verification.',
+        );
+      }
       const cleanPhone = (dto.phone || '').replace(/\D/g, '');
       const masterMobile = (master?.mobile || '').replace(/\D/g, '');
       if (!master || !masterMobile.endsWith(cleanPhone)) {

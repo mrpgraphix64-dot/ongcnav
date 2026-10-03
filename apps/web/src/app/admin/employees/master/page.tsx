@@ -27,7 +27,7 @@ import AdminModal from '@/components/admin/AdminModal';
 interface MasterRecord {
   id: string;
   cpfNo: string;
-  mobileNo: string;
+  mobileNo: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,8 +35,9 @@ interface MasterRecord {
 interface ValidationRowPreview {
   row: number;
   cpfNo: string;
-  mobileNo: string;
+  mobileNo: string | null;
   status: 'VALID' | 'INVALID' | 'DUPLICATE' | 'CONFLICT' | 'IDENTICAL';
+  mobileState?: 'VALID' | 'MISSING' | 'INVALID';
   reason?: string;
 }
 
@@ -44,11 +45,18 @@ interface ValidationResponse {
   success: boolean;
   fileName: string;
   totalRows: number;
+  sourceRows: number;
   validCount: number;
-  invalidCount: number;
-  duplicateCount: number;
-  conflictCount: number;
+  newCount: number;
   identicalCount: number;
+  conflictCount: number;
+  missingMobileCount: number;
+  invalidCpfCount: number;
+  invalidMobileCount: number;
+  duplicateCount: number;
+  blankRowCount: number;
+  invalidCount: number;
+  currentDatabaseCount: number;
   rows: ValidationRowPreview[];
 }
 
@@ -455,30 +463,51 @@ export default function OngcEmployeeMasterPage() {
                   <th className="py-2.5 px-4 w-16">#</th>
                   <th className="py-2.5 px-4">CPF NO</th>
                   <th className="py-2.5 px-4">Mobile No</th>
+                  <th className="py-2.5 px-4">Status</th>
                   <th className="py-2.5 px-4">Added On</th>
                   <th className="py-2.5 px-4">Updated On</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {records.map((r, idx) => (
-                  <tr key={r.id || r.cpfNo} className="hover:bg-cream-soft/40 transition-colors">
-                    <td className="py-2.5 px-4 text-stone-400 font-mono text-[11px]">
-                      {(page - 1) * limit + idx + 1}
-                    </td>
-                    <td className="py-2.5 px-4 font-mono font-bold text-maroon text-sm">
-                      {r.cpfNo}
-                    </td>
-                    <td className="py-2.5 px-4 font-mono font-semibold text-ink text-sm">
-                      {r.mobileNo}
-                    </td>
-                    <td className="py-2.5 px-4 text-stone-500 text-[11px]">
-                      {formatTimestamp(r.createdAt)}
-                    </td>
-                    <td className="py-2.5 px-4 text-stone-500 text-[11px]">
-                      {formatTimestamp(r.updatedAt)}
-                    </td>
-                  </tr>
-                ))}
+                {records.map((r, idx) => {
+                  const hasMobile = Boolean(r.mobileNo && r.mobileNo.trim() !== '');
+                  return (
+                    <tr key={r.id || r.cpfNo} className="hover:bg-cream-soft/40 transition-colors">
+                      <td className="py-2.5 px-4 text-stone-400 font-mono text-[11px]">
+                        {(page - 1) * limit + idx + 1}
+                      </td>
+                      <td className="py-2.5 px-4 font-mono font-bold text-maroon text-sm">
+                        {r.cpfNo}
+                      </td>
+                      <td className="py-2.5 px-4 font-mono font-semibold text-ink text-sm">
+                        {hasMobile ? (
+                          r.mobileNo
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            MOBILE NO. MISSING
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        {hasMobile ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            ACTIVE
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            NO MOBILE
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4 text-stone-500 text-[11px]">
+                        {formatTimestamp(r.createdAt)}
+                      </td>
+                      <td className="py-2.5 px-4 text-stone-500 text-[11px]">
+                        {formatTimestamp(r.updatedAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -603,8 +632,8 @@ export default function OngcEmployeeMasterPage() {
                   Header Format Rules:
                 </div>
                 <p>&bull; Case-insensitive headers: <code className="bg-white px-1 py-0.5 rounded border border-stone-200">CPF NO</code> and <code className="bg-white px-1 py-0.5 rounded border border-stone-200">Mobile No</code></p>
-                <p>&bull; CPF Number must contain exactly 5 numeric digits (e.g. 12345).</p>
-                <p>&bull; Mobile Number must be a valid 10-digit Indian mobile number.</p>
+                <p>&bull; CPF Number must contain 5 or 6 numeric digits (e.g. 29344 or 103506).</p>
+                <p>&bull; Mobile Number is optional. If provided, must be a valid 10-digit Indian mobile number.</p>
               </div>
             </div>
           )}
@@ -621,9 +650,9 @@ export default function OngcEmployeeMasterPage() {
           {/* STEP 3: PREVIEW & CONFIRMATION */}
           {uploadStep === 'PREVIEW' && validationPreview && (
             <div className="space-y-4">
-              {/* REPLACEMENT WARNING BOX (Section 8) */}
+              {/* REPLACEMENT WARNING BOX (Section 8 & 12) */}
               {modalMode === 'REPLACE' && (
-                <div className="p-3.5 rounded-xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs space-y-2">
+                <div className="p-3.5 rounded-xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs space-y-2.5">
                   <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-rose-800">
                     <AlertTriangle className="w-4 h-4 text-rose-600" />
                     <span>Important Master Data Replacement Warning</span>
@@ -631,6 +660,34 @@ export default function OngcEmployeeMasterPage() {
                   <p className="leading-relaxed">
                     Replace Master Data will replace the official CPF/Mobile verification records currently used for employee registration. Existing employee registrations, family records, passes, QR codes, check-ins and historical data will <strong>NOT</strong> be deleted.
                   </p>
+
+                  <div className="bg-white/80 p-2.5 rounded-lg border border-rose-200 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-stone-500 block">Current records in DB:</span>
+                      <strong className="text-ink font-mono">{validationPreview.currentDatabaseCount ?? total}</strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Incoming source rows:</span>
+                      <strong className="text-ink font-mono">{validationPreview.sourceRows || validationPreview.totalRows}</strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Valid unique CPFs to store:</span>
+                      <strong className="text-emerald-700 font-mono">{validationPreview.validCount}</strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Missing mobile records:</span>
+                      <strong className="text-amber-700 font-mono">{validationPreview.missingMobileCount || 0}</strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Invalid records (skipped):</span>
+                      <strong className="text-rose-700 font-mono">{validationPreview.invalidCount}</strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Duplicate records (skipped):</span>
+                      <strong className="text-orange-700 font-mono">{validationPreview.duplicateCount}</strong>
+                    </div>
+                  </div>
+
                   <label className="flex items-start gap-2 pt-1 font-bold text-rose-950 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -638,7 +695,7 @@ export default function OngcEmployeeMasterPage() {
                       onChange={(e) => setReplaceConfirmed(e.target.checked)}
                       className="mt-0.5 rounded border-rose-400 text-maroon focus:ring-maroon"
                     />
-                    <span>I understand and confirm that all master verification records will be replaced. Existing event records remain untouched.</span>
+                    <span>I understand and confirm that all master verification records will be replaced with the validated file records. Existing event registrations and operational data remain untouched.</span>
                   </label>
                 </div>
               )}
@@ -678,31 +735,43 @@ export default function OngcEmployeeMasterPage() {
                 </div>
               )}
 
-              {/* SUMMARY STATS STRIP */}
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
+              {/* SUMMARY STATS STRIP (9 Audit Metrics) */}
+              <div className="grid grid-cols-3 sm:grid-cols-9 gap-2 text-center text-xs">
                 <div className="p-2 bg-stone-50 rounded-xl border border-stone-200">
-                  <span className="text-[10px] text-stone-500 block uppercase font-bold">Total Rows</span>
-                  <span className="font-outfit font-black text-sm text-ink">{validationPreview.totalRows}</span>
+                  <span className="text-[9px] text-stone-500 block uppercase font-bold">Total Rows</span>
+                  <span className="font-outfit font-black text-sm text-ink">{validationPreview.sourceRows || validationPreview.totalRows}</span>
                 </div>
                 <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-200">
-                  <span className="text-[10px] text-emerald-700 block uppercase font-bold">Valid</span>
+                  <span className="text-[9px] text-emerald-700 block uppercase font-bold">Valid</span>
                   <span className="font-outfit font-black text-sm text-emerald-800">{validationPreview.validCount}</span>
                 </div>
+                <div className="p-2 bg-teal-50 rounded-xl border border-teal-200">
+                  <span className="text-[9px] text-teal-700 block uppercase font-bold">New</span>
+                  <span className="font-outfit font-black text-sm text-teal-800">{validationPreview.newCount || 0}</span>
+                </div>
                 <div className="p-2 bg-blue-50 rounded-xl border border-blue-200">
-                  <span className="text-[10px] text-blue-700 block uppercase font-bold">Identical</span>
+                  <span className="text-[9px] text-blue-700 block uppercase font-bold">Identical</span>
                   <span className="font-outfit font-black text-sm text-blue-800">{validationPreview.identicalCount}</span>
                 </div>
                 <div className="p-2 bg-purple-50 rounded-xl border border-purple-200">
-                  <span className="text-[10px] text-purple-700 block uppercase font-bold">Conflicts</span>
+                  <span className="text-[9px] text-purple-700 block uppercase font-bold">Conflicts</span>
                   <span className="font-outfit font-black text-sm text-purple-800">{validationPreview.conflictCount}</span>
                 </div>
                 <div className="p-2 bg-amber-50 rounded-xl border border-amber-200">
-                  <span className="text-[10px] text-amber-700 block uppercase font-bold">Duplicates</span>
-                  <span className="font-outfit font-black text-sm text-amber-800">{validationPreview.duplicateCount}</span>
+                  <span className="text-[9px] text-amber-700 block uppercase font-bold">No Mobile</span>
+                  <span className="font-outfit font-black text-sm text-amber-800">{validationPreview.missingMobileCount || 0}</span>
+                </div>
+                <div className="p-2 bg-orange-50 rounded-xl border border-orange-200">
+                  <span className="text-[9px] text-orange-700 block uppercase font-bold">Duplicates</span>
+                  <span className="font-outfit font-black text-sm text-orange-800">{validationPreview.duplicateCount}</span>
                 </div>
                 <div className="p-2 bg-rose-50 rounded-xl border border-rose-200">
-                  <span className="text-[10px] text-rose-700 block uppercase font-bold">Invalid</span>
-                  <span className="font-outfit font-black text-sm text-rose-800">{validationPreview.invalidCount}</span>
+                  <span className="text-[9px] text-rose-700 block uppercase font-bold">Invalid CPF</span>
+                  <span className="font-outfit font-black text-sm text-rose-800">{validationPreview.invalidCpfCount || 0}</span>
+                </div>
+                <div className="p-2 bg-red-50 rounded-xl border border-red-200">
+                  <span className="text-[9px] text-red-700 block uppercase font-bold">Invalid Mob</span>
+                  <span className="font-outfit font-black text-sm text-red-800">{validationPreview.invalidMobileCount || 0}</span>
                 </div>
               </div>
 
@@ -723,7 +792,15 @@ export default function OngcEmployeeMasterPage() {
                       <tr key={i} className="hover:bg-stone-50">
                         <td className="py-1.5 px-3 text-stone-400 font-mono">{r.row}</td>
                         <td className="py-1.5 px-3 font-mono font-bold text-ink">{r.cpfNo}</td>
-                        <td className="py-1.5 px-3 font-mono text-stone-700">{r.mobileNo}</td>
+                        <td className="py-1.5 px-3 font-mono text-stone-700">
+                          {r.mobileNo ? (
+                            r.mobileNo
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                              MISSING
+                            </span>
+                          )}
+                        </td>
                         <td className="py-1.5 px-3">
                           {r.status === 'VALID' ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">

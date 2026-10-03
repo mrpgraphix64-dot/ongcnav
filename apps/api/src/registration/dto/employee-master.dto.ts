@@ -13,17 +13,15 @@ export enum MasterConflictResolution {
 }
 
 export class MasterRowItemDto {
-  @ApiProperty({ description: '5-digit ONGC CPF Number', example: '12345' })
+  @ApiProperty({ description: 'ONGC CPF Number (5 or 6 numeric digits)', example: '12345' })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^[0-9]{5}$/, { message: 'CPF must contain exactly 5 numeric digits' })
+  @Matches(/^[0-9]{5,6}$/, { message: 'CPF must contain 5 or 6 numeric digits' })
   cpfNo: string;
 
-  @ApiProperty({ description: '10-digit Indian Mobile Number', example: '9876543210' })
-  @IsString()
-  @IsNotEmpty()
-  @Matches(/^[6-9][0-9]{9}$/, { message: 'Mobile must be a valid 10-digit Indian mobile number' })
-  mobileNo: string;
+  @ApiPropertyOptional({ description: 'Optional 10-digit Indian Mobile Number', example: '9876543210', nullable: true })
+  @IsOptional()
+  mobileNo?: string | null;
 }
 
 export class ValidateMasterUploadDto {

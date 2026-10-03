@@ -113,4 +113,17 @@ describe('Employee Registration Flow (Web)', () => {
     expect(pageSrc).toContain('Back to Edit');
     expect(pageSrc).toContain('Submit Registration');
   });
+
+  it('renders the 3-Card Scratch & Reveal Section in the post-registration success flow with pass retrieval CTA', () => {
+    const pageSrc = fs.readFileSync(path.join(__dirname, 'page.tsx'), 'utf8');
+
+    // Scratch card component imported and rendered
+    expect(pageSrc).toContain('import ScratchCardsSection from \'@/components/scratch-cards/ScratchCardsSection\';');
+    expect(pageSrc).toContain('<ScratchCardsSection referenceNumber={referenceNumber || \'ONGC-2026\'} />');
+
+    // Official Pass Reference Number banner and existing lookup link preserved
+    expect(pageSrc).toContain('Official Pass Reference Number');
+    expect(pageSrc).toContain('/employee/my-tickets');
+    expect(pageSrc).toContain('View My Passes / Lookup');
+  });
 });

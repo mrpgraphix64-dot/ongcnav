@@ -156,11 +156,11 @@ describe('RegistrationService', () => {
       expect(res.data.employee.referenceNumber).toBe('ONGC-00001');
     });
 
-    it('rejects employee registration if CPF is not strictly 5 numeric digits', async () => {
+    it('rejects employee registration if CPF is not 5 or 6 numeric digits', async () => {
       await expect(service.register({ ...baseDto, cpf: '1234' } as any)).rejects.toThrow(
         BadRequestException,
       );
-      await expect(service.register({ ...baseDto, cpf: '123456' } as any)).rejects.toThrow(
+      await expect(service.register({ ...baseDto, cpf: '1234567' } as any)).rejects.toThrow(
         BadRequestException,
       );
       await expect(service.register({ ...baseDto, cpf: '12A45' } as any)).rejects.toThrow(
@@ -615,11 +615,11 @@ describe('RegistrationService', () => {
   });
 
   describe('verifyEmployee', () => {
-    it('rejects CPF that is not 5 digits', async () => {
+    it('rejects CPF that is not 5 or 6 digits', async () => {
       await expect(service.verifyEmployee('1234', '9876543210')).rejects.toThrow(
         BadRequestException,
       );
-      await expect(service.verifyEmployee('123456', '9876543210')).rejects.toThrow(
+      await expect(service.verifyEmployee('1234567', '9876543210')).rejects.toThrow(
         BadRequestException,
       );
     });

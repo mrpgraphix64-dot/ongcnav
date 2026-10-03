@@ -49,9 +49,10 @@ describe('EmployeeMasterService', () => {
   });
 
   describe('CPF and Mobile Normalization Rules', () => {
-    it('normalizes valid 5-digit CPF with whitespace trimming', () => {
+    it('normalizes valid 5-digit and 6-digit CPF with whitespace trimming', () => {
       expect(normalizeCpf('12345')).toBe('12345');
       expect(normalizeCpf('  65432  ')).toBe('65432');
+      expect(normalizeCpf('103506')).toBe('103506');
     });
 
     it('ensures CPF 12345 remains string "12345" across types', () => {
@@ -59,6 +60,8 @@ describe('EmployeeMasterService', () => {
       expect(typeof normalizeCpf('12345')).toBe('string');
       expect(normalizeCpf(12345)).toBe('12345');
       expect(typeof normalizeCpf(12345)).toBe('string');
+      expect(normalizeCpf(103506)).toBe('103506');
+      expect(typeof normalizeCpf(103506)).toBe('string');
     });
 
     it('preserves leading zero for CPF 01234 as string "01234"', () => {
@@ -69,6 +72,10 @@ describe('EmployeeMasterService', () => {
     it('rejects 4-digit CPF 1234 rather than automatically padding with a zero', () => {
       expect(normalizeCpf('1234')).toBeNull();
       expect(normalizeCpf(1234)).toBeNull();
+    });
+
+    it('rejects 7-digit numbers', () => {
+      expect(normalizeCpf('1234567')).toBeNull();
     });
 
     it('rejects CPF containing letters or special characters', () => {
@@ -85,9 +92,9 @@ describe('EmployeeMasterService', () => {
       expect(typeof normalizeCpf(bigintCpf)).toBe('string');
     });
 
-    it('rejects invalid CPF (less than 5 digits, more than 5 digits, non-numeric)', () => {
+    it('rejects invalid CPF (less than 5 digits, more than 6 digits, non-numeric)', () => {
       expect(normalizeCpf('1234')).toBeNull();
-      expect(normalizeCpf('123456')).toBeNull();
+      expect(normalizeCpf('1234567')).toBeNull();
       expect(normalizeCpf('12A45')).toBeNull();
       expect(normalizeCpf('')).toBeNull();
       expect(normalizeCpf(null)).toBeNull();
@@ -140,22 +147,26 @@ describe('EmployeeMasterService', () => {
       expect(result.rows[0].status).toBe('VALID');
     });
 
-    it('parses Excel (.xlsx) file buffer and preserves leading zeros', async () => {
+    it('parses Excel (.xlsx) file buffer and preserves leading zeros and 6-digit CPFs', async () => {
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet([
         ['CPF NO', 'Mobile No'],
         ['01234', '9876543210'],
         ['12345', '9876543211'],
+        ['103506', ''],
       ]);
       XLSX.utils.book_append_sheet(wb, ws, 'Master');
       const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
       const result = await service.validateFile(excelBuffer, 'master.xlsx');
       expect(result.success).toBe(true);
-      expect(result.validCount).toBe(2);
+      expect(result.validCount).toBe(3);
       expect(result.rows[0].cpfNo).toBe('01234');
       expect(result.rows[0].mobileNo).toBe('9876543210');
       expect(result.rows[1].cpfNo).toBe('12345');
+      expect(result.rows[2].cpfNo).toBe('103506');
+      expect(result.rows[2].mobileNo).toBeNull();
+      expect(result.missingMobileCount).toBe(1);
     });
 
     it('flags invalid CPF and invalid Mobile rows with appropriate reasons', async () => {
@@ -169,10 +180,10 @@ describe('EmployeeMasterService', () => {
       expect(result.validCount).toBe(1);
 
       expect(result.rows[0].status).toBe('INVALID');
-      expect(result.rows[0].reason).toContain('5 numeric digits');
+      expect(result.rows[0].reason).toContain('5 or 6 numeric digits');
 
       expect(result.rows[1].status).toBe('INVALID');
-      expect(result.rows[1].reason).toContain('valid 10-digit Indian mobile');
+      expect(result.rows[1].reason).toContain('Invalid mobile number');
 
       expect(result.rows[2].status).toBe('VALID');
     });
@@ -187,7 +198,7 @@ describe('EmployeeMasterService', () => {
       expect(result.duplicateCount).toBe(1);
       expect(result.validCount).toBe(2);
       expect(result.rows[1].status).toBe('DUPLICATE');
-      expect(result.rows[1].reason).toContain('already exists in file');
+      expect(result.rows[1].reason).toContain('Duplicate CPF in file');
     });
 
     it('detects existing identical vs conflicting records in database', async () => {
@@ -204,7 +215,8 @@ describe('EmployeeMasterService', () => {
       const result = await service.validateFile(csv);
       expect(result.identicalCount).toBe(1);
       expect(result.conflictCount).toBe(1);
-      expect(result.validCount).toBe(1);
+      expect(result.newCount).toBe(1);
+      expect(result.validCount).toBe(3);
 
       expect(result.rows[0].status).toBe('IDENTICAL');
       expect(result.rows[1].status).toBe('CONFLICT');

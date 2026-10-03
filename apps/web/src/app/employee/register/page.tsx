@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import MaintenanceNotice from '@/components/MaintenanceNotice';
+import ScratchCardsSection from '@/components/scratch-cards/ScratchCardsSection';
 import { getEventDayTheme, ALLOWED_FAMILY_RELATIONS, AllowedFamilyRelation } from '@ongc/shared-types';
 
 // ----------------------------------------------------------------------------
@@ -68,7 +69,7 @@ type EmployeeCategory = (typeof EMPLOYEE_CATEGORIES)[number]['value'];
 
 const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CPF_REGEX = /^[0-9]{5}$/;
+const CPF_REGEX = /^[0-9]{5,6}$/;
 
 const REGISTRATION_GUIDELINES = [
   {
@@ -504,7 +505,7 @@ export default function EmployeeRegisterPage() {
     if (!category) return 'Please select an employee category.';
     const cpf = common.cpf.trim();
     if (!cpf) return 'Please enter your ONGC CPF number.';
-    if (!CPF_REGEX.test(cpf)) return 'Employee CPF No. must accept ONLY 5 numeric digits.';
+    if (!CPF_REGEX.test(cpf)) return 'Employee CPF No. must contain 5 or 6 numeric digits.';
     const mobile = common.mobile.trim();
     if (!mobile) return 'Please enter the employee 10-digit mobile number.';
     if (!INDIAN_MOBILE_REGEX.test(mobile)) {
@@ -776,87 +777,92 @@ export default function EmployeeRegisterPage() {
             </p>
           </div>
         ) : submitted ? (
-          /* SUCCESS STATE CARD — PENDING ADMIN REVIEW & DAILY QR DELIVERY */
-          <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/40 shadow-xl text-center space-y-6">
-            <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner border border-emerald-200">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-
-            <div className="space-y-2">
-              <div className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider">
-                Registration Submitted
+          <div className="space-y-8">
+            {/* SUCCESS STATE CARD — PENDING ADMIN REVIEW & DAILY QR DELIVERY */}
+            <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/40 shadow-xl text-center space-y-6">
+              <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner border border-emerald-200">
+                <CheckCircle2 className="w-10 h-10" />
               </div>
-              <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink">
-                Registration Under Review (PENDING)
-              </h2>
-              <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full" />
-            </div>
 
-            {/* Official Pass Reference Number Banner */}
-            {referenceNumber && (
-              <div className="bg-gradient-to-r from-maroon/10 via-gold/15 to-maroon/10 border-2 border-gold/60 rounded-2xl p-5 max-w-lg mx-auto shadow-sm">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-maroon-dark block">
-                  Official Pass Reference Number
-                </span>
-                <span className="font-mono text-2xl sm:text-3xl font-black text-maroon tracking-wider block mt-1">
-                  {referenceNumber}
-                </span>
-                <p className="text-xs text-stone-600 mt-1">
-                  Save this Reference Number for pass retrieval and support inquiries.
-                </p>
+              <div className="space-y-2">
+                <div className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider">
+                  Registration Submitted
+                </div>
+                <h2 className="font-outfit font-extrabold text-2xl sm:text-3xl text-ink">
+                  Registration Under Review (PENDING)
+                </h2>
+                <div className="w-16 h-1 bg-emerald-500 mx-auto rounded-full" />
               </div>
-            )}
 
-            <p className="text-ink-soft text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
-              Your registration for <strong>{common.name}</strong> (CPF: <span className="font-mono font-bold text-ink">{common.cpf}</span>) has been submitted for review.
-            </p>
+              {/* Official Pass Reference Number Banner */}
+              {referenceNumber && (
+                <div className="bg-gradient-to-r from-maroon/10 via-gold/15 to-maroon/10 border-2 border-gold/60 rounded-2xl p-5 max-w-lg mx-auto shadow-sm">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-maroon-dark block">
+                    Official Pass Reference Number
+                  </span>
+                  <span className="font-mono text-2xl sm:text-3xl font-black text-maroon tracking-wider block mt-1">
+                    {referenceNumber}
+                  </span>
+                  <p className="text-xs text-stone-600 mt-1">
+                    Save this Reference Number for pass retrieval and support inquiries.
+                  </p>
+                </div>
+              )}
 
-            {/* Daily QR Delivery Information Banner */}
-            <div className="text-left bg-cream-light border border-amber-300/80 rounded-2xl p-5 space-y-3 max-w-lg mx-auto">
-              <h3 className="font-outfit font-extrabold text-sm text-maroon flex items-center gap-2">
-                <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Pass Rules &amp; Delivery Information</span>
-              </h3>
-              <ul className="text-xs text-ink-soft space-y-2 leading-relaxed">
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 font-bold">•</span>
-                  <span>
-                    <strong>One Permanent QR for Event:</strong> One unique QR code is issued per attendee for all selected event dates. The QR permits one successful entry per selected event day.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 font-bold">•</span>
-                  <span>
-                    After admin approval, your pass will be dispatched to your registered email address (<strong className="text-ink">{common.email}</strong>).
-                  </span>
-                </li>
-                {familyMembers.length > 0 && (
+              <p className="text-ink-soft text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
+                Your registration for <strong>{common.name}</strong> (CPF: <span className="font-mono font-bold text-ink">{common.cpf}</span>) has been submitted for review.
+              </p>
+
+              {/* Daily QR Delivery Information Banner */}
+              <div className="text-left bg-cream-light border border-amber-300/80 rounded-2xl p-5 space-y-3 max-w-lg mx-auto">
+                <h3 className="font-outfit font-extrabold text-sm text-maroon flex items-center gap-2">
+                  <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Pass Rules &amp; Delivery Information</span>
+                </h3>
+                <ul className="text-xs text-ink-soft space-y-2 leading-relaxed">
                   <li className="flex items-start gap-2">
                     <span className="text-amber-600 font-bold">•</span>
                     <span>
-                      <strong>Family Member Passes:</strong> Each registered family member will receive their own permanent QR pass directly at their individual registered email address for their selected attendance dates.
+                      <strong>One Permanent QR for Event:</strong> One unique QR code is issued per attendee for all selected event dates. The QR permits one successful entry per selected event day.
                     </span>
                   </li>
-                )}
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 font-bold">•</span>
-                  <span>
-                    <strong>Strictly Non-Transferable:</strong> Passes cannot be transferred, forwarded, or shared. Duplicate entry scans will be flagged by the security checkpoint.
-                  </span>
-                </li>
-              </ul>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-600 font-bold">•</span>
+                    <span>
+                      After admin approval, your pass will be dispatched to your registered email address (<strong className="text-ink">{common.email}</strong>).
+                    </span>
+                  </li>
+                  {familyMembers.length > 0 && (
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 font-bold">•</span>
+                      <span>
+                        <strong>Family Member Passes:</strong> Each registered family member will receive their own permanent QR pass directly at their individual registered email address for their selected attendance dates.
+                      </span>
+                    </li>
+                  )}
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-600 font-bold">•</span>
+                    <span>
+                      <strong>Strictly Non-Transferable:</strong> Passes cannot be transferred, forwarded, or shared. Duplicate entry scans will be flagged by the security checkpoint.
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <Link
+                  href="/employee/my-tickets"
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-maroon text-white font-bold text-sm hover:bg-maroon-dark transition-all shadow-md inline-flex items-center justify-center gap-2 border border-gold/40 cursor-pointer"
+                >
+                  <Ticket className="w-4 h-4 text-gold-light" />
+                  <span>View My Passes / Lookup</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-center gap-3">
-              <Link
-                href="/employee/my-tickets"
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-maroon text-white font-bold text-sm hover:bg-maroon-dark transition-all shadow-md inline-flex items-center justify-center gap-2 border border-gold/40 cursor-pointer"
-              >
-                <Ticket className="w-4 h-4 text-gold-light" />
-                <span>View My Passes / Lookup</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
+            {/* AESTHETIC 3-CARD SCRATCH & REVEAL SECTION */}
+            <ScratchCardsSection referenceNumber={referenceNumber || 'ONGC-2026'} />
           </div>
         ) : (
           /* STEPPED WIZARD CARD */

@@ -9,11 +9,21 @@ import {
 } from './dto/employee-master.dto';
 import * as XLSX from 'xlsx';
 
+export type MobileState = 'VALID' | 'MISSING' | 'INVALID';
+
+export interface MobileInspectionResult {
+  state: MobileState;
+  value: string | null;
+  rawValue?: string;
+  reason?: string;
+}
+
 export interface MasterRowValidationPreview {
   row: number;
   cpfNo: string;
-  mobileNo: string;
+  mobileNo: string | null;
   status: 'VALID' | 'INVALID' | 'DUPLICATE' | 'CONFLICT' | 'IDENTICAL';
+  mobileState?: MobileState;
   reason?: string;
 }
 
@@ -21,11 +31,18 @@ export interface MasterValidationResponse {
   success: boolean;
   fileName: string;
   totalRows: number;
+  sourceRows: number;
   validCount: number;
-  invalidCount: number;
-  duplicateCount: number;
-  conflictCount: number;
+  newCount: number;
   identicalCount: number;
+  conflictCount: number;
+  missingMobileCount: number;
+  invalidCpfCount: number;
+  invalidMobileCount: number;
+  duplicateCount: number;
+  blankRowCount: number;
+  invalidCount: number;
+  currentDatabaseCount: number;
   rows: MasterRowValidationPreview[];
 }
 
@@ -39,23 +56,55 @@ export function formatCpfString(value: unknown): string {
   return String(value).trim();
 }
 
+/**
+ * Normalizes and validates an ONGC CPF number.
+ * ONGC master records contain 5-digit and 6-digit numeric CPFs.
+ * Leading zeros are strictly preserved and never auto-padded or parsed as Number/BigInt.
+ */
 export function normalizeCpf(raw: unknown): string | null {
   if (raw === undefined || raw === null) return null;
   const clean = formatCpfString(raw);
-  if (/^[0-9]{5}$/.test(clean)) {
+  // Matches 5 or 6 numeric digits (covers all ONGC employee master records)
+  if (/^[0-9]{5,6}$/.test(clean)) {
     return clean;
   }
   return null;
 }
 
-export function normalizeMobile(raw: any): string | null {
-  if (raw === undefined || raw === null) return null;
-  const digits = String(raw).replace(/\D/g, '');
-  const tenDigits = digits.slice(-10);
-  if (/^[6-9][0-9]{9}$/.test(tenDigits)) {
-    return tenDigits;
+/**
+ * Evaluates mobile number into 3 distinct states:
+ * 1. VALID: 10-digit Indian mobile starting with 6-9
+ * 2. MISSING: empty / blank / null
+ * 3. INVALID: present but cannot be normalized to a valid 10-digit mobile
+ */
+export function inspectMobile(raw: unknown): MobileInspectionResult {
+  if (raw === undefined || raw === null) {
+    return { state: 'MISSING', value: null };
   }
-  return null;
+  const str = String(raw).trim();
+  if (str === '' || str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined' || str.toLowerCase() === 'n/a') {
+    return { state: 'MISSING', value: null };
+  }
+
+  // Strip all non-digit characters (+91, spaces, hyphens, parentheses, etc.)
+  const digits = str.replace(/\D/g, '');
+  const tenDigits = digits.slice(-10);
+
+  if (/^[6-9][0-9]{9}$/.test(tenDigits) && digits.length <= 13) {
+    return { state: 'VALID', value: tenDigits };
+  }
+
+  return {
+    state: 'INVALID',
+    value: null,
+    rawValue: str,
+    reason: `Invalid mobile number: "${str}" cannot be normalized to a 10-digit Indian mobile starting with 6-9`,
+  };
+}
+
+export function normalizeMobile(raw: unknown): string | null {
+  const result = inspectMobile(raw);
+  return result.state === 'VALID' ? result.value : null;
 }
 
 @Injectable()
@@ -163,109 +212,163 @@ export class EmployeeMasterService {
     }
 
     const previewRows: MasterRowValidationPreview[] = [];
-    const seenCpfInFile = new Set<string>();
+    const seenCpfInFile = new Map<string, { rowNum: number; mobileNo: string | null }>();
     const validCandidateCpfs = new Set<string>();
 
-    // Step 1: Client/row-level syntactic validation & in-file duplicate detection
+    let blankRowCount = 0;
+    let invalidCpfCount = 0;
+    let invalidMobileCount = 0;
+    let duplicateCount = 0;
+    let conflictCount = 0;
+    let missingMobileCount = 0;
+
+    // Step 1: Row-level syntactic validation & in-file duplicate detection
     for (let i = 0; i < dataRows.length; i++) {
       const rowNum = i + 2; // Row 1 is header
       const rawCpf = String(dataRows[i][cpfIndex] ?? '').trim();
-      const rawMobile = String(dataRows[i][mobileIndex] ?? '').trim();
+      const rawMobile = dataRows[i][mobileIndex];
 
       // Empty row check
-      if (!rawCpf && !rawMobile) {
+      if (!rawCpf && (rawMobile === undefined || rawMobile === null || String(rawMobile).trim() === '')) {
+        blankRowCount++;
         continue;
       }
 
       const cleanCpf = normalizeCpf(rawCpf);
-      const cleanMobile = normalizeMobile(rawMobile);
+      const mobileRes = inspectMobile(rawMobile);
 
+      // Check CPF validity (must be 5 or 6 numeric digits)
       if (!cleanCpf) {
+        invalidCpfCount++;
         previewRows.push({
           row: rowNum,
           cpfNo: rawCpf || '(empty)',
-          mobileNo: rawMobile || '(empty)',
+          mobileNo: mobileRes.value,
           status: 'INVALID',
-          reason: 'CPF must contain exactly 5 numeric digits',
+          mobileState: mobileRes.state,
+          reason: 'CPF must contain 5 or 6 numeric digits',
         });
         continue;
       }
 
-      if (!cleanMobile) {
+      // Check Mobile validity: MISSING is allowed (valid master record), INVALID is rejected
+      if (mobileRes.state === 'INVALID') {
+        invalidMobileCount++;
         previewRows.push({
           row: rowNum,
           cpfNo: cleanCpf,
-          mobileNo: rawMobile || '(empty)',
+          mobileNo: mobileRes.rawValue || '(invalid)',
           status: 'INVALID',
-          reason: 'Mobile must be a valid 10-digit Indian mobile number',
+          mobileState: 'INVALID',
+          reason: mobileRes.reason || 'Invalid 10-digit mobile number',
         });
         continue;
       }
 
+      if (mobileRes.state === 'MISSING') {
+        missingMobileCount++;
+      }
+
+      // In-file duplicate check
       if (seenCpfInFile.has(cleanCpf)) {
-        previewRows.push({
-          row: rowNum,
-          cpfNo: cleanCpf,
-          mobileNo: cleanMobile,
-          status: 'DUPLICATE',
-          reason: 'CPF already exists in file',
-        });
+        const firstSeen = seenCpfInFile.get(cleanCpf)!;
+        if (firstSeen.mobileNo === mobileRes.value) {
+          duplicateCount++;
+          previewRows.push({
+            row: rowNum,
+            cpfNo: cleanCpf,
+            mobileNo: mobileRes.value,
+            status: 'DUPLICATE',
+            mobileState: mobileRes.state,
+            reason: `Duplicate CPF in file (first seen at row ${firstSeen.rowNum})`,
+          });
+        } else {
+          conflictCount++;
+          previewRows.push({
+            row: rowNum,
+            cpfNo: cleanCpf,
+            mobileNo: mobileRes.value,
+            status: 'CONFLICT',
+            mobileState: mobileRes.state,
+            reason: `Conflicting mobile numbers in file for CPF ${cleanCpf} (Row ${firstSeen.rowNum}: ${firstSeen.mobileNo || 'MISSING'} vs Row ${rowNum}: ${mobileRes.value || 'MISSING'})`,
+          });
+        }
         continue;
       }
 
-      seenCpfInFile.add(cleanCpf);
+      seenCpfInFile.set(cleanCpf, { rowNum, mobileNo: mobileRes.value });
       validCandidateCpfs.add(cleanCpf);
 
       previewRows.push({
         row: rowNum,
         cpfNo: cleanCpf,
-        mobileNo: cleanMobile,
+        mobileNo: mobileRes.value,
         status: 'VALID',
-        reason: '-',
+        mobileState: mobileRes.state,
+        reason: mobileRes.state === 'MISSING' ? 'Mobile number missing (record valid with null mobile)' : '-',
       });
     }
 
     // Step 2: Cross-check valid candidates against existing database master records
+    let newCount = 0;
+    let identicalCount = 0;
+
     if (validCandidateCpfs.size > 0) {
       const existingRecords = await this.prisma.ongcEmployeeMaster.findMany({
         where: { cpf: { in: Array.from(validCandidateCpfs) } },
         select: { cpf: true, mobile: true },
       });
 
-      const existingMap = new Map<string, string>();
+      const existingMap = new Map<string, string | null>();
       for (const rec of existingRecords) {
         existingMap.set(rec.cpf, rec.mobile);
       }
 
       for (const item of previewRows) {
-        if (item.status === 'VALID' && existingMap.has(item.cpfNo)) {
-          const dbMobile = existingMap.get(item.cpfNo)!;
-          if (dbMobile === item.mobileNo) {
-            item.status = 'IDENTICAL';
-            item.reason = 'CPF already exists with matching mobile number';
+        if (item.status === 'VALID') {
+          if (existingMap.has(item.cpfNo)) {
+            const dbMobile = existingMap.get(item.cpfNo);
+            const isMatch =
+              (dbMobile === null && item.mobileNo === null) ||
+              (dbMobile !== null && item.mobileNo !== null && dbMobile === item.mobileNo);
+
+            if (isMatch) {
+              item.status = 'IDENTICAL';
+              item.reason = 'CPF already exists with matching mobile number';
+              identicalCount++;
+            } else {
+              item.status = 'CONFLICT';
+              item.reason = `CPF already exists with different mobile (${dbMobile || 'MISSING'})`;
+              conflictCount++;
+            }
           } else {
-            item.status = 'CONFLICT';
-            item.reason = `CPF already exists with different mobile (${dbMobile})`;
+            newCount++;
           }
         }
       }
     }
 
-    const validCount = previewRows.filter((r) => r.status === 'VALID').length;
-    const invalidCount = previewRows.filter((r) => r.status === 'INVALID').length;
-    const duplicateCount = previewRows.filter((r) => r.status === 'DUPLICATE').length;
-    const conflictCount = previewRows.filter((r) => r.status === 'CONFLICT').length;
-    const identicalCount = previewRows.filter((r) => r.status === 'IDENTICAL').length;
+    const currentDatabaseCount = await this.prisma.ongcEmployeeMaster.count();
+    const validCount = newCount + identicalCount + conflictCount;
+    const invalidCount = invalidCpfCount + invalidMobileCount;
+    const sourceRows = dataRows.length;
 
     return {
       success: true,
       fileName: originalName || 'master_data.csv',
-      totalRows: previewRows.length,
+      totalRows: sourceRows,
+      sourceRows,
       validCount,
-      invalidCount,
-      duplicateCount,
-      conflictCount,
+      newCount,
       identicalCount,
+      conflictCount,
+      missingMobileCount,
+      invalidCpfCount,
+      invalidMobileCount,
+      duplicateCount,
+      blankRowCount,
+      invalidCount,
+      currentDatabaseCount,
       rows: previewRows,
     };
   }
@@ -281,22 +384,23 @@ export class EmployeeMasterService {
 
     // Sanitize and filter valid rows
     const seenCpf = new Set<string>();
-    const validRows: Array<{ cpfNo: string; mobileNo: string }> = [];
+    const validRows: Array<{ cpfNo: string; mobileNo: string | null }> = [];
     let invalidCount = 0;
 
     for (const r of dto.rows) {
       const cCpf = normalizeCpf(r.cpfNo);
-      const cMobile = normalizeMobile(r.mobileNo);
-      if (cCpf && cMobile && !seenCpf.has(cCpf)) {
+      const mRes = inspectMobile(r.mobileNo);
+
+      if (cCpf && mRes.state !== 'INVALID' && !seenCpf.has(cCpf)) {
         seenCpf.add(cCpf);
-        validRows.push({ cpfNo: cCpf, mobileNo: cMobile });
+        validRows.push({ cpfNo: cCpf, mobileNo: mRes.value });
       } else {
         invalidCount++;
       }
     }
 
     if (validRows.length === 0) {
-      throw new BadRequestException('None of the submitted rows passed CPF and Mobile validation.');
+      throw new BadRequestException('None of the submitted rows passed CPF validation.');
     }
 
     if (dto.mode === MasterImportMode.REPLACE) {
@@ -368,34 +472,51 @@ export class EmployeeMasterService {
         select: { cpf: true, mobile: true },
       });
 
-      const existingMap = new Map<string, string>();
+      const existingMap = new Map<string, string | null>();
       for (const rec of existingRecords) {
         existingMap.set(rec.cpf, rec.mobile);
       }
 
-      const toInsert: Array<{ cpf: string; mobile: string; name: string }> = [];
+      const toInsert: Array<{ cpf: string; mobile: string | null; name: string }> = [];
 
       for (const row of validRows) {
-        const existingMobile = existingMap.get(row.cpfNo);
-        if (!existingMobile) {
+        if (!existingMap.has(row.cpfNo)) {
           toInsert.push({
             cpf: row.cpfNo,
             mobile: row.mobileNo,
             name: '',
           });
           addedCount++;
-        } else if (existingMobile === row.mobileNo) {
-          unchangedCount++;
         } else {
-          // Conflict
-          if (dto.resolveConflicts === MasterConflictResolution.OVERWRITE) {
+          const existingMobile = existingMap.get(row.cpfNo);
+          const isIdentical =
+            (existingMobile === null && row.mobileNo === null) ||
+            (existingMobile !== null && row.mobileNo !== null && existingMobile === row.mobileNo);
+
+          if (isIdentical) {
+            unchangedCount++;
+          } else if (existingMobile !== null && row.mobileNo === null) {
+            // Existing CPF has valid mobile, incoming has missing mobile:
+            // DEFAULT RULE: Keep existing mobile! Do NOT erase with null!
+            unchangedCount++;
+          } else if (existingMobile === null && row.mobileNo !== null) {
+            // Existing had no mobile, incoming has valid mobile: update with new mobile
             await tx.ongcEmployeeMaster.update({
               where: { cpf: row.cpfNo },
               data: { mobile: row.mobileNo },
             });
             updatedCount++;
           } else {
-            conflictCount++;
+            // Both are different valid mobile numbers -> Conflict
+            if (dto.resolveConflicts === MasterConflictResolution.OVERWRITE) {
+              await tx.ongcEmployeeMaster.update({
+                where: { cpf: row.cpfNo },
+                data: { mobile: row.mobileNo },
+              });
+              updatedCount++;
+            } else {
+              conflictCount++;
+            }
           }
         }
       }
@@ -430,7 +551,7 @@ export class EmployeeMasterService {
     });
 
     this.logger.log(
-      `[EMPLOYEE_MASTER] Master update: +${addedCount} added, ${unchangedCount} unchanged, ${conflictCount} conflicts by user ${adminUser?.id || 'admin'}.`,
+      `[EMPLOYEE_MASTER] Master update: +${addedCount} added, ${unchangedCount} unchanged, ${updatedCount} updated, ${conflictCount} conflicts by user ${adminUser?.id || 'admin'}.`,
     );
 
     return {
@@ -441,13 +562,14 @@ export class EmployeeMasterService {
       conflicts: conflictCount,
       updated: updatedCount,
       invalid: invalidCount,
-      message: `Master update complete: ${addedCount} added, ${unchangedCount} unchanged, ${conflictCount} conflicts skipped.`,
+      message: `Master update complete: ${addedCount} added, ${updatedCount} updated, ${unchangedCount} unchanged, ${conflictCount} conflicts skipped.`,
     };
   }
 
   /**
    * Export all ONGC Employee Master records to clean CSV.
    * Columns: CPF NO,Mobile No
+   * For missing mobile: 12346,
    */
   async exportMasterToCsv(): Promise<string> {
     const records = await this.prisma.ongcEmployeeMaster.findMany({
@@ -457,7 +579,7 @@ export class EmployeeMasterService {
 
     let csv = 'CPF NO,Mobile No\r\n';
     for (const r of records) {
-      csv += `${r.cpf},${r.mobile}\r\n`;
+      csv += `${r.cpf},${r.mobile || ''}\r\n`;
     }
     return csv;
   }
@@ -484,7 +606,6 @@ export class EmployeeMasterService {
 
       const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
       return lines.map((line) => {
-        // Handles comma or tab separated
         const separator = line.includes('\t') ? '\t' : ',';
         return line.split(separator).map((cell) => cell.replace(/^["']|["']$/g, '').trim());
       });

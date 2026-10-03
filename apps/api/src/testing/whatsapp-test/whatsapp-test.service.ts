@@ -86,6 +86,7 @@ export class WhatsAppTestService {
       safeRecipient: providerInfo.safeRecipient,
       phoneNumberIdConfigured: providerInfo.phoneNumberIdConfigured,
       businessAccountConfigured: providerInfo.businessAccountConfigured,
+      accessTokenConfigured: providerInfo.accessTokenConfigured,
       apiVersion: providerInfo.apiVersion,
       testRecipientConfigured: providerInfo.testRecipientConfigured,
       templateConfigured: providerInfo.templateConfigured,

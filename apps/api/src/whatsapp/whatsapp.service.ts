@@ -26,6 +26,7 @@ export interface WhatsAppProviderInfo {
   safeRecipient: string | null;
   phoneNumberIdConfigured: boolean;
   businessAccountConfigured: boolean;
+  accessTokenConfigured: boolean;
   apiVersion: string;
   testRecipientConfigured: boolean;
   templateConfigured: boolean;
@@ -43,11 +44,29 @@ export class WhatsAppService {
   ) {}
 
   /**
+   * Helper resolving from ConfigService with fallback to process.env.
+   */
+  private getEnv(key: string): string | undefined {
+    const val = this.configService?.get<string>(key);
+    if (val !== undefined && val !== null) {
+      const s = String(val).trim();
+      return s.length > 0 ? s : undefined;
+    }
+    if (process.env.NODE_ENV !== 'test') {
+      const procVal = process.env[key];
+      if (procVal && typeof procVal === 'string' && procVal.trim()) {
+        return procVal.trim();
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Resolves the configured Meta WhatsApp Graph API version.
    * Defaults to 'v25.0' if not set in server environment.
    */
   getApiVersion(): string {
-    const rawVersion = this.configService.get<string>('WHATSAPP_API_VERSION');
+    const rawVersion = this.getEnv('WHATSAPP_API_VERSION');
     if (rawVersion && rawVersion.trim()) {
       const trimmed = rawVersion.trim();
       return trimmed.startsWith('v') ? trimmed : `v${trimmed}`;
@@ -60,24 +79,24 @@ export class WhatsAppService {
    * Standardized: WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID
    */
   isProviderConfigured(): boolean {
-    const token = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
-    const phoneNumberId = this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID');
+    const token = this.getEnv('WHATSAPP_ACCESS_TOKEN');
+    const phoneNumberId = this.getEnv('WHATSAPP_PHONE_NUMBER_ID');
 
     return Boolean(token && phoneNumberId && token.trim() && phoneNumberId.trim());
   }
 
   isPhoneNumberIdConfigured(): boolean {
-    const phoneNumberId = this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID');
+    const phoneNumberId = this.getEnv('WHATSAPP_PHONE_NUMBER_ID');
     return Boolean(phoneNumberId && phoneNumberId.trim());
   }
 
   isBusinessAccountConfigured(): boolean {
-    const wabaId = this.configService.get<string>('WHATSAPP_BUSINESS_ACCOUNT_ID');
+    const wabaId = this.getEnv('WHATSAPP_BUSINESS_ACCOUNT_ID');
     return Boolean(wabaId && wabaId.trim());
   }
 
   isAccessTokenConfigured(): boolean {
-    const token = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
+    const token = this.getEnv('WHATSAPP_ACCESS_TOKEN');
     return Boolean(token && token.trim());
   }
 
@@ -96,8 +115,8 @@ export class WhatsAppService {
    * Defaults: hello_world / en_US
    */
   getTemplateConfig(): { name: string; language: string } {
-    const name = this.configService.get<string>('WHATSAPP_TEST_TEMPLATE_NAME') || 'hello_world';
-    const language = this.configService.get<string>('WHATSAPP_TEST_TEMPLATE_LANGUAGE') || 'en_US';
+    const name = this.getEnv('WHATSAPP_TEST_TEMPLATE_NAME') || 'hello_world';
+    const language = this.getEnv('WHATSAPP_TEST_TEMPLATE_LANGUAGE') || 'en_US';
     return {
       name: name.trim(),
       language: language.trim(),
@@ -124,7 +143,7 @@ export class WhatsAppService {
       // In case setting table lookup fails, fallback to env check
     }
 
-    const envRecipient = this.configService.get<string>('WHATSAPP_TEST_RECIPIENT');
+    const envRecipient = this.getEnv('WHATSAPP_TEST_RECIPIENT');
     if (envRecipient && envRecipient.trim()) {
       return this.normalizePhoneNumber(envRecipient.trim());
     }
@@ -158,6 +177,7 @@ export class WhatsAppService {
       safeRecipient,
       phoneNumberIdConfigured: this.isPhoneNumberIdConfigured(),
       businessAccountConfigured: this.isBusinessAccountConfigured(),
+      accessTokenConfigured: this.isAccessTokenConfigured(),
       apiVersion,
       testRecipientConfigured: Boolean(safeRecipient),
       templateConfigured: Boolean(templateConfig.name),
@@ -193,8 +213,8 @@ export class WhatsAppService {
       return { exists: true, approved: true };
     }
 
-    const wabaId = this.configService.get<string>('WHATSAPP_BUSINESS_ACCOUNT_ID');
-    const token = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN');
+    const wabaId = this.getEnv('WHATSAPP_BUSINESS_ACCOUNT_ID');
+    const token = this.getEnv('WHATSAPP_ACCESS_TOKEN');
     const apiVersion = this.getApiVersion();
 
     if (!wabaId || !wabaId.trim() || !token || !token.trim()) {
@@ -328,8 +348,8 @@ export class WhatsAppService {
       };
     }
 
-    const token = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN')!.trim();
-    const phoneNumberId = this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID')!.trim();
+    const token = this.getEnv('WHATSAPP_ACCESS_TOKEN')!.trim();
+    const phoneNumberId = this.getEnv('WHATSAPP_PHONE_NUMBER_ID')!.trim();
     const apiVersion = this.getApiVersion();
     const cleanPhoneForMeta = recipient.replace(/^\+/, '');
 
@@ -459,8 +479,8 @@ export class WhatsAppService {
       };
     }
 
-    const token = this.configService.get<string>('WHATSAPP_ACCESS_TOKEN')!.trim();
-    const phoneNumberId = this.configService.get<string>('WHATSAPP_PHONE_NUMBER_ID')!.trim();
+    const token = this.getEnv('WHATSAPP_ACCESS_TOKEN')!.trim();
+    const phoneNumberId = this.getEnv('WHATSAPP_PHONE_NUMBER_ID')!.trim();
     const apiVersion = this.getApiVersion();
 
     try {

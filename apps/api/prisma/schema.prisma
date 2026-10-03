@@ -734,7 +734,7 @@ model OngcEmployeeMaster {
   name      String?  @default("") @db.VarChar(255)
   dob       String?  @db.VarChar(50)
   doj       String?  @db.VarChar(50)
-  mobile    String   @db.VarChar(20)
+  mobile    String?  @db.VarChar(20)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -1350,6 +1350,76 @@ export const DEFAULT_SPONSOR_VOUCHER_CONFIG: SponsorVoucherConfig = {
   ],
 };
 
+export interface ScratchCardItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  badgeLabel?: string;
+  category: 'welcome' | 'sponsor' | 'festive';
+  enabled: boolean;
+  revealHeadline: string;
+  revealSubheadline?: string;
+  revealBody: string;
+  highlightText?: string;
+  validityNote?: string;
+  sponsorConfig?: SponsorVoucherConfig;
+  ctaText?: string;
+  ctaUrl?: string;
+}
+
+export function getDefaultScratchCards(
+  sponsorVoucher?: SponsorVoucherConfig | null,
+): ScratchCardItem[] {
+  const voucher = sponsorVoucher ?? DEFAULT_SPONSOR_VOUCHER_CONFIG;
+  const isSponsorEnabled = voucher.enabled !== false;
+
+  return [
+    {
+      id: 'welcome',
+      title: 'YOUR NAVRATRI SURPRISE',
+      subtitle: 'A little celebration awaits you',
+      badgeLabel: 'NAVRATRI 2026',
+      category: 'welcome',
+      enabled: true,
+      revealHeadline: 'FESTIVE BLESSING',
+      revealSubheadline: 'Welcome to ONGC Navratri 2026',
+      revealBody:
+        'May the auspicious blessings of Maa Durga bring happiness, good health, and prosperous festivities to you and your entire family throughout these nine sacred nights.',
+      highlightText: '9 Sacred Nights of Devotion & Joy',
+      validityNote: 'Celebration Days: Oct 11 – Oct 19, 2026',
+    },
+    {
+      id: 'mahavir',
+      title: voucher.sponsorName || 'MAHAVIR JEWELLERS',
+      subtitle: 'A special gift for ONGC Navratri participants',
+      badgeLabel: voucher.voucherLabel || 'GIFT VOUCHER',
+      category: 'sponsor',
+      enabled: isSponsorEnabled,
+      revealHeadline: voucher.offerHeadline || '₹5,000 OFF',
+      revealSubheadline: voucher.offerSubtext || 'ON MAKING CHARGES',
+      revealBody:
+        'Exclusive festive jewellery voucher from our sponsor Mahavir Jewellers for ONGC Navratri participants and their families.',
+      highlightText: voucher.instructionText || 'Show this voucher at Mahavir Jewellers to avail the offer.',
+      validityNote: (voucher.validityNote || 'Lifetime | No expiry').replace(/^Valid:\s*/i, ''),
+      sponsorConfig: voucher,
+    },
+    {
+      id: 'garba',
+      title: 'GARBA NIGHT SURPRISE',
+      subtitle: 'Celebrate the spirit of Navratri',
+      badgeLabel: 'EWC CELEBRATION',
+      category: 'festive',
+      enabled: true,
+      revealHeadline: 'SPECIAL PRIVILEGE',
+      revealSubheadline: 'Garba Celebration & Hospitality',
+      revealBody:
+        'Celebrate the vibrant spirit of Navratri with authentic Gujarati folk orchestra, devotional Maha Aarti ceremonies, and dedicated hospitality for ONGC personnel.',
+      highlightText: 'Malaviya Cricket Ground, ONGC Colony',
+      validityNote: 'Gates open at 7:00 PM every night',
+    },
+  ];
+}
+
 export interface BuildEmployeeWhatsAppMessageParams {
   employeeName: string;
   referenceNumber: string;
@@ -1416,6 +1486,7 @@ export interface WhatsAppConfigDto {
   safeRecipient: string | null;
   phoneNumberIdConfigured: boolean;
   businessAccountConfigured: boolean;
+  accessTokenConfigured: boolean;
   apiVersion: string;
   testRecipientConfigured: boolean;
   templateConfigured: boolean;
